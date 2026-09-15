@@ -1,0 +1,77 @@
+# rules/pipeline.yaml —— 8 步闭环顺序声明（Ch1 §B / §G）
+#
+# 权威出处：`Ch1 §D.1`（8 步闭环 → 章节映射）/ `Ch1 §G`（闭环步骤声明）
+# 只读：0444；**版本化**，改序须留痕（写一条 `audit/rule_changes.jsonl`）。
+#
+# 纪律：编排器只负责"把 1–6 步串成可断点续跑的状态机"，
+#       第 7/8 步**预留接口**（publish_hook / verify_hook），
+#       第八章/第十章"已拆解"，接口即插即用；**不在第一章伪造第 7/8 步实现**。
+
+version: 1
+spec_anchor: "Ch1 §D.1"
+steps:
+  - step: 1
+    name: ingest_public_information
+    produces: [sources, claims]
+    blocking: true
+    chapter_ref: "Ch6 §6.1 + Ch9 §N9.3"
+    implemented_in_first_version: true
+  - step: 2
+    name: trace_dedup_verify
+    produces: [claims, claim_propagation, events]
+    blocking: true
+    chapter_ref: "Ch6 §6.3"
+    implemented_in_first_version: true
+  - step: 3
+    name: update_company_and_industry_relations
+    produces: [relations, business_positions, impacts]
+    blocking: true
+    chapter_ref: "Ch7 §7.1"
+    implemented_in_first_version: true
+  - step: 4
+    name: revise_growth_and_moat_judgment
+    produces: [baselines]
+    blocking: true
+    chapter_ref: "Ch4 §4.1~4.3"
+    implemented_in_first_version: true
+  - step: 5
+    name: update_financial_and_valuation_assumptions
+    produces: [baselines, expectations]
+    blocking: true
+    chapter_ref: "Ch4 §4.4 + Ch5 §5.3"
+    implemented_in_first_version: true
+  - step: 6
+    name: compare_company_vs_benchmark_expected_return
+    produces: [benchmarks, recommendations]
+    blocking: true
+    chapter_ref: "Ch5 §5.4 + Ch7 §7.3"
+    implemented_in_first_version: true
+  - step: 7
+    name: publish_recommendations
+    produces: [views, snapshots]
+    blocking: true
+    chapter_ref: "第八章（`08/02`）"
+    implemented_in_first_version: false     # 由 Ch8 承接，本阶段只注册 hook
+    hook: publish_hook
+    gap_behavior: explicit_gap_when_hook_absent   # 未注册 → **显式标 gap**，不得静默跳过（G1-05）
+  - step: 8
+    name: continuous_verification_and_history
+    produces: [tasks]
+    blocking: true
+    chapter_ref: "第十章（`10/02`）"
+    implemented_in_first_version: false
+    hook: verify_hook
+    gap_behavior: explicit_gap_when_hook_absent
+
+# ── 8 步完整性守卫的判据（G1-05，Ch1 §F）────────────────────────────────────
+completeness:
+  guard: "scripts/orchestrate/pipeline.py: assert_steps_complete()"
+  rule: "1–6 步产物对象齐备；7/8 步接口已注册（未实现时**显式标 gap**，不得静默跳过）"
+  on_missing: blocked        # 缺产物 → 编排器置 blocked，**不得报成功**
+
+# ── 反 KPI（Ch1 §D.3 / §F G1-02）──────────────────────────────────────────
+anti_kpi:
+  always_write_check_record: true          # 每日运行**必写** check_record，无论有无变化
+  no_change_means_no_signal: true          # judgment_change 全 False → 不写新版本、不发信号
+  publish_only_on_change: true             # 仅有变化时才触发第 7 步发布
+  change_reason_required_for_new_signal: true

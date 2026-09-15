@@ -1,0 +1,180 @@
+# registry/prep_deliverables.yaml —— 阶段① 交付物登记 + **「已确认规则 vs 建议实现方式」显式分层**
+#
+# 权威出处：
+#   `Ch11 §B` 阶段① 通过判据：「四类交付物齐备；**"已确认规则 vs 建议实现方式"有显式区分**
+#              （分层 / 标注，**可逐条指认**）；口径字段 `tbd` 占位」
+#   `00_交付施工图 §2 阶段① 通过判据`（可执行伪码 `stage_prep_passed`）
+#   `源稿 §附录二`：「已确认投资规则与建议实现方式**以本文的状态标注为准**」
+#
+# ★ 本文件就是"显式区分"的**可逐条指认**载体：每一项交付物都带
+#   `layer ∈ {confirmed_rule, implementation_proposal}` + `design_anchor`（节号锚点）。
+#   阶段门 `stage_prep_passed()` 会断言：① 四类齐全；② 每项都有 layer；
+#   ③ `confirmed_rule` 项**必有**设计锚点；④ 两层均非空（不能只做一层）。
+#
+# 消歧（纪律 8）：字段名用 `delivery_stage`，**回避裸词 `stage`**。
+
+version: 1
+spec_anchor: "Ch11 §B"
+delivery_stage: 1
+stage_key: prep
+
+# ── 四类交付物（`Ch11 §B` 阶段① 逐字：本文 / 首批关系核验清单 / 公开数据登记 / 基准及关键口径）──
+deliverables:
+  - deliverable_id: d01_this_document
+    deliverable_class: the_document_itself
+    title: 开发 Agent 开工提示词（本文）
+    artifact: "设计区 00_开发Agent开工提示词.md（只读）+ system/registry/prep_deliverables.yaml（本登记）"
+    layer: confirmed_rule
+    design_anchor: "00_开发Agent开工提示词.md §一~§十三"
+    produced_by: deliverable_agent
+
+  - deliverable_id: d02_relations_checklist
+    deliverable_class: first_batch_relations_checklist
+    title: 首批关系核验清单
+    artifact: registry/first_batch_relations_checklist.yaml
+    layer: implementation_proposal          # ★ 清单结构 = 建议实现方式；关系事实 = 待核验
+    design_anchor: "Ch9 §4.1 阶段1 / Ch11 §D.2 p02"
+    produced_by: deliverable_agent
+
+  - deliverable_id: d03_public_data_registry
+    deliverable_class: public_data_registration
+    title: 公开数据登记
+    artifact: registry/sources.yaml
+    layer: implementation_proposal
+    design_anchor: "Ch9 §3.4.8 / §N9.3-01~11"
+    produced_by: deliverable_agent
+
+  - deliverable_id: d04_benchmark_and_caliber
+    deliverable_class: benchmark_and_key_calibers
+    title: 基准及关键口径
+    artifact: "rules/benchmark.yaml + rules/freeze.yaml（11 项 freeze_param，口径表）"
+    layer: implementation_proposal
+    design_anchor: "Ch3 §C.3 / Ch11 §C·§D"
+    produced_by: deliverable_agent
+
+# ── 「已确认规则」逐条指认（来自源稿 §二，**不得被实现方改写**）────────────────
+#    每一条：源稿的已确认规则原文锚点 + 实现载体。实现方**只能实现，不能改语义**。
+confirmed_rules:
+  - id: cr01_holding_period
+    statement: "主周期：一个季度到一年；每条建议明确具体期限和起算时点"
+    design_anchor: "源稿 §二 主周期 / Ch2 §D.2"
+    implementation_carrier: "recommendations.horizon + start_date（必填）"
+    layer: confirmed_rule
+  - id: cr02_buy_standard
+    statement: "买入标准：有依据预计绝对收益为正，并且高于同一期间的主基准收益"
+    design_anchor: "源稿 §二 买入标准"
+    implementation_carrier: "Ch7 §D gate（**只做结构判定，无置信度数值阈值** — A5）"
+    layer: confirmed_rule
+  - id: cr03_sell_standard
+    statement: "卖出标准：有依据预计无法继续跑赢基准，就建议卖出，即使仍有正的预期绝对收益"
+    design_anchor: "源稿 §二 卖出标准"
+    implementation_carrier: "Ch7 §D 决策规则（T06/T07 反例集）"
+    layer: confirmed_rule
+  - id: cr04_no_min_excess_threshold
+    statement: "不另设最低超额收益幅度（P-01 禁止项）"
+    design_anchor: "源稿 §二 / Ch2 §B.2 P-01 / 源稿 T06"
+    implementation_carrier: "scripts/checks/conflict_scan.py L2+L3"
+    layer: confirmed_rule
+  - id: cr05_no_confidence_threshold
+    statement: "不得设固定置信度门槛（P-02 禁止项）；官方确认仅为纯加成，永不参与比较"
+    design_anchor: "Ch2 §B.2 P-02 / `00_待拍板项清单` A4·A5"
+    implementation_carrier: "scripts/checks/conflict_scan.py L2；scripts/checks/assert_gate_input.py"
+    layer: confirmed_rule
+  - id: cr06_catalyst_not_required
+    statement: "明确催化剂不是买入必要条件；低估本身可构成理由"
+    design_anchor: "源稿 §二 催化剂 / Ch2 §B.2 P-06"
+    implementation_carrier: "scripts/checks/assert_gate_input.py（catalyst_required 不得进门）"
+    layer: confirmed_rule
+  - id: cr07_no_short_no_position
+    statement: "卖出建议表示股票层面的退出判断，不代表系统知道用户实际持仓，也不自动转为做空建议"
+    design_anchor: "源稿 §二 / Ch2 §B.2 P-04·P-05"
+    implementation_carrier: "schema Recommendation（无 position/quantity；action 枚举无做空）"
+    layer: confirmed_rule
+  - id: cr08_no_cross_asset_module
+    statement: "环境变化进入公司和基准研究，不另建黄金、BTC 或跨资产配置模块"
+    design_anchor: "源稿 §三 / Ch3 §D.3"
+    implementation_carrier: "scripts/checks/module_denylist.py"
+    layer: confirmed_rule
+  - id: cr09_benchmark_identity
+    statement: "已确认采用 ETF 作为主要比较对象，同行比较作为辅助分析"
+    design_anchor: "源稿 §三 主基准工作候选 / Ch3 §C.3"
+    implementation_carrier: "rules/benchmark.yaml（对象化，非硬编码代码）"
+    layer: confirmed_rule
+  - id: cr10_return_caliber
+    statement: "统一使用相同起止时间、美元口径、包含分红再投资的市场价格总回报；净值收益可作诊断；基金费用不能再次重复扣除"
+    design_anchor: "源稿 §三 收益口径 / Ch3 §D.2 N3.4-05/07"
+    implementation_carrier: "scripts/benchmark/return_guard.py + rules/freeze.yaml::p10"
+    layer: confirmed_rule
+  - id: cr11_benchmark_change_governance
+    statement: "基准不因建议表现好坏而更换；未来如变更，必须记录生效日期并保留旧口径结果"
+    design_anchor: "源稿 §三 / Ch3 §C.3 N3.4-08/09"
+    implementation_carrier: "rules/benchmark.yaml change_governance（人工审批闸门）"
+    layer: confirmed_rule
+  - id: cr12_no_paid_subscription_launch
+    statement: "本次讨论未授权新增付费数据订阅；后续付费数据接入可单独提出，但不作为首版启动条件"
+    design_anchor: "源稿 §六 / 源稿第 368 行 / Ch11 §E.2"
+    implementation_carrier: "registry/launch_criteria.yaml + scripts/checks/launch_guard.py"
+    layer: confirmed_rule
+  - id: cr13_no_aggregate_consensus
+    statement: "只有少量机构的公开数据时只能称公开预测样本，显示样本数、来源和期间，不能标成完整一致预期"
+    design_anchor: "源稿 §五 / Ch2 §B.2 P-07 / Ch9 §N9.1-20"
+    implementation_carrier: "schema ExpectationSample（禁 consensus/market_view/average_forecast 字段名）"
+    layer: confirmed_rule
+  - id: cr14_three_layer_permission
+    statement: "公开信息输入不自动授权公开发布整个研究库；分享给同事时应显示资料日期和版本"
+    design_anchor: "源稿 §九 / Ch9 §3.4.10 / §N9.2-07/08"
+    implementation_carrier: "rules/publish.yaml 三层权限"
+    layer: confirmed_rule
+  - id: cr15_append_only_versions
+    statement: "预测修订、财务重述和原文更正以新版本保存，不覆盖过去可见的版本"
+    design_anchor: "源稿 §九 / Ch9 §N9.1-33 / §3.4.2"
+    implementation_carrier: "schema/store.py 追加式真源 + pre-commit 拒改既有行"
+    layer: confirmed_rule
+  - id: cr16_no_model_self_assessment
+    statement: "来源质量和作者表现可逐步积累，但不能用模型自评替代人工核验样本"
+    design_anchor: "源稿 §九 / Ch9 §N9.3-11"
+    implementation_carrier: "schema/registry_models.py QualityLabel（human_verified 为 ground truth）"
+    layer: confirmed_rule
+  - id: cr17_five_stage_delivery
+    statement: "五阶段交付：需求与来源准备 / NVIDIA 深度样例 / 核心产业链运行 / 每日持续研究 / 覆盖扩展与评估"
+    design_anchor: "源稿 §十一 / Ch11 §B"
+    implementation_carrier: "registry/delivery.yaml + scripts/delivery/stage_gate.py"
+    layer: confirmed_rule
+
+# ── 「建议实现方式」逐条指认（**实现方提案，需审批，不等于已确认规则**）──────────
+implementation_proposals:
+  - id: ip01_storage_combo
+    statement: "文件（JSONL + MD/YAML）为追加式真源 + SQLite 作**可重建索引** + Git 承担 as-of"
+    design_anchor: "Ch9 §3.3.2 / §3.10 J1"
+    layer: implementation_proposal
+    status: implemented
+  - id: ip02_no_graph_db
+    statement: "不引入图数据库；关系图用边表（dependency_edges）表达"
+    design_anchor: "Ch9 §N9.2-10 / §3.3.1 路线④"
+    layer: implementation_proposal
+    status: implemented
+  - id: ip03_checker_exit_nonzero
+    statement: "所有扫描 / 断言命中即 `exit 1`（禁 warn-only）"
+    design_anchor: "Ch2 §B.3 / 纪律 2"
+    layer: implementation_proposal
+    status: implemented
+  - id: ip04_scope_executable
+    statement: "禁词的 scope 必须是**可执行断言**（决策作用域 / Recommendation 字段名 / 检查器命名空间免扫）"
+    design_anchor: "Ch2 §B.1 通则"
+    layer: implementation_proposal
+    status: implemented
+  - id: ip05_pointer_no_duplicate
+    statement: "参数值唯一真源 = rules/freeze.yaml；schedule / allowlist / benchmark / scope / notification / publish 只**指针**不双写"
+    design_anchor: "Ch11 §D.2 / 纪律 5"
+    layer: implementation_proposal
+    status: implemented
+  - id: ip06_l4_l5_deferred_scope
+    statement: "阶段① 尚无 gate 模块与 views 配置 → L4/L5 无被检对象时**显式记 note 并上报扫描数**，不冒充通过"
+    design_anchor: "`00_开发Agent开工提示词 §6.2`（Phantom Subscription / Empty Execution）"
+    layer: implementation_proposal
+    status: implemented
+  - id: ip07_backfill_timestamps
+    statement: "附录一原型资料视为**补入**：first_seen_at = 补入日，occurred_at = 资料日期，backfilled_at 显式记录"
+    design_anchor: "Ch9 §N9.1-31/32 / §2.2.1 场景①"
+    layer: implementation_proposal
+    status: implemented

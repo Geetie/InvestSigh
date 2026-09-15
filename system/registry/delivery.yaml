@@ -1,0 +1,146 @@
+# registry/delivery.yaml —— 五阶段路线 + 可测通过判据 + 顺序锁定（Ch11 §A.4 / §B）
+#
+# 权威出处：`Ch11 §B`（五阶段交付路线契约）/ `Ch11 §A.4`（既有对象的新增字段要求）
+#           源稿五阶段为**交付主线（权威）**；`09 §3.9` 为实现细化挂靠（§A.3）。
+#
+# ★ 主从关系不许反（`00_交付施工图 §0 第 1 条`）：本文件逐字采源稿/Ch11 §B 的
+#   名称、数量、顺序；**不合并、不并列**。
+# ★ 阶段未过即阻塞，不得静默跳过（纪律 12 / Ch11 §G G11-04）。
+#
+# 消歧：字段名用 `delivery_stage`，**回避裸词 `stage`**（Ch2 §C.2 / Ch11 §A.4 纪律 8）。
+# 只读：0444 由 scripts/checks/freeze_guard.py 一并校验。
+
+version: 1
+spec_anchor: "Ch11 §B"
+order_locked: true                    # 顺序锁定：不得重排
+mainline: source_manuscript_five_stages   # 施工主线 = 源稿五阶段
+
+delivery_stages:
+  - delivery_stage: 1
+    key: prep
+    name: 需求与来源准备
+    entry_condition: 整包文档确认
+    deliverables:
+      - 本提示词（开发 Agent 开工提示词）
+      - 首批关系核验清单
+      - 公开数据登记
+      - 基准及关键口径
+    pass_criteria_testable:
+      - id: four_deliverables
+        statement: "四类交付物齐备"
+        check_kind: automated
+      - id: rule_vs_impl_split
+        statement: "\"已确认规则 vs 建议实现方式\"有显式区分（分层/标注，**可逐条指认**）"
+        check_kind: automated_and_manual
+      - id: caliber_tbd_placeholder
+        statement: "口径字段 `tbd` 占位"
+        check_kind: automated
+      - id: no_paid_required
+        statement: "首版启动条件的 `required` 不含付费订阅"
+        check_kind: automated
+    exit_artifacts: [registry/sources.yaml, "口径表（freeze_status=tbd）"]
+    chapter_anchor: "Ch9（地基）· Ch2 · Ch3 · Ch1 · Ch11"
+    impl_ref: "09 §3.9"
+    gate_impl: "scripts/delivery/stage_gate.py: stage_prep_passed"
+
+  - delivery_stage: 2
+    key: nvidia_sample
+    name: NVIDIA 深度样例
+    entry_condition: 阶段① 通过
+    deliverables:
+      - 完整经营/竞争/财务/估值/基准比较与建议底稿
+    pass_criteria_testable:
+      - id: six_step_chain_complete
+        statement: "六步判断链完整（Ch1 五问 + Ch10 六结果）"
+        check_kind: automated
+      - id: evidence_locatable
+        statement: "证据可定位（Ch6 §D）"
+        check_kind: automated
+      - id: derivation_reviewable
+        statement: "推导可复查（traceback_coverage == 1.0）"
+        check_kind: automated
+      - id: chapter4_g_depth
+        statement: "满足 Ch4 §G 深度"
+        check_kind: automated
+    exit_artifacts: ["NVIDIA 底稿（深度标准）"]
+    chapter_anchor: "Ch4 · Ch5 · Ch9（compute 层）"
+    impl_ref: "09 §3.9"
+    gate_impl: "scripts/delivery/stage_gate.py: stage_nvidia_sample_passed"
+
+  - delivery_stage: 3
+    key: core_chain
+    name: 核心产业链运行
+    entry_condition: 阶段② 通过
+    deliverables:
+      - 上/下游与竞争者独立底稿
+      - 真实事件联动
+      - 图谱与问题任务
+    pass_criteria_testable:
+      - id: multi_company_transmission
+        statement: "多公司传导跑通（Ch7 §C.7）"
+        check_kind: automated
+      - id: t01_t14_all_pass
+        statement: "**T01–T14 全过**（唯一权威表 = `10/01 §2.1`）；任一 ❌ 即整体不通过"
+        check_kind: automated
+        authority_anchor: "10/01 §2.1"
+      - id: graph_and_ask_traceable
+        statement: "图谱/提问任务可追溯"
+        check_kind: automated
+    exit_artifacts: ["多公司样例", "acceptance_input_set（首批名单 + 样本事件）"]
+    chapter_anchor: "Ch6 · Ch7 · Ch9（graph 层）"
+    impl_ref: "09 §3.9"
+    gate_impl: "scripts/delivery/stage_gate.py: stage_core_chain_passed"
+
+  - delivery_stage: 4
+    key: daily_run
+    name: 每日持续研究
+    entry_condition: 阶段③ 通过
+    deliverables:
+      - 固定更新 + 事件触发 + 增量发布 + 故障降级与建议记录
+    pass_criteria_testable:
+      - id: timing_replayable
+        statement: "连续运行下**时点可核**（Ch9 §2.2）"
+        check_kind: automated
+      - id: coverage_verifiable
+        statement: "**覆盖可核**（`10/01 §N10.1-06`）"
+        check_kind: automated
+      - id: task_state_auditable
+        statement: "**任务状态可核**（Ch8 §C.2）"
+        check_kind: automated
+      - id: degrade_keeps_last_valid
+        statement: "降级**保留上次有效结果**（Ch8 §E）"
+        check_kind: automated
+    exit_artifacts: [state.json 游标, 运行日志]
+    chapter_anchor: "Ch8 · Ch1（Automation 编排）· Ch9（ops 层）"
+    impl_ref: "09 §3.9"
+    gate_impl: "scripts/delivery/stage_gate.py: stage_daily_run_passed"
+
+  - delivery_stage: 5
+    key: expansion
+    name: 覆盖扩展与评估
+    entry_condition: 阶段④ 通过
+    deliverables:
+      - 逐步补齐其他公司 + 校准公开信息筛选 + 持续前向复盘
+    pass_criteria_testable:
+      - id: research_standard_consistent
+        statement: "研究标准**保持一致**（Ch4 §G）"
+        check_kind: automated
+      - id: investment_result_verifiable
+        statement: "投资结果**可核验**（`Ch10 §N10.3-04` 前向记录）"
+        check_kind: automated
+      - id: review_append_only
+        statement: "复盘 **append-only**（`(success, failure, pending)` ⊆ 记录集，禁选择性删除）"
+        check_kind: automated
+    exit_artifacts: [三层复盘记录]
+    chapter_anchor: "Ch10 · Ch9（快照与权限）"
+    impl_ref: "09 §3.9"
+    gate_impl: "scripts/delivery/stage_gate.py: stage_expansion_passed"
+
+# ── 顺序锁定（`order_locked: true` 的判据）────────────────────────────────
+order_invariants:
+  - id: O11-01
+    statement: "delivery_stage 序列必须是 1,2,3,4,5，且与源稿五阶段名称逐字一致"
+  - id: O11-02
+    statement: "每个 stage 必须声明 entry_condition / deliverables / pass_criteria_testable / exit_artifacts"
+  - id: O11-03
+    statement: "阶段 n 的 entry_condition 必须引用阶段 n-1；生成一个环即 fail"

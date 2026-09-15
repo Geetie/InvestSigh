@@ -1,0 +1,25 @@
+# rules/notification.yaml —— 通知渠道与聚合（Ch8 §K ③ / Ch11 p11）
+#
+# 权威出处：`Ch8 §K ③`（通知/发布配置：**接口先定、值 tbd**）/ `Ch11 §D.1 p11`
+#
+# ★ 单一真源纪律：渠道与聚合的**值** = `rules/freeze.yaml::p11`；本文件只声明**接口**。
+# ★ 红线：通知**不得**通过过滤偷偷改变投资规则（源稿 §八：「不通过通知过滤偷偷改变投资规则」）。
+# ★ 阶段归属：阶段④（`00_交付施工图 §3.1`）。本阶段只落可解析指针骨架，不提前实现。
+# 只读：0444 + SHA256。
+
+version: 1
+spec_anchor: "Ch8 §K ③"
+param_ref: p11
+delivery_stage: 4
+implementation_status: pointer_skeleton
+
+interface:                                   # 接口先定（值 tbd）
+  notification_channels: tbd                 # ← 值只在 rules/freeze.yaml::p11
+  notification_aggregation: tbd              # ← 值只在 rules/freeze.yaml::p11
+  digest_frequency: tbd
+  per_object_override: []
+
+red_lines:
+  filter_must_not_change_rules: true         # ★ 通知过滤不得改变投资规则
+  must_surface_degradation: true             # 未完成核验 / 数据失效 / 任务失败均须可见
+  must_surface_gaps: true                    # 缺口不得被通知层隐藏

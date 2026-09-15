@@ -1,0 +1,34 @@
+# rules/schedule.yaml —— 调度时刻 / 时区（p07 指向，**不另存值**）
+#
+# 权威出处：`Ch11 §D.2 p07`（运行时刻与延迟目标）/ `Ch8 §D`（调度契约：五类触发 + 四时间戳时序）
+#           `Ch9 §3.10 J3`（每日运行时刻与时区）
+#
+# ★ 单一真源纪律（Ch11 §D.2 讲死）：**参数值唯一真源 = `rules/freeze.yaml::freeze_param`**；
+#   本文件由 p07 **指向**，**不另存同一参数的第二份值**。
+#   → 故本文件只声明**结构位**，时刻 / 时区值一律 `tbd`，实际读取走
+#     `config.freeze.get_param('p07')`（统一读口，**不硬编码**）。
+#
+# ★ 阶段归属：本文件为**阶段④ 前置**（`00_交付施工图 §3.1` 列为阶段④）。
+#   本阶段只落**可解析的指针骨架**，使 p07 的 `schedule_pointer` 不悬空；
+#   **不提前实现**调度行为（无 rrule、无触发器、无时区换算逻辑）。
+# 只读：0444 + SHA256。
+
+version: 1
+spec_anchor: "Ch8 §D"
+param_ref: p07
+delivery_stage: 4
+implementation_status: pointer_skeleton   # 阶段④ 补齐调度行为
+
+cadence:
+  daily: tbd
+  event_triggered: tbd
+  anchor: us_market_close                 # 源稿：建议以美股收盘后为主更新窗口
+  timezone: tbd                           # 须**显式记录**（`Ch9 §3.10 J3`）
+  time_value: tbd                         # ← 值只在 rules/freeze.yaml::p07
+  non_trading_day_policy: tbd
+
+latency_target:
+  latency_cap: public_data_update_frequency   # 时效上限 = 公开数据更新频率
+  realtime_response: false                    # 事件触发 **不代表** 毫秒级响应
+
+four_timestamps_ordering_required: true   # 发现 / 入队 / 完成 / 发布 四时间戳分别记录（Ch8 §D）

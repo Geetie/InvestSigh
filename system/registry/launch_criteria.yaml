@@ -1,0 +1,56 @@
+# registry/launch_criteria.yaml —— 首版启动条件（Ch11 §E.2）
+#
+# 权威出处：`Ch11 §E.2 红线二：付费数据可单独提出、非首版启动条件`（源稿第 368 行）
+#           `Ch9 §3.4.11`（D-01 免费额度）
+#
+# ★ 红线二：`required`（首版启动条件）**仅公开信息**；付费接入只能出现在 `optional`（**可后置、不阻塞**）。
+# ★ D-01 校验：iFinD / pandadata 必须 `license_tier=free_quota` 且 `cost=0`。
+# 守卫：`scripts/checks/launch_guard.py`（命中即 fail，禁 warn-only）。
+
+version: 1
+spec_anchor: "Ch11 §E.2"
+red_line_anchor: "源稿第 368 行"
+
+required:                        # ★ 首版启动条件——不得含任何付费订阅
+  - id: public_information_sources
+    requires_paid_subscription: false
+    statement: "仅公开可访问的信息：公司 IR、监管披露、官方财报材料、公开问答"
+    anchor: "源稿 §六"
+  - id: public_supplementary_sources
+    requires_paid_subscription: false
+    statement: "公开产品材料、第三方研究、媒体、X、YouTube、Substack 用于补充"
+    anchor: "源稿 §六"
+  - id: free_quota_connectors
+    requires_paid_subscription: false
+    statement: "免费额度连接器（westock / iFinD / pandadata）可进首版清单"
+    anchor: "D-01"
+  - id: serverside_persistence
+    requires_paid_subscription: false
+    statement: "服务端文件持久化（非浏览器本地存储）"
+    anchor: "Ch9 §N9.2-06"
+
+optional:                        # 付费接入——**可后置、不阻塞首版**
+  - id: paid_research_library
+    requires_paid_subscription: true
+    statement: "新增付费研报库"
+    deferred: true
+    anchor: "源稿：本次讨论未授权新增付费数据订阅"
+  - id: paid_expert_network
+    requires_paid_subscription: true
+    statement: "付费专家网络"
+    deferred: true
+  - id: paid_consensus_database
+    requires_paid_subscription: true
+    statement: "付费市场预期数据库（一致预期）"
+    deferred: true
+    consequence_if_absent: "缺少付费一致预期数据库时，仍可进行反向估值与独立研究，**但必须披露覆盖缺口**"
+
+# ── D-01 可用来源清单（launch_guard 逐项校验）────────────────────────────
+available_sources:
+  - {id: westock,   license_tier: free_quota, cost: 0, requires_paid_subscription: false}
+  - {id: iFinD,     license_tier: free_quota, cost: 0, requires_paid_subscription: false}
+  - {id: pandadata, license_tier: free_quota, cost: 0, requires_paid_subscription: false}
+
+# ── 与 allowlist 的关系（单一真源）──────────────────────────────────────
+allowlist_ref: rules/data-sources.allowlist.yaml
+param_ref: p09                    # 预算值只在 rules/freeze.yaml::p09

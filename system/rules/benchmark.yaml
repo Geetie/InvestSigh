@@ -1,0 +1,66 @@
+# rules/benchmark.yaml —— 基准对象声明（Ch3 §B-17 / §C.3）
+#
+# 权威出处：`Ch3 §C.3`（基准对象化与 AGIX 口径 N3.4-01~09）
+#           `Ch9 §N9.1-22/23`（基准身份及研究底稿 / 收益口径）
+#
+# ★ 单一真源纪律：基准**身份**的值 = `rules/freeze.yaml::p01`，本文件**只声明对象**，
+#   **不硬编码单一基准代码**（`Ch3 §C.3`：冻结前不得硬编码单一基准代码）。
+#   本文件与 p01 的关系 = "对象 ← 身份" 的指针，不构成第二份值。
+#
+# ★ 禁用语义（N3.4-05）：基准收益**必须取基金本身行情**，**禁用公开股票指数替代整个基金**。
+# 只读：0444 + SHA256。
+
+version: 1
+spec_anchor: "Ch3 §C.3"
+
+benchmark_objects:
+  - benchmark_id_param_ref: p01            # ← 指针：身份值只在 rules/freeze.yaml::p01
+    benchmark_role: primary                # primary（ETF 主基准）/ secondary（同行辅基准，辅助分析）
+    coverage_profile:
+      positioning: "ai_hardware_infrastructure_application"
+      note: "覆盖 AI 硬件 / 基础设施 / 应用（源稿 §「主基准工作候选」）"
+    includes_non_listed_assets: true       # AGIX = true（含非上市资产）
+    non_listed_assets:
+      disclosure_state: undisclosed        # 缺口单列；**不硬编点值**（承 Ch5 impl §E.1）
+      sensitivity:
+        disclosure_state: undisclosed
+    freeze_status: unfrozen                # 域 = 基准对象（≠ param 的 tbd/frozen）
+    return_basis:
+      same_start_end: true                 # 同起止时间
+      currency: USD                        # 美元
+      dividends_reinvested: true           # 含分红再投资
+      price_kind: market_price_total_return  # 市场价格总回报
+      fee_deducted_again: false            # ★ 基金费用已含在实际回报，**禁止二次扣费**（N3.4-07）
+      version: v1
+    return_basis_version: v1
+    benchmark_semantics: "选股相对继续持有该 AI 投资选项是否创造价值；≠ 全体 AI 上市公司纯行业平均"
+    return_source: fund_market_price       # ★ 必须为基金本身行情（N3.4-05）
+    proxy_index_used: false                # ★ 不得以公开指数充当基金
+    change_records: []                     # 变更 → 新增版本 + effective_date + 保留旧口径 + reason + version + 人工审批
+
+  - benchmark_id_param_ref: tbd            # secondary（同行辅基准）——辅助分析用途，身份待定
+    benchmark_role: secondary
+    coverage_profile: {positioning: tbd}
+    freeze_status: unfrozen
+    return_basis: {same_start_end: true, currency: USD, dividends_reinvested: true,
+                   price_kind: market_price_total_return, fee_deducted_again: false, version: v1}
+    return_basis_version: v1
+    benchmark_semantics: "同行辅助比较；不得用于替代主基准的相对收益判定"
+    return_source: fund_market_price
+    proxy_index_used: false
+    change_records: []
+
+# ── 基准变更治理（N3.4-08/09 / Ch9 §3.4.12）────────────────────────────────
+change_governance:
+  overwrite_forbidden: true                # 变更**不覆盖**，新增版本
+  required_fields: [effective_date, reason, version]
+  keep_old_caliber_results: true            # 保留旧口径结果（as-of 可查）
+  requires_human_approval: true             # 无审批的变更被拒（承 Ch11 "发布与人工复核"）
+  guard: "scripts/benchmark/return_guard.py"
+
+# ── 收益守卫判据（N3.4-05/07，Ch3 §D.2）────────────────────────────────────
+return_guard:
+  must_use_fund_market_price: true
+  proxy_index_used_must_be_false: true
+  fee_deducted_again_must_be_false: true
+  nav_return_role: diagnostic               # 净值收益**仅作诊断**，不得用于相对收益判定（Ch3 §D.2 逐字值 = "diagnostic"）

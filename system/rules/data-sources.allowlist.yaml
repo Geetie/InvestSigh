@@ -1,0 +1,61 @@
+# rules/data-sources.allowlist.yaml —— 数据源许可与预算（Ch9 §3.4.11 / Ch11 §D.2 p09）
+#
+# 权威出处：`Ch9 §3.4.11 数据源 allowlist（含决策 D-01）` / `Ch11 §D.2 p09`
+# 落位说明：`00_交付施工图 §3.1` 写 `registry/data-sources.allowlist.yaml`，
+#   而 `Ch9 §3.4.11` 与 `Ch11 §D.2` 均写 `rules/data-sources.allowlist.yaml`。
+#   按 `00_交付施工图 §0 第 4 条`（本图不替设计做决定，组件细节以各章 02 为准）**采 rules/**；
+#   该路径分歧已登记于 `system/reports/phase1_open_tensions.md`，**待需求方确认**。
+#
+# ★ D-01（2026-09-15 已拍板）：iFinD / pandadata MCP 连接器**有免费额度，暂不视为"付费数据订阅"**。
+#   → 标 `license_tier=free_quota` / `cost=0`；**不得写入裁决逻辑**（仍须走 Ch6 分级与证据质量流程）；
+#   → **若未来转为付费，须按 Ch2 §N2.1-14 重新评估**。
+#
+# ★ 单一真源纪律：本文件**不另存** p09 的预算值；预算值只在 `rules/freeze.yaml::p09`。
+# 只读：0444 + SHA256。
+
+version: 1
+spec_anchor: "Ch9 §3.4.11"
+param_ref: p09                             # ← 指针：p09 的值只在 rules/freeze.yaml
+decision_anchor: "D-01（2026-09-15）"
+
+# 消歧：这里是 `license_tier`（数据源许可），**不是** `tier`（来源分级）
+#       —— Ch2 §C.2 R-18 / `Ch9 §3.4.11` v1.1 回改 R-18。
+tier_field_name: license_tier
+
+sources:
+  - id: westock
+    kind: mcp_connector
+    license_tier: free_quota
+    cost: 0
+    may_enter_first_version: true
+    may_enter_decision_logic: false        # ★ 不得写入裁决逻辑
+    reassessment_rule: "若转为付费，按 Ch2 §N2.1-14 重评"
+  - id: iFinD
+    kind: mcp_connector
+    license_tier: free_quota
+    cost: 0
+    may_enter_first_version: true
+    may_enter_decision_logic: false
+    reassessment_rule: "若转为付费，按 Ch2 §N2.1-14 重评"
+  - id: pandadata
+    kind: mcp_connector
+    license_tier: free_quota
+    cost: 0
+    may_enter_first_version: true
+    may_enter_decision_logic: false
+    reassessment_rule: "若转为付费，按 Ch2 §N2.1-14 重评"
+  - id: websearch_webfetch
+    kind: builtin_capability
+    license_tier: free_quota
+    cost: 0
+    may_enter_first_version: true
+    may_enter_decision_logic: false
+    note: "公开网页采集（IR / 媒体 / KOL / 视频），尊重登录、付费与访问限制"
+
+budget_policy:
+  data_scope: public_only                  # 仅公开信息（源稿第 169 行）
+  budget_value: tbd                        # ← 值只在 rules/freeze.yaml::p09
+  paid_subscription_as_first_version_launch_condition: false   # ★ 红线二（Ch11 §E.2）
+
+# ── 首版启动条件关联（Ch11 §E.2 / registry/launch_criteria.yaml）────────────
+launch_criteria_ref: registry/launch_criteria.yaml

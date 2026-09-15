@@ -1,0 +1,6884 @@
+{
+  "$defs": {
+    "Baseline": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "baseline_id": {
+          "title": "Baseline Id",
+          "type": "string"
+        },
+        "business_mechanism": {
+          "title": "Business Mechanism",
+          "type": "string"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "conclusion_version": {
+          "default": 1,
+          "title": "Conclusion Version",
+          "type": "integer"
+        },
+        "driver_model": {
+          "items": {
+            "$ref": "#/$defs/DriverModel"
+          },
+          "title": "Driver Model",
+          "type": "array"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "evidence_claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Claim Ids",
+          "type": "array"
+        },
+        "expiry_review": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expiry Review"
+        },
+        "falsifier_written_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Falsifier Written Seq"
+        },
+        "falsifiers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Falsifiers",
+          "type": "array"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "historical_numeric_claims": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Historical Numeric Claims",
+          "type": "array"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "unmet_conditions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unmet Conditions",
+          "type": "array"
+        },
+        "value_state_refs": {
+          "$ref": "#/$defs/ValueStateRefs"
+        },
+        "verification_conditions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Verification Conditions",
+          "type": "array"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "baseline_id",
+        "company_id",
+        "version",
+        "business_mechanism"
+      ],
+      "title": "Baseline",
+      "type": "object"
+    },
+    "Benchmark": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "benchmark_id": {
+          "title": "Benchmark Id",
+          "type": "string"
+        },
+        "benchmark_role": {
+          "$ref": "#/$defs/BenchmarkRole",
+          "default": "primary"
+        },
+        "benchmark_semantics": {
+          "default": "",
+          "title": "Benchmark Semantics",
+          "type": "string"
+        },
+        "change_records": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Change Records",
+          "type": "array"
+        },
+        "coverage_profile": {
+          "additionalProperties": true,
+          "title": "Coverage Profile",
+          "type": "object"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "freeze_status": {
+          "$ref": "#/$defs/BenchmarkFreezeStatus",
+          "default": "unfrozen"
+        },
+        "includes_non_listed_assets": {
+          "default": false,
+          "title": "Includes Non Listed Assets",
+          "type": "boolean"
+        },
+        "non_listed_assets": {
+          "additionalProperties": true,
+          "title": "Non Listed Assets",
+          "type": "object"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "proxy_index_used": {
+          "default": false,
+          "title": "Proxy Index Used",
+          "type": "boolean"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "return_basis": {
+          "$ref": "#/$defs/BenchmarkReturnBasis"
+        },
+        "return_basis_version": {
+          "default": "v1",
+          "title": "Return Basis Version",
+          "type": "string"
+        },
+        "return_source": {
+          "default": "fund_market_price",
+          "enum": [
+            "fund_market_price",
+            "proxy_index"
+          ],
+          "title": "Return Source",
+          "type": "string"
+        },
+        "sensitivity": {
+          "additionalProperties": true,
+          "title": "Sensitivity",
+          "type": "object"
+        }
+      },
+      "required": [
+        "benchmark_id"
+      ],
+      "title": "Benchmark",
+      "type": "object"
+    },
+    "BenchmarkFreezeStatus": {
+      "description": "`benchmark.freeze_status`（`Ch3 §C.3`）——域 = 基准对象。\n\n`unfrozen` 时**允许替换代码**（AGIX = 工作假设）；冻结前不得硬编码单一基准代码。",
+      "enum": [
+        "unfrozen",
+        "frozen"
+      ],
+      "title": "BenchmarkFreezeStatus",
+      "type": "string"
+    },
+    "BenchmarkReturnBasis": {
+      "additionalProperties": false,
+      "description": "收益口径（`Ch9 §N9.1-23` / `Ch3 §C.3`）。\n\n**同起止时间 + 美元 + 含分红再投资的市场价格总回报**；净值仅诊断；费用不重复扣。",
+      "properties": {
+        "currency": {
+          "default": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "dividends_reinvested": {
+          "default": true,
+          "title": "Dividends Reinvested",
+          "type": "boolean"
+        },
+        "fee_deducted_again": {
+          "default": false,
+          "title": "Fee Deducted Again",
+          "type": "boolean"
+        },
+        "price_kind": {
+          "default": "market_price_total_return",
+          "enum": [
+            "market_price_total_return",
+            "nav"
+          ],
+          "title": "Price Kind",
+          "type": "string"
+        },
+        "same_start_end": {
+          "default": true,
+          "title": "Same Start End",
+          "type": "boolean"
+        },
+        "version": {
+          "default": "v1",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "title": "BenchmarkReturnBasis",
+      "type": "object"
+    },
+    "BenchmarkRole": {
+      "description": "`Ch3 §C.3`。",
+      "enum": [
+        "primary",
+        "secondary"
+      ],
+      "title": "BenchmarkRole",
+      "type": "string"
+    },
+    "BusinessPosition": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "evidence_strength": {
+          "default": "",
+          "title": "Evidence Strength",
+          "type": "string"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "inclusion_reason": {
+          "default": "",
+          "title": "Inclusion Reason",
+          "type": "string"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "position_listed": {
+          "default": false,
+          "title": "Position Listed",
+          "type": "boolean"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "raw_source": {
+          "default": "",
+          "title": "Raw Source",
+          "type": "string"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "research_depth": {
+          "$ref": "#/$defs/ResearchDepth",
+          "default": "position_listed"
+        },
+        "scan_frequency": {
+          "default": "tbd",
+          "title": "Scan Frequency",
+          "type": "string"
+        }
+      },
+      "required": [
+        "company_id",
+        "node_id"
+      ],
+      "title": "BusinessPosition",
+      "type": "object"
+    },
+    "CheckRecord": {
+      "additionalProperties": false,
+      "description": "核查记录（`Ch1 §C.2`）。**不是**第九章 8 大对象之一，属控制面子记录。\n\n每日运行**必写**（无论有无变化），使\"无信号\"成为正常态。",
+      "properties": {
+        "changed": {
+          "title": "Changed",
+          "type": "boolean"
+        },
+        "check_id": {
+          "title": "Check Id",
+          "type": "string"
+        },
+        "degraded": {
+          "default": false,
+          "title": "Degraded",
+          "type": "boolean"
+        },
+        "judgment_change": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "title": "Judgment Change",
+          "type": "object"
+        },
+        "run_date": {
+          "format": "date",
+          "title": "Run Date",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/CheckScope"
+        },
+        "signals_emitted": {
+          "title": "Signals Emitted",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "check_id",
+        "run_date",
+        "scope",
+        "changed",
+        "signals_emitted"
+      ],
+      "title": "CheckRecord",
+      "type": "object"
+    },
+    "CheckScope": {
+      "description": "`check_record.scope`（`Ch1 §C.2`）。",
+      "enum": [
+        "collect",
+        "verify",
+        "recheck",
+        "full"
+      ],
+      "title": "CheckScope",
+      "type": "string"
+    },
+    "Claim": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "carrier_platform": {
+          "default": "",
+          "title": "Carrier Platform",
+          "type": "string"
+        },
+        "claim_form": {
+          "$ref": "#/$defs/ClaimForm"
+        },
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "claim_nature": {
+          "$ref": "#/$defs/ClaimNature"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "full_text_read": {
+          "default": false,
+          "title": "Full Text Read",
+          "type": "boolean"
+        },
+        "impact_capability": {
+          "additionalProperties": true,
+          "title": "Impact Capability",
+          "type": "object"
+        },
+        "locator": {
+          "default": "",
+          "title": "Locator",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "official_claim_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OfficialClaimKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "origin_claim_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin Claim Id"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "publisher_entity": {
+          "default": "",
+          "title": "Publisher Entity",
+          "type": "string"
+        },
+        "quote_hash": {
+          "title": "Quote Hash",
+          "type": "string"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "status": {
+          "default": "active",
+          "title": "Status",
+          "type": "string"
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supersedes"
+        },
+        "tier": {
+          "$ref": "#/$defs/SourceTier"
+        },
+        "tier_basis": {
+          "default": "",
+          "title": "Tier Basis",
+          "type": "string"
+        },
+        "version_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "claim_id",
+        "source_id",
+        "quote_hash",
+        "claim_nature",
+        "claim_form",
+        "tier"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "ClaimForm": {
+      "description": "来源形成形式（`Ch6 §N6.2-04`，1.5 手材料拆型）。",
+      "enum": [
+        "original_investigation",
+        "citation",
+        "estimate",
+        "opinion"
+      ],
+      "title": "ClaimForm",
+      "type": "string"
+    },
+    "ClaimNature": {
+      "description": "认识论性质，普遍适用（`Ch9 §3.4.6` R-17 / `Ch2 §C.2`）。",
+      "enum": [
+        "fact",
+        "plan",
+        "forecast",
+        "interpretation"
+      ],
+      "title": "ClaimNature",
+      "type": "string"
+    },
+    "ClaimPropagation": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "carrier_platform": {
+          "default": "",
+          "title": "Carrier Platform",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "independent_evidence": {
+          "default": false,
+          "title": "Independent Evidence",
+          "type": "boolean"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "propagated_claim_id": {
+          "title": "Propagated Claim Id",
+          "type": "string"
+        },
+        "propagation_id": {
+          "title": "Propagation Id",
+          "type": "string"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "publisher_entity": {
+          "default": "",
+          "title": "Publisher Entity",
+          "type": "string"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "root_claim_id": {
+          "title": "Root Claim Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "propagation_id",
+        "root_claim_id",
+        "propagated_claim_id"
+      ],
+      "title": "ClaimPropagation",
+      "type": "object"
+    },
+    "Company": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "change_log": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Change Log",
+          "type": "array"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "economic_group_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Economic Group Name"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "external_ids": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "External Ids",
+          "type": "object"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "fiscal_year_start_month": {
+          "default": 1,
+          "maximum": 12,
+          "minimum": 1,
+          "title": "Fiscal Year Start Month",
+          "type": "integer"
+        },
+        "legal_name": {
+          "title": "Legal Name",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "research_depth": {
+          "$ref": "#/$defs/ResearchDepth",
+          "default": "position_listed"
+        }
+      },
+      "required": [
+        "company_id",
+        "legal_name"
+      ],
+      "title": "Company",
+      "type": "object"
+    },
+    "DependencyEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "edge_id": {
+          "title": "Edge Id",
+          "type": "string"
+        },
+        "from_ref": {
+          "title": "From Ref",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "to_ref": {
+          "title": "To Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "edge_id",
+        "from_ref",
+        "to_ref",
+        "kind"
+      ],
+      "title": "DependencyEdge",
+      "type": "object"
+    },
+    "DirectionState": {
+      "description": "增长动力 / 确定性 / 护城河趋势三者的共用方向枚举（`Ch9 §N9.1-18`）。",
+      "enum": [
+        "strengthening",
+        "weakening",
+        "unchanged",
+        "tbd"
+      ],
+      "title": "DirectionState",
+      "type": "string"
+    },
+    "DisclosureState": {
+      "description": "披露状态——\"不填入猜测数值\"的显式表达（`Ch9 §N9.1-09` / `§N9.2-02`）。\n\n未披露时**必须**显式存 `undisclosed`，**不得**置 0、置 null 或写猜测值。",
+      "enum": [
+        "disclosed",
+        "undisclosed"
+      ],
+      "title": "DisclosureState",
+      "type": "string"
+    },
+    "DriverModel": {
+      "additionalProperties": false,
+      "description": "驱动模型（`Ch9 §N9.1-17` / `Ch4 §D`）。驱动 → 科目 → 每股指标三层映射。",
+      "properties": {
+        "assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "driver_id": {
+          "title": "Driver Id",
+          "type": "string"
+        },
+        "driver_name": {
+          "title": "Driver Name",
+          "type": "string"
+        },
+        "is_primary": {
+          "default": false,
+          "title": "Is Primary",
+          "type": "boolean"
+        },
+        "linked_accounts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Linked Accounts",
+          "type": "array"
+        },
+        "realization_stage": {
+          "$ref": "#/$defs/DriverRealizationStage",
+          "default": "tbd"
+        }
+      },
+      "required": [
+        "driver_id",
+        "driver_name"
+      ],
+      "title": "DriverModel",
+      "type": "object"
+    },
+    "DriverRealizationStage": {
+      "description": "驱动的兑现阶段（`Ch4 §D`）。与 `relation_progress_stage` **不得互用**（`Ch2 §C.2 R-15 ②`）。",
+      "enum": [
+        "tbd",
+        "not_started",
+        "ramping",
+        "ramped",
+        "declining"
+      ],
+      "title": "DriverRealizationStage",
+      "type": "string"
+    },
+    "ErrorAxis": {
+      "description": "错误定位七方向（`Ch9 §3.3.5` R-29）。**标记字段，不进决策函数**。",
+      "enum": [
+        "source",
+        "business_mechanism",
+        "relation_transmission",
+        "financial_forecast",
+        "price_expectation",
+        "benchmark_forecast",
+        "timing"
+      ],
+      "title": "ErrorAxis",
+      "type": "string"
+    },
+    "EvalLayer": {
+      "description": "三层复盘分层（`Ch9 §3.3.5` R-29）。**标记字段，不进决策函数**。",
+      "enum": [
+        "research_quality",
+        "forecast_quality",
+        "investment_result"
+      ],
+      "title": "EvalLayer",
+      "type": "string"
+    },
+    "EvalResult": {
+      "additionalProperties": false,
+      "description": "三层复盘评估结果（`Ch9 §3.3.5` R-29）。\n\n⚠️ 均为**标记字段**：**不进决策函数**、不参与任何门槛\n（对齐 `Ch2 §B.3` Checker-1 的 `is_decision_scope` 排除项）。",
+      "properties": {
+        "error_axis": {
+          "items": {
+            "$ref": "#/$defs/ErrorAxis"
+          },
+          "title": "Error Axis",
+          "type": "array"
+        },
+        "error_axis_note": {
+          "default": "",
+          "title": "Error Axis Note",
+          "type": "string"
+        },
+        "eval_layer": {
+          "$ref": "#/$defs/EvalLayer"
+        }
+      },
+      "required": [
+        "eval_layer"
+      ],
+      "title": "EvalResult",
+      "type": "object"
+    },
+    "Event": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "company_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Company Ids",
+          "type": "array"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "event_alias": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Event Alias",
+          "type": "array"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "event_type": {
+          "$ref": "#/$defs/EventType"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "metric": {
+          "default": "tbd",
+          "title": "Metric",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "period_bucket": {
+          "default": "tbd",
+          "title": "Period Bucket",
+          "type": "string"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "related_object_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Related Object Refs",
+          "type": "array"
+        },
+        "root_source_id": {
+          "default": "",
+          "title": "Root Source Id",
+          "type": "string"
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supersedes"
+        },
+        "version_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "event_id",
+        "event_type"
+      ],
+      "title": "Event",
+      "type": "object"
+    },
+    "EventType": {
+      "description": "事件类型（`Ch9 §3.4.7` 指纹组成项之一）。",
+      "enum": [
+        "tbd",
+        "earnings",
+        "guidance",
+        "order",
+        "product",
+        "supply",
+        "policy",
+        "price_action",
+        "personnel",
+        "other"
+      ],
+      "title": "EventType",
+      "type": "string"
+    },
+    "ExpectationSample": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "period": {
+          "title": "Period",
+          "type": "string"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "provider_kind": {
+          "default": "broker",
+          "enum": [
+            "company_guidance",
+            "broker",
+            "social"
+          ],
+          "title": "Provider Kind",
+          "type": "string"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "sample_id": {
+          "title": "Sample Id",
+          "type": "string"
+        },
+        "sample_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sample Size"
+        },
+        "sample_value": {
+          "default": "tbd",
+          "title": "Sample Value",
+          "type": "string"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "source_id": {
+          "default": "",
+          "title": "Source Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sample_id",
+        "security_id",
+        "provider_id",
+        "metric",
+        "period"
+      ],
+      "title": "ExpectationSample",
+      "type": "object"
+    },
+    "Impact": {
+      "additionalProperties": false,
+      "properties": {
+        "affected_company_id": {
+          "title": "Affected Company Id",
+          "type": "string"
+        },
+        "affected_security_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Affected Security Id"
+        },
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "conditions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Conditions",
+          "type": "array"
+        },
+        "counter_forces": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Counter Forces",
+          "type": "array"
+        },
+        "direction": {
+          "enum": [
+            "positive",
+            "negative",
+            "unclear"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "evidence_claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Claim Ids",
+          "type": "array"
+        },
+        "falsifiers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Falsifiers",
+          "type": "array"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "impact_id": {
+          "title": "Impact Id",
+          "type": "string"
+        },
+        "impact_variable": {
+          "title": "Impact Variable",
+          "type": "string"
+        },
+        "magnitude": {
+          "default": "tbd",
+          "title": "Magnitude",
+          "type": "string"
+        },
+        "magnitude_disclosure": {
+          "$ref": "#/$defs/DisclosureState",
+          "default": "undisclosed"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "path_kind": {
+          "default": "direct_relation",
+          "enum": [
+            "direct_relation",
+            "inferred_path"
+          ],
+          "title": "Path Kind",
+          "type": "string"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "time_lag": {
+          "default": "tbd",
+          "title": "Time Lag",
+          "type": "string"
+        }
+      },
+      "required": [
+        "impact_id",
+        "event_id",
+        "affected_company_id",
+        "impact_variable",
+        "direction"
+      ],
+      "title": "Impact",
+      "type": "object"
+    },
+    "IndustryNode": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "node_name": {
+          "title": "Node Name",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "parent_node_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Node Id"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "taxonomy_version": {
+          "title": "Taxonomy Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "node_id",
+        "node_name",
+        "taxonomy_version"
+      ],
+      "title": "IndustryNode",
+      "type": "object"
+    },
+    "MoatLevel": {
+      "description": "护城河**水平**（`Ch2 §C.2 A-02` / `N2.2-02`）。与 `moat_state` 独立、不得合并为 `moat`。",
+      "enum": [
+        "weak",
+        "moderate",
+        "strong",
+        "tbd"
+      ],
+      "title": "MoatLevel",
+      "type": "string"
+    },
+    "OfficialClaimKind": {
+      "description": "官方一手披露性质，**仅适用 `tier=primary`**（`Ch6 §N6.2-03`）。",
+      "enum": [
+        "occurred_fact",
+        "forward_guidance",
+        "marketing_claim"
+      ],
+      "title": "OfficialClaimKind",
+      "type": "string"
+    },
+    "OpportunityBasis": {
+      "additionalProperties": false,
+      "description": "机会类型依据（`Ch2 §C.1` / `Ch9 §3.3.4`）。每类一条依据。",
+      "properties": {
+        "price_ref": {
+          "title": "Price Ref",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/OpportunityType"
+        },
+        "value_ref": {
+          "title": "Value Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "value_ref",
+        "price_ref"
+      ],
+      "title": "OpportunityBasis",
+      "type": "object"
+    },
+    "OpportunityType": {
+      "description": "机会类型 A/B（`Ch2 §C.1` 规则 2）。**数组、不互斥、可为空**；**不进买入门**。\n\n★ 登记在案的张力（`system/reports/phase1_open_tensions.md::T-02`）：\n  `Ch2 §C.1` 逐字把枚举写作 \"enum A/B\"（源稿亦为\"机会类型 A 类 / B 类\"），\n  而 `施工图 §8` 纪律 7 要求\"枚举 token 英文小写 + 下划线\"。二者在**表面形式**上冲突。\n  本实现的取舍 —— **不擅自改动设计的数据契约，也不悄悄放松纪律**：\n\n  - **wire 值 = 设计逐字** `\"A\"` / `\"B\"`（JSONL / schema 里出现的 token 不变）\n  - **成员名 = 小写下划线** `type_a` / `type_b`（满足纪律 7 对**标识符**的要求）\n  - 例外集合被单测 `test_enum_value_exceptions_are_exactly_the_documented_ones` **钉住**，\n    任何新增的大写值都会 fail",
+      "enum": [
+        "A",
+        "B"
+      ],
+      "title": "OpportunityType",
+      "type": "string"
+    },
+    "PriceSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "adjustment_caliber_version": {
+          "default": "tbd",
+          "title": "Adjustment Caliber Version",
+          "type": "string"
+        },
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "currency": {
+          "title": "Currency",
+          "type": "string"
+        },
+        "delayed": {
+          "default": false,
+          "title": "Delayed",
+          "type": "boolean"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "is_nav": {
+          "default": false,
+          "title": "Is Nav",
+          "type": "boolean"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "price": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Price"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "source_id": {
+          "default": "",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "trading_session": {
+          "title": "Trading Session",
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshot_id",
+        "security_id",
+        "price",
+        "currency",
+        "trading_session"
+      ],
+      "title": "PriceSnapshot",
+      "type": "object"
+    },
+    "Product": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "generation": {
+          "default": "tbd",
+          "title": "Generation",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "product_id": {
+          "title": "Product Id",
+          "type": "string"
+        },
+        "product_name": {
+          "title": "Product Name",
+          "type": "string"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        }
+      },
+      "required": [
+        "product_id",
+        "company_id",
+        "product_name"
+      ],
+      "title": "Product",
+      "type": "object"
+    },
+    "Recommendation": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "description": "建议动作（`Ch2 §B.2 P-05`）。**不得含 short / short_sell**；**无 quantity / position**。",
+          "enum": [
+            "buy",
+            "sell",
+            "pending",
+            "maintain"
+          ],
+          "title": "RecommendationAction",
+          "type": "string"
+        },
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "change_reason": {
+          "default": "",
+          "title": "Change Reason",
+          "type": "string"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "early_judgment": {
+          "default": false,
+          "title": "Early Judgment",
+          "type": "boolean"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "evidence_gaps": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Gaps",
+          "type": "array"
+        },
+        "evidence_version_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Version Ids",
+          "type": "array"
+        },
+        "expiry_review": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expiry Review"
+        },
+        "falsifier_written_at": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Falsifier Written At"
+        },
+        "falsifiers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Falsifiers",
+          "type": "array"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "horizon": {
+          "title": "Horizon",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "opportunity_basis": {
+          "items": {
+            "additionalProperties": false,
+            "description": "机会类型依据（`Ch2 §C.1` / `Ch9 §3.3.4`）。每类一条依据。",
+            "properties": {
+              "price_ref": {
+                "title": "Price Ref",
+                "type": "string"
+              },
+              "type": {
+                "$ref": "#/$defs/OpportunityType"
+              },
+              "value_ref": {
+                "title": "Value Ref",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "value_ref",
+              "price_ref"
+            ],
+            "title": "OpportunityBasis",
+            "type": "object"
+          },
+          "title": "Opportunity Basis",
+          "type": "array"
+        },
+        "opportunity_types": {
+          "items": {
+            "description": "机会类型 A/B（`Ch2 §C.1` 规则 2）。**数组、不互斥、可为空**；**不进买入门**。\n\n★ 登记在案的张力（`system/reports/phase1_open_tensions.md::T-02`）：\n  `Ch2 §C.1` 逐字把枚举写作 \"enum A/B\"（源稿亦为\"机会类型 A 类 / B 类\"），\n  而 `施工图 §8` 纪律 7 要求\"枚举 token 英文小写 + 下划线\"。二者在**表面形式**上冲突。\n  本实现的取舍 —— **不擅自改动设计的数据契约，也不悄悄放松纪律**：\n\n  - **wire 值 = 设计逐字** `\"A\"` / `\"B\"`（JSONL / schema 里出现的 token 不变）\n  - **成员名 = 小写下划线** `type_a` / `type_b`（满足纪律 7 对**标识符**的要求）\n  - 例外集合被单测 `test_enum_value_exceptions_are_exactly_the_documented_ones` **钉住**，\n    任何新增的大写值都会 fail",
+            "enum": [
+              "A",
+              "B"
+            ],
+            "title": "OpportunityType",
+            "type": "string"
+          },
+          "title": "Opportunity Types",
+          "type": "array"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recommendation_id": {
+          "title": "Recommendation Id",
+          "type": "string"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "review_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Date"
+        },
+        "rule_version": {
+          "title": "Rule Version",
+          "type": "string"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "start_date": {
+          "format": "date",
+          "title": "Start Date",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/RecommendationStatus",
+          "default": "active"
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supersedes"
+        },
+        "unmet_conditions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unmet Conditions",
+          "type": "array"
+        },
+        "verification_conditions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Verification Conditions",
+          "type": "array"
+        },
+        "version": {
+          "default": 1,
+          "title": "Version",
+          "type": "integer"
+        },
+        "version_kind": {
+          "anyOf": [
+            {
+              "description": "三类版本事件语义不同，必须区分（`Ch9 §2.3.2` / `§3.4.2`）。",
+              "enum": [
+                "forecast_revision",
+                "financial_restatement",
+                "source_retraction"
+              ],
+              "title": "VersionKind",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "recommendation_id",
+        "security_id",
+        "company_id",
+        "action",
+        "horizon",
+        "start_date",
+        "rule_version"
+      ],
+      "title": "Recommendation",
+      "type": "object"
+    },
+    "RecommendationAction": {
+      "description": "建议动作（`Ch2 §B.2 P-05`）。**不得含 short / short_sell**；**无 quantity / position**。",
+      "enum": [
+        "buy",
+        "sell",
+        "pending",
+        "maintain"
+      ],
+      "title": "RecommendationAction",
+      "type": "string"
+    },
+    "RecommendationStatus": {
+      "description": "建议状态（`Ch7 §D`：`boundary_unresolved` 与\"跑不赢\"\"无法判断\"两端并列不并入，`Ch2 §C.3`）。",
+      "enum": [
+        "active",
+        "confident_underperform",
+        "uncertain",
+        "boundary_unresolved",
+        "superseded"
+      ],
+      "title": "RecommendationStatus",
+      "type": "string"
+    },
+    "Relation": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "commitment_kind": {
+          "default": "tbd",
+          "title": "Commitment Kind",
+          "type": "string"
+        },
+        "currency": {
+          "default": "tbd",
+          "title": "Currency",
+          "type": "string"
+        },
+        "economic_exposure": {
+          "default": "tbd",
+          "title": "Economic Exposure",
+          "type": "string"
+        },
+        "economic_exposure_caliber": {
+          "default": "tbd",
+          "title": "Economic Exposure Caliber",
+          "type": "string"
+        },
+        "economic_exposure_disclosure": {
+          "$ref": "#/$defs/DisclosureState",
+          "default": "undisclosed"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "evidence_claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Claim Ids",
+          "type": "array"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "object_id": {
+          "title": "Object Id",
+          "type": "string"
+        },
+        "object_kind": {
+          "enum": [
+            "company",
+            "product"
+          ],
+          "title": "Object Kind",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "related_product_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Related Product Id"
+        },
+        "relation_id": {
+          "title": "Relation Id",
+          "type": "string"
+        },
+        "relation_progress_stage": {
+          "$ref": "#/$defs/RelationProgressStage",
+          "default": "tbd"
+        },
+        "relation_type": {
+          "title": "Relation Type",
+          "type": "string"
+        },
+        "subject_id": {
+          "title": "Subject Id",
+          "type": "string"
+        },
+        "subject_kind": {
+          "enum": [
+            "company",
+            "product"
+          ],
+          "title": "Subject Kind",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "valid_to": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valid To"
+        }
+      },
+      "required": [
+        "relation_id",
+        "subject_id",
+        "subject_kind",
+        "object_id",
+        "object_kind",
+        "relation_type",
+        "valid_from"
+      ],
+      "title": "Relation",
+      "type": "object"
+    },
+    "RelationProgressStage": {
+      "description": "合作阶段（`Ch9 §N9.1-07`）。**不得自动跨级推进**（T03）。\n\n⚠️ 与 `driver.realization_stage` **分别命名、不得互用**（`Ch2 §C.2 R-15 ②`）。",
+      "enum": [
+        "tbd",
+        "discussed",
+        "validation_done",
+        "qualification_done",
+        "design_win",
+        "order_confirmed",
+        "revenue_recognized"
+      ],
+      "title": "RelationProgressStage",
+      "type": "string"
+    },
+    "ResearchDepth": {
+      "description": "研究深度四态（`Ch9 §N9.1-05` / `Ch3 §C.2`）。**可回退**，非单调递增。",
+      "enum": [
+        "position_listed",
+        "relations_verified",
+        "baseline_done",
+        "tracking"
+      ],
+      "title": "ResearchDepth",
+      "type": "string"
+    },
+    "Security": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "currency": {
+          "title": "Currency",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "listing_venue": {
+          "title": "Listing Venue",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "ticker": {
+          "title": "Ticker",
+          "type": "string"
+        },
+        "trading_session": {
+          "title": "Trading Session",
+          "type": "string"
+        },
+        "verified": {
+          "default": false,
+          "title": "Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "security_id",
+        "company_id",
+        "ticker",
+        "listing_venue",
+        "currency",
+        "trading_session"
+      ],
+      "title": "Security",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "access_restriction": {
+          "default": "tbd",
+          "title": "Access Restriction",
+          "type": "string"
+        },
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "author_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author Id"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "content_hash": {
+          "default": "",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "crawl_method": {
+          "title": "Crawl Method",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "expected_latency": {
+          "default": "tbd",
+          "title": "Expected Latency",
+          "type": "string"
+        },
+        "fallback_source_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Source Ids",
+          "type": "array"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "health": {
+          "default": "tbd",
+          "title": "Health",
+          "type": "string"
+        },
+        "observed_stats": {
+          "additionalProperties": true,
+          "title": "Observed Stats",
+          "type": "object"
+        },
+        "obtainable_content_type": {
+          "title": "Obtainable Content Type",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "public_entry": {
+          "title": "Public Entry",
+          "type": "string"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "quality_label": {
+          "default": "tbd",
+          "title": "Quality Label",
+          "type": "string"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_version": {
+          "default": "v1",
+          "title": "Source Version",
+          "type": "string"
+        },
+        "tier": {
+          "$ref": "#/$defs/SourceTier"
+        },
+        "update_frequency": {
+          "default": "tbd",
+          "title": "Update Frequency",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "public_entry",
+        "obtainable_content_type",
+        "crawl_method",
+        "tier"
+      ],
+      "title": "Source",
+      "type": "object"
+    },
+    "SourceTier": {
+      "description": "来源分级 `tier`（**不得**与 `license_tier` / `param_tier` 混用，`Ch2 §C.2 R-18`）。\n\n权威取值：`Ch6 §C.1`。",
+      "enum": [
+        "primary",
+        "secondary_1_5",
+        "secondary_tertiary"
+      ],
+      "title": "SourceTier",
+      "type": "string"
+    },
+    "Task": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "change_log": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Change Log",
+          "type": "array"
+        },
+        "check_record": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CheckRecord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cost": {
+          "additionalProperties": true,
+          "title": "Cost",
+          "type": "object"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "eval_result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvalResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "eval_result_history": {
+          "items": {
+            "$ref": "#/$defs/EvalResult"
+          },
+          "title": "Eval Result History",
+          "type": "array"
+        },
+        "failure_reason": {
+          "default": "tbd",
+          "title": "Failure Reason",
+          "type": "string"
+        },
+        "failure_stage": {
+          "default": "tbd",
+          "title": "Failure Stage",
+          "type": "string"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "idempotency_key": {
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "input_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Input Refs",
+          "type": "array"
+        },
+        "last_valid_result_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Valid Result Ref"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "output_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Output Refs",
+          "type": "array"
+        },
+        "parent_context": {
+          "additionalProperties": true,
+          "title": "Parent Context",
+          "type": "object"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recheck_due": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recheck Due"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "rule_change_records": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Rule Change Records",
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/TaskStatus",
+          "default": "queued"
+        },
+        "task_id": {
+          "title": "Task Id",
+          "type": "string"
+        },
+        "task_type": {
+          "$ref": "#/$defs/TaskType"
+        }
+      },
+      "required": [
+        "task_id",
+        "task_type",
+        "idempotency_key"
+      ],
+      "title": "Task",
+      "type": "object"
+    },
+    "TaskStatus": {
+      "description": "任务五态（`Ch1 §C.3` 状态机 / `Ch8 §C.2`）。",
+      "enum": [
+        "queued",
+        "researching",
+        "pending_evidence",
+        "done",
+        "failed"
+      ],
+      "title": "TaskStatus",
+      "type": "string"
+    },
+    "TaskType": {
+      "description": "任务类型（`Ch1 §C.3`）。",
+      "enum": [
+        "research",
+        "verify",
+        "parse",
+        "recheck",
+        "dedup_override"
+      ],
+      "title": "TaskType",
+      "type": "string"
+    },
+    "ValueStateRefs": {
+      "additionalProperties": false,
+      "description": "价值状态（`Ch9 §N9.1-18`）。三组状态**可同时并存且不同向**（`Ch2 §C.2` N2.2-04）。",
+      "properties": {
+        "certainty_state": {
+          "$ref": "#/$defs/DirectionState",
+          "default": "tbd"
+        },
+        "growth_momentum_state": {
+          "$ref": "#/$defs/DirectionState",
+          "default": "tbd"
+        },
+        "moat_level": {
+          "$ref": "#/$defs/MoatLevel",
+          "default": "tbd"
+        },
+        "moat_state": {
+          "$ref": "#/$defs/DirectionState",
+          "default": "tbd"
+        }
+      },
+      "title": "ValueStateRefs",
+      "type": "object"
+    },
+    "VersionKind": {
+      "description": "三类版本事件语义不同，必须区分（`Ch9 §2.3.2` / `§3.4.2`）。",
+      "enum": [
+        "forecast_revision",
+        "financial_restatement",
+        "source_retraction"
+      ],
+      "title": "VersionKind",
+      "type": "string"
+    }
+  },
+  "$id": "https://investsigh.local/schema/facts.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "defs": {
+    "Baseline": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "baseline_id": {
+          "title": "Baseline Id",
+          "type": "string"
+        },
+        "business_mechanism": {
+          "title": "Business Mechanism",
+          "type": "string"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "conclusion_version": {
+          "default": 1,
+          "title": "Conclusion Version",
+          "type": "integer"
+        },
+        "driver_model": {
+          "items": {
+            "$ref": "#/$defs/DriverModel"
+          },
+          "title": "Driver Model",
+          "type": "array"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "evidence_claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Claim Ids",
+          "type": "array"
+        },
+        "expiry_review": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expiry Review"
+        },
+        "falsifier_written_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Falsifier Written Seq"
+        },
+        "falsifiers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Falsifiers",
+          "type": "array"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "historical_numeric_claims": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Historical Numeric Claims",
+          "type": "array"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "unmet_conditions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unmet Conditions",
+          "type": "array"
+        },
+        "value_state_refs": {
+          "$ref": "#/$defs/ValueStateRefs"
+        },
+        "verification_conditions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Verification Conditions",
+          "type": "array"
+        },
+        "version": {
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "baseline_id",
+        "company_id",
+        "version",
+        "business_mechanism"
+      ],
+      "title": "Baseline",
+      "type": "object"
+    },
+    "Benchmark": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "benchmark_id": {
+          "title": "Benchmark Id",
+          "type": "string"
+        },
+        "benchmark_role": {
+          "$ref": "#/$defs/BenchmarkRole",
+          "default": "primary"
+        },
+        "benchmark_semantics": {
+          "default": "",
+          "title": "Benchmark Semantics",
+          "type": "string"
+        },
+        "change_records": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Change Records",
+          "type": "array"
+        },
+        "coverage_profile": {
+          "additionalProperties": true,
+          "title": "Coverage Profile",
+          "type": "object"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "freeze_status": {
+          "$ref": "#/$defs/BenchmarkFreezeStatus",
+          "default": "unfrozen"
+        },
+        "includes_non_listed_assets": {
+          "default": false,
+          "title": "Includes Non Listed Assets",
+          "type": "boolean"
+        },
+        "non_listed_assets": {
+          "additionalProperties": true,
+          "title": "Non Listed Assets",
+          "type": "object"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "proxy_index_used": {
+          "default": false,
+          "title": "Proxy Index Used",
+          "type": "boolean"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "return_basis": {
+          "$ref": "#/$defs/BenchmarkReturnBasis"
+        },
+        "return_basis_version": {
+          "default": "v1",
+          "title": "Return Basis Version",
+          "type": "string"
+        },
+        "return_source": {
+          "default": "fund_market_price",
+          "enum": [
+            "fund_market_price",
+            "proxy_index"
+          ],
+          "title": "Return Source",
+          "type": "string"
+        },
+        "sensitivity": {
+          "additionalProperties": true,
+          "title": "Sensitivity",
+          "type": "object"
+        }
+      },
+      "required": [
+        "benchmark_id"
+      ],
+      "title": "Benchmark",
+      "type": "object"
+    },
+    "BenchmarkFreezeStatus": {
+      "description": "`benchmark.freeze_status`（`Ch3 §C.3`）——域 = 基准对象。\n\n`unfrozen` 时**允许替换代码**（AGIX = 工作假设）；冻结前不得硬编码单一基准代码。",
+      "enum": [
+        "unfrozen",
+        "frozen"
+      ],
+      "title": "BenchmarkFreezeStatus",
+      "type": "string"
+    },
+    "BenchmarkReturnBasis": {
+      "additionalProperties": false,
+      "description": "收益口径（`Ch9 §N9.1-23` / `Ch3 §C.3`）。\n\n**同起止时间 + 美元 + 含分红再投资的市场价格总回报**；净值仅诊断；费用不重复扣。",
+      "properties": {
+        "currency": {
+          "default": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "dividends_reinvested": {
+          "default": true,
+          "title": "Dividends Reinvested",
+          "type": "boolean"
+        },
+        "fee_deducted_again": {
+          "default": false,
+          "title": "Fee Deducted Again",
+          "type": "boolean"
+        },
+        "price_kind": {
+          "default": "market_price_total_return",
+          "enum": [
+            "market_price_total_return",
+            "nav"
+          ],
+          "title": "Price Kind",
+          "type": "string"
+        },
+        "same_start_end": {
+          "default": true,
+          "title": "Same Start End",
+          "type": "boolean"
+        },
+        "version": {
+          "default": "v1",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "title": "BenchmarkReturnBasis",
+      "type": "object"
+    },
+    "BenchmarkRole": {
+      "description": "`Ch3 §C.3`。",
+      "enum": [
+        "primary",
+        "secondary"
+      ],
+      "title": "BenchmarkRole",
+      "type": "string"
+    },
+    "BusinessPosition": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "evidence_strength": {
+          "default": "",
+          "title": "Evidence Strength",
+          "type": "string"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "inclusion_reason": {
+          "default": "",
+          "title": "Inclusion Reason",
+          "type": "string"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "position_listed": {
+          "default": false,
+          "title": "Position Listed",
+          "type": "boolean"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "raw_source": {
+          "default": "",
+          "title": "Raw Source",
+          "type": "string"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "research_depth": {
+          "$ref": "#/$defs/ResearchDepth",
+          "default": "position_listed"
+        },
+        "scan_frequency": {
+          "default": "tbd",
+          "title": "Scan Frequency",
+          "type": "string"
+        }
+      },
+      "required": [
+        "company_id",
+        "node_id"
+      ],
+      "title": "BusinessPosition",
+      "type": "object"
+    },
+    "CheckRecord": {
+      "additionalProperties": false,
+      "description": "核查记录（`Ch1 §C.2`）。**不是**第九章 8 大对象之一，属控制面子记录。\n\n每日运行**必写**（无论有无变化），使\"无信号\"成为正常态。",
+      "properties": {
+        "changed": {
+          "title": "Changed",
+          "type": "boolean"
+        },
+        "check_id": {
+          "title": "Check Id",
+          "type": "string"
+        },
+        "degraded": {
+          "default": false,
+          "title": "Degraded",
+          "type": "boolean"
+        },
+        "judgment_change": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "title": "Judgment Change",
+          "type": "object"
+        },
+        "run_date": {
+          "format": "date",
+          "title": "Run Date",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/CheckScope"
+        },
+        "signals_emitted": {
+          "title": "Signals Emitted",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "check_id",
+        "run_date",
+        "scope",
+        "changed",
+        "signals_emitted"
+      ],
+      "title": "CheckRecord",
+      "type": "object"
+    },
+    "CheckScope": {
+      "description": "`check_record.scope`（`Ch1 §C.2`）。",
+      "enum": [
+        "collect",
+        "verify",
+        "recheck",
+        "full"
+      ],
+      "title": "CheckScope",
+      "type": "string"
+    },
+    "Claim": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "carrier_platform": {
+          "default": "",
+          "title": "Carrier Platform",
+          "type": "string"
+        },
+        "claim_form": {
+          "$ref": "#/$defs/ClaimForm"
+        },
+        "claim_id": {
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "claim_nature": {
+          "$ref": "#/$defs/ClaimNature"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "full_text_read": {
+          "default": false,
+          "title": "Full Text Read",
+          "type": "boolean"
+        },
+        "impact_capability": {
+          "additionalProperties": true,
+          "title": "Impact Capability",
+          "type": "object"
+        },
+        "locator": {
+          "default": "",
+          "title": "Locator",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "official_claim_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OfficialClaimKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "origin_claim_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Origin Claim Id"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "publisher_entity": {
+          "default": "",
+          "title": "Publisher Entity",
+          "type": "string"
+        },
+        "quote_hash": {
+          "title": "Quote Hash",
+          "type": "string"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "status": {
+          "default": "active",
+          "title": "Status",
+          "type": "string"
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supersedes"
+        },
+        "tier": {
+          "$ref": "#/$defs/SourceTier"
+        },
+        "tier_basis": {
+          "default": "",
+          "title": "Tier Basis",
+          "type": "string"
+        },
+        "version_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "claim_id",
+        "source_id",
+        "quote_hash",
+        "claim_nature",
+        "claim_form",
+        "tier"
+      ],
+      "title": "Claim",
+      "type": "object"
+    },
+    "ClaimForm": {
+      "description": "来源形成形式（`Ch6 §N6.2-04`，1.5 手材料拆型）。",
+      "enum": [
+        "original_investigation",
+        "citation",
+        "estimate",
+        "opinion"
+      ],
+      "title": "ClaimForm",
+      "type": "string"
+    },
+    "ClaimNature": {
+      "description": "认识论性质，普遍适用（`Ch9 §3.4.6` R-17 / `Ch2 §C.2`）。",
+      "enum": [
+        "fact",
+        "plan",
+        "forecast",
+        "interpretation"
+      ],
+      "title": "ClaimNature",
+      "type": "string"
+    },
+    "ClaimPropagation": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "carrier_platform": {
+          "default": "",
+          "title": "Carrier Platform",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "independent_evidence": {
+          "default": false,
+          "title": "Independent Evidence",
+          "type": "boolean"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "propagated_claim_id": {
+          "title": "Propagated Claim Id",
+          "type": "string"
+        },
+        "propagation_id": {
+          "title": "Propagation Id",
+          "type": "string"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "publisher_entity": {
+          "default": "",
+          "title": "Publisher Entity",
+          "type": "string"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "root_claim_id": {
+          "title": "Root Claim Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "propagation_id",
+        "root_claim_id",
+        "propagated_claim_id"
+      ],
+      "title": "ClaimPropagation",
+      "type": "object"
+    },
+    "Company": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "change_log": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Change Log",
+          "type": "array"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "economic_group_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Economic Group Name"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "external_ids": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "External Ids",
+          "type": "object"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "fiscal_year_start_month": {
+          "default": 1,
+          "maximum": 12,
+          "minimum": 1,
+          "title": "Fiscal Year Start Month",
+          "type": "integer"
+        },
+        "legal_name": {
+          "title": "Legal Name",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "research_depth": {
+          "$ref": "#/$defs/ResearchDepth",
+          "default": "position_listed"
+        }
+      },
+      "required": [
+        "company_id",
+        "legal_name"
+      ],
+      "title": "Company",
+      "type": "object"
+    },
+    "DependencyEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "edge_id": {
+          "title": "Edge Id",
+          "type": "string"
+        },
+        "from_ref": {
+          "title": "From Ref",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "to_ref": {
+          "title": "To Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "edge_id",
+        "from_ref",
+        "to_ref",
+        "kind"
+      ],
+      "title": "DependencyEdge",
+      "type": "object"
+    },
+    "DirectionState": {
+      "description": "增长动力 / 确定性 / 护城河趋势三者的共用方向枚举（`Ch9 §N9.1-18`）。",
+      "enum": [
+        "strengthening",
+        "weakening",
+        "unchanged",
+        "tbd"
+      ],
+      "title": "DirectionState",
+      "type": "string"
+    },
+    "DisclosureState": {
+      "description": "披露状态——\"不填入猜测数值\"的显式表达（`Ch9 §N9.1-09` / `§N9.2-02`）。\n\n未披露时**必须**显式存 `undisclosed`，**不得**置 0、置 null 或写猜测值。",
+      "enum": [
+        "disclosed",
+        "undisclosed"
+      ],
+      "title": "DisclosureState",
+      "type": "string"
+    },
+    "DriverModel": {
+      "additionalProperties": false,
+      "description": "驱动模型（`Ch9 §N9.1-17` / `Ch4 §D`）。驱动 → 科目 → 每股指标三层映射。",
+      "properties": {
+        "assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "driver_id": {
+          "title": "Driver Id",
+          "type": "string"
+        },
+        "driver_name": {
+          "title": "Driver Name",
+          "type": "string"
+        },
+        "is_primary": {
+          "default": false,
+          "title": "Is Primary",
+          "type": "boolean"
+        },
+        "linked_accounts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Linked Accounts",
+          "type": "array"
+        },
+        "realization_stage": {
+          "$ref": "#/$defs/DriverRealizationStage",
+          "default": "tbd"
+        }
+      },
+      "required": [
+        "driver_id",
+        "driver_name"
+      ],
+      "title": "DriverModel",
+      "type": "object"
+    },
+    "DriverRealizationStage": {
+      "description": "驱动的兑现阶段（`Ch4 §D`）。与 `relation_progress_stage` **不得互用**（`Ch2 §C.2 R-15 ②`）。",
+      "enum": [
+        "tbd",
+        "not_started",
+        "ramping",
+        "ramped",
+        "declining"
+      ],
+      "title": "DriverRealizationStage",
+      "type": "string"
+    },
+    "ErrorAxis": {
+      "description": "错误定位七方向（`Ch9 §3.3.5` R-29）。**标记字段，不进决策函数**。",
+      "enum": [
+        "source",
+        "business_mechanism",
+        "relation_transmission",
+        "financial_forecast",
+        "price_expectation",
+        "benchmark_forecast",
+        "timing"
+      ],
+      "title": "ErrorAxis",
+      "type": "string"
+    },
+    "EvalLayer": {
+      "description": "三层复盘分层（`Ch9 §3.3.5` R-29）。**标记字段，不进决策函数**。",
+      "enum": [
+        "research_quality",
+        "forecast_quality",
+        "investment_result"
+      ],
+      "title": "EvalLayer",
+      "type": "string"
+    },
+    "EvalResult": {
+      "additionalProperties": false,
+      "description": "三层复盘评估结果（`Ch9 §3.3.5` R-29）。\n\n⚠️ 均为**标记字段**：**不进决策函数**、不参与任何门槛\n（对齐 `Ch2 §B.3` Checker-1 的 `is_decision_scope` 排除项）。",
+      "properties": {
+        "error_axis": {
+          "items": {
+            "$ref": "#/$defs/ErrorAxis"
+          },
+          "title": "Error Axis",
+          "type": "array"
+        },
+        "error_axis_note": {
+          "default": "",
+          "title": "Error Axis Note",
+          "type": "string"
+        },
+        "eval_layer": {
+          "$ref": "#/$defs/EvalLayer"
+        }
+      },
+      "required": [
+        "eval_layer"
+      ],
+      "title": "EvalResult",
+      "type": "object"
+    },
+    "Event": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "company_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Company Ids",
+          "type": "array"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "event_alias": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Event Alias",
+          "type": "array"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "event_type": {
+          "$ref": "#/$defs/EventType"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "metric": {
+          "default": "tbd",
+          "title": "Metric",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "period_bucket": {
+          "default": "tbd",
+          "title": "Period Bucket",
+          "type": "string"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "related_object_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Related Object Refs",
+          "type": "array"
+        },
+        "root_source_id": {
+          "default": "",
+          "title": "Root Source Id",
+          "type": "string"
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supersedes"
+        },
+        "version_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "event_id",
+        "event_type"
+      ],
+      "title": "Event",
+      "type": "object"
+    },
+    "EventType": {
+      "description": "事件类型（`Ch9 §3.4.7` 指纹组成项之一）。",
+      "enum": [
+        "tbd",
+        "earnings",
+        "guidance",
+        "order",
+        "product",
+        "supply",
+        "policy",
+        "price_action",
+        "personnel",
+        "other"
+      ],
+      "title": "EventType",
+      "type": "string"
+    },
+    "ExpectationSample": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "metric": {
+          "title": "Metric",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "period": {
+          "title": "Period",
+          "type": "string"
+        },
+        "provider_id": {
+          "title": "Provider Id",
+          "type": "string"
+        },
+        "provider_kind": {
+          "default": "broker",
+          "enum": [
+            "company_guidance",
+            "broker",
+            "social"
+          ],
+          "title": "Provider Kind",
+          "type": "string"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "sample_id": {
+          "title": "Sample Id",
+          "type": "string"
+        },
+        "sample_size": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sample Size"
+        },
+        "sample_value": {
+          "default": "tbd",
+          "title": "Sample Value",
+          "type": "string"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "source_id": {
+          "default": "",
+          "title": "Source Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sample_id",
+        "security_id",
+        "provider_id",
+        "metric",
+        "period"
+      ],
+      "title": "ExpectationSample",
+      "type": "object"
+    },
+    "Impact": {
+      "additionalProperties": false,
+      "properties": {
+        "affected_company_id": {
+          "title": "Affected Company Id",
+          "type": "string"
+        },
+        "affected_security_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Affected Security Id"
+        },
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "conditions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Conditions",
+          "type": "array"
+        },
+        "counter_forces": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Counter Forces",
+          "type": "array"
+        },
+        "direction": {
+          "enum": [
+            "positive",
+            "negative",
+            "unclear"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "evidence_claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Claim Ids",
+          "type": "array"
+        },
+        "falsifiers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Falsifiers",
+          "type": "array"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "impact_id": {
+          "title": "Impact Id",
+          "type": "string"
+        },
+        "impact_variable": {
+          "title": "Impact Variable",
+          "type": "string"
+        },
+        "magnitude": {
+          "default": "tbd",
+          "title": "Magnitude",
+          "type": "string"
+        },
+        "magnitude_disclosure": {
+          "$ref": "#/$defs/DisclosureState",
+          "default": "undisclosed"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "path_kind": {
+          "default": "direct_relation",
+          "enum": [
+            "direct_relation",
+            "inferred_path"
+          ],
+          "title": "Path Kind",
+          "type": "string"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "time_lag": {
+          "default": "tbd",
+          "title": "Time Lag",
+          "type": "string"
+        }
+      },
+      "required": [
+        "impact_id",
+        "event_id",
+        "affected_company_id",
+        "impact_variable",
+        "direction"
+      ],
+      "title": "Impact",
+      "type": "object"
+    },
+    "IndustryNode": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "node_name": {
+          "title": "Node Name",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "parent_node_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Node Id"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "taxonomy_version": {
+          "title": "Taxonomy Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "node_id",
+        "node_name",
+        "taxonomy_version"
+      ],
+      "title": "IndustryNode",
+      "type": "object"
+    },
+    "MoatLevel": {
+      "description": "护城河**水平**（`Ch2 §C.2 A-02` / `N2.2-02`）。与 `moat_state` 独立、不得合并为 `moat`。",
+      "enum": [
+        "weak",
+        "moderate",
+        "strong",
+        "tbd"
+      ],
+      "title": "MoatLevel",
+      "type": "string"
+    },
+    "OfficialClaimKind": {
+      "description": "官方一手披露性质，**仅适用 `tier=primary`**（`Ch6 §N6.2-03`）。",
+      "enum": [
+        "occurred_fact",
+        "forward_guidance",
+        "marketing_claim"
+      ],
+      "title": "OfficialClaimKind",
+      "type": "string"
+    },
+    "OpportunityBasis": {
+      "additionalProperties": false,
+      "description": "机会类型依据（`Ch2 §C.1` / `Ch9 §3.3.4`）。每类一条依据。",
+      "properties": {
+        "price_ref": {
+          "title": "Price Ref",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/OpportunityType"
+        },
+        "value_ref": {
+          "title": "Value Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "value_ref",
+        "price_ref"
+      ],
+      "title": "OpportunityBasis",
+      "type": "object"
+    },
+    "OpportunityType": {
+      "description": "机会类型 A/B（`Ch2 §C.1` 规则 2）。**数组、不互斥、可为空**；**不进买入门**。\n\n★ 登记在案的张力（`system/reports/phase1_open_tensions.md::T-02`）：\n  `Ch2 §C.1` 逐字把枚举写作 \"enum A/B\"（源稿亦为\"机会类型 A 类 / B 类\"），\n  而 `施工图 §8` 纪律 7 要求\"枚举 token 英文小写 + 下划线\"。二者在**表面形式**上冲突。\n  本实现的取舍 —— **不擅自改动设计的数据契约，也不悄悄放松纪律**：\n\n  - **wire 值 = 设计逐字** `\"A\"` / `\"B\"`（JSONL / schema 里出现的 token 不变）\n  - **成员名 = 小写下划线** `type_a` / `type_b`（满足纪律 7 对**标识符**的要求）\n  - 例外集合被单测 `test_enum_value_exceptions_are_exactly_the_documented_ones` **钉住**，\n    任何新增的大写值都会 fail",
+      "enum": [
+        "A",
+        "B"
+      ],
+      "title": "OpportunityType",
+      "type": "string"
+    },
+    "PriceSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "adjustment_caliber_version": {
+          "default": "tbd",
+          "title": "Adjustment Caliber Version",
+          "type": "string"
+        },
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "currency": {
+          "title": "Currency",
+          "type": "string"
+        },
+        "delayed": {
+          "default": false,
+          "title": "Delayed",
+          "type": "boolean"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "is_nav": {
+          "default": false,
+          "title": "Is Nav",
+          "type": "boolean"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "price": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Price"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "source_id": {
+          "default": "",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "trading_session": {
+          "title": "Trading Session",
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshot_id",
+        "security_id",
+        "price",
+        "currency",
+        "trading_session"
+      ],
+      "title": "PriceSnapshot",
+      "type": "object"
+    },
+    "Product": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "generation": {
+          "default": "tbd",
+          "title": "Generation",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "product_id": {
+          "title": "Product Id",
+          "type": "string"
+        },
+        "product_name": {
+          "title": "Product Name",
+          "type": "string"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        }
+      },
+      "required": [
+        "product_id",
+        "company_id",
+        "product_name"
+      ],
+      "title": "Product",
+      "type": "object"
+    },
+    "Recommendation": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "description": "建议动作（`Ch2 §B.2 P-05`）。**不得含 short / short_sell**；**无 quantity / position**。",
+          "enum": [
+            "buy",
+            "sell",
+            "pending",
+            "maintain"
+          ],
+          "title": "RecommendationAction",
+          "type": "string"
+        },
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "change_reason": {
+          "default": "",
+          "title": "Change Reason",
+          "type": "string"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "early_judgment": {
+          "default": false,
+          "title": "Early Judgment",
+          "type": "boolean"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "evidence_gaps": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Gaps",
+          "type": "array"
+        },
+        "evidence_version_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Version Ids",
+          "type": "array"
+        },
+        "expiry_review": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expiry Review"
+        },
+        "falsifier_written_at": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Falsifier Written At"
+        },
+        "falsifiers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Falsifiers",
+          "type": "array"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "horizon": {
+          "title": "Horizon",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "opportunity_basis": {
+          "items": {
+            "additionalProperties": false,
+            "description": "机会类型依据（`Ch2 §C.1` / `Ch9 §3.3.4`）。每类一条依据。",
+            "properties": {
+              "price_ref": {
+                "title": "Price Ref",
+                "type": "string"
+              },
+              "type": {
+                "$ref": "#/$defs/OpportunityType"
+              },
+              "value_ref": {
+                "title": "Value Ref",
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "value_ref",
+              "price_ref"
+            ],
+            "title": "OpportunityBasis",
+            "type": "object"
+          },
+          "title": "Opportunity Basis",
+          "type": "array"
+        },
+        "opportunity_types": {
+          "items": {
+            "description": "机会类型 A/B（`Ch2 §C.1` 规则 2）。**数组、不互斥、可为空**；**不进买入门**。\n\n★ 登记在案的张力（`system/reports/phase1_open_tensions.md::T-02`）：\n  `Ch2 §C.1` 逐字把枚举写作 \"enum A/B\"（源稿亦为\"机会类型 A 类 / B 类\"），\n  而 `施工图 §8` 纪律 7 要求\"枚举 token 英文小写 + 下划线\"。二者在**表面形式**上冲突。\n  本实现的取舍 —— **不擅自改动设计的数据契约，也不悄悄放松纪律**：\n\n  - **wire 值 = 设计逐字** `\"A\"` / `\"B\"`（JSONL / schema 里出现的 token 不变）\n  - **成员名 = 小写下划线** `type_a` / `type_b`（满足纪律 7 对**标识符**的要求）\n  - 例外集合被单测 `test_enum_value_exceptions_are_exactly_the_documented_ones` **钉住**，\n    任何新增的大写值都会 fail",
+            "enum": [
+              "A",
+              "B"
+            ],
+            "title": "OpportunityType",
+            "type": "string"
+          },
+          "title": "Opportunity Types",
+          "type": "array"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recommendation_id": {
+          "title": "Recommendation Id",
+          "type": "string"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "review_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Date"
+        },
+        "rule_version": {
+          "title": "Rule Version",
+          "type": "string"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "start_date": {
+          "format": "date",
+          "title": "Start Date",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/RecommendationStatus",
+          "default": "active"
+        },
+        "supersedes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supersedes"
+        },
+        "unmet_conditions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unmet Conditions",
+          "type": "array"
+        },
+        "verification_conditions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Verification Conditions",
+          "type": "array"
+        },
+        "version": {
+          "default": 1,
+          "title": "Version",
+          "type": "integer"
+        },
+        "version_kind": {
+          "anyOf": [
+            {
+              "description": "三类版本事件语义不同，必须区分（`Ch9 §2.3.2` / `§3.4.2`）。",
+              "enum": [
+                "forecast_revision",
+                "financial_restatement",
+                "source_retraction"
+              ],
+              "title": "VersionKind",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "recommendation_id",
+        "security_id",
+        "company_id",
+        "action",
+        "horizon",
+        "start_date",
+        "rule_version"
+      ],
+      "title": "Recommendation",
+      "type": "object"
+    },
+    "RecommendationAction": {
+      "description": "建议动作（`Ch2 §B.2 P-05`）。**不得含 short / short_sell**；**无 quantity / position**。",
+      "enum": [
+        "buy",
+        "sell",
+        "pending",
+        "maintain"
+      ],
+      "title": "RecommendationAction",
+      "type": "string"
+    },
+    "RecommendationStatus": {
+      "description": "建议状态（`Ch7 §D`：`boundary_unresolved` 与\"跑不赢\"\"无法判断\"两端并列不并入，`Ch2 §C.3`）。",
+      "enum": [
+        "active",
+        "confident_underperform",
+        "uncertain",
+        "boundary_unresolved",
+        "superseded"
+      ],
+      "title": "RecommendationStatus",
+      "type": "string"
+    },
+    "Relation": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "commitment_kind": {
+          "default": "tbd",
+          "title": "Commitment Kind",
+          "type": "string"
+        },
+        "currency": {
+          "default": "tbd",
+          "title": "Currency",
+          "type": "string"
+        },
+        "economic_exposure": {
+          "default": "tbd",
+          "title": "Economic Exposure",
+          "type": "string"
+        },
+        "economic_exposure_caliber": {
+          "default": "tbd",
+          "title": "Economic Exposure Caliber",
+          "type": "string"
+        },
+        "economic_exposure_disclosure": {
+          "$ref": "#/$defs/DisclosureState",
+          "default": "undisclosed"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "evidence_claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Claim Ids",
+          "type": "array"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "object_id": {
+          "title": "Object Id",
+          "type": "string"
+        },
+        "object_kind": {
+          "enum": [
+            "company",
+            "product"
+          ],
+          "title": "Object Kind",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "related_product_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Related Product Id"
+        },
+        "relation_id": {
+          "title": "Relation Id",
+          "type": "string"
+        },
+        "relation_progress_stage": {
+          "$ref": "#/$defs/RelationProgressStage",
+          "default": "tbd"
+        },
+        "relation_type": {
+          "title": "Relation Type",
+          "type": "string"
+        },
+        "subject_id": {
+          "title": "Subject Id",
+          "type": "string"
+        },
+        "subject_kind": {
+          "enum": [
+            "company",
+            "product"
+          ],
+          "title": "Subject Kind",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "valid_to": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valid To"
+        }
+      },
+      "required": [
+        "relation_id",
+        "subject_id",
+        "subject_kind",
+        "object_id",
+        "object_kind",
+        "relation_type",
+        "valid_from"
+      ],
+      "title": "Relation",
+      "type": "object"
+    },
+    "RelationProgressStage": {
+      "description": "合作阶段（`Ch9 §N9.1-07`）。**不得自动跨级推进**（T03）。\n\n⚠️ 与 `driver.realization_stage` **分别命名、不得互用**（`Ch2 §C.2 R-15 ②`）。",
+      "enum": [
+        "tbd",
+        "discussed",
+        "validation_done",
+        "qualification_done",
+        "design_win",
+        "order_confirmed",
+        "revenue_recognized"
+      ],
+      "title": "RelationProgressStage",
+      "type": "string"
+    },
+    "ResearchDepth": {
+      "description": "研究深度四态（`Ch9 §N9.1-05` / `Ch3 §C.2`）。**可回退**，非单调递增。",
+      "enum": [
+        "position_listed",
+        "relations_verified",
+        "baseline_done",
+        "tracking"
+      ],
+      "title": "ResearchDepth",
+      "type": "string"
+    },
+    "Security": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "currency": {
+          "title": "Currency",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "listing_venue": {
+          "title": "Listing Venue",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "ticker": {
+          "title": "Ticker",
+          "type": "string"
+        },
+        "trading_session": {
+          "title": "Trading Session",
+          "type": "string"
+        },
+        "verified": {
+          "default": false,
+          "title": "Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "security_id",
+        "company_id",
+        "ticker",
+        "listing_venue",
+        "currency",
+        "trading_session"
+      ],
+      "title": "Security",
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "access_restriction": {
+          "default": "tbd",
+          "title": "Access Restriction",
+          "type": "string"
+        },
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "author_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Author Id"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "content_hash": {
+          "default": "",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "crawl_method": {
+          "title": "Crawl Method",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "expected_latency": {
+          "default": "tbd",
+          "title": "Expected Latency",
+          "type": "string"
+        },
+        "fallback_source_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Fallback Source Ids",
+          "type": "array"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "health": {
+          "default": "tbd",
+          "title": "Health",
+          "type": "string"
+        },
+        "observed_stats": {
+          "additionalProperties": true,
+          "title": "Observed Stats",
+          "type": "object"
+        },
+        "obtainable_content_type": {
+          "title": "Obtainable Content Type",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "public_entry": {
+          "title": "Public Entry",
+          "type": "string"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "quality_label": {
+          "default": "tbd",
+          "title": "Quality Label",
+          "type": "string"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_version": {
+          "default": "v1",
+          "title": "Source Version",
+          "type": "string"
+        },
+        "tier": {
+          "$ref": "#/$defs/SourceTier"
+        },
+        "update_frequency": {
+          "default": "tbd",
+          "title": "Update Frequency",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "public_entry",
+        "obtainable_content_type",
+        "crawl_method",
+        "tier"
+      ],
+      "title": "Source",
+      "type": "object"
+    },
+    "SourceTier": {
+      "description": "来源分级 `tier`（**不得**与 `license_tier` / `param_tier` 混用，`Ch2 §C.2 R-18`）。\n\n权威取值：`Ch6 §C.1`。",
+      "enum": [
+        "primary",
+        "secondary_1_5",
+        "secondary_tertiary"
+      ],
+      "title": "SourceTier",
+      "type": "string"
+    },
+    "Task": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "change_log": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Change Log",
+          "type": "array"
+        },
+        "check_record": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CheckRecord"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "cost": {
+          "additionalProperties": true,
+          "title": "Cost",
+          "type": "object"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "eval_result": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EvalResult"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "eval_result_history": {
+          "items": {
+            "$ref": "#/$defs/EvalResult"
+          },
+          "title": "Eval Result History",
+          "type": "array"
+        },
+        "failure_reason": {
+          "default": "tbd",
+          "title": "Failure Reason",
+          "type": "string"
+        },
+        "failure_stage": {
+          "default": "tbd",
+          "title": "Failure Stage",
+          "type": "string"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "idempotency_key": {
+          "title": "Idempotency Key",
+          "type": "string"
+        },
+        "input_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Input Refs",
+          "type": "array"
+        },
+        "last_valid_result_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Valid Result Ref"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "output_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Output Refs",
+          "type": "array"
+        },
+        "parent_context": {
+          "additionalProperties": true,
+          "title": "Parent Context",
+          "type": "object"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recheck_due": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recheck Due"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "rule_change_records": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Rule Change Records",
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/TaskStatus",
+          "default": "queued"
+        },
+        "task_id": {
+          "title": "Task Id",
+          "type": "string"
+        },
+        "task_type": {
+          "$ref": "#/$defs/TaskType"
+        }
+      },
+      "required": [
+        "task_id",
+        "task_type",
+        "idempotency_key"
+      ],
+      "title": "Task",
+      "type": "object"
+    },
+    "TaskStatus": {
+      "description": "任务五态（`Ch1 §C.3` 状态机 / `Ch8 §C.2`）。",
+      "enum": [
+        "queued",
+        "researching",
+        "pending_evidence",
+        "done",
+        "failed"
+      ],
+      "title": "TaskStatus",
+      "type": "string"
+    },
+    "TaskType": {
+      "description": "任务类型（`Ch1 §C.3`）。",
+      "enum": [
+        "research",
+        "verify",
+        "parse",
+        "recheck",
+        "dedup_override"
+      ],
+      "title": "TaskType",
+      "type": "string"
+    },
+    "ValueStateRefs": {
+      "additionalProperties": false,
+      "description": "价值状态（`Ch9 §N9.1-18`）。三组状态**可同时并存且不同向**（`Ch2 §C.2` N2.2-04）。",
+      "properties": {
+        "certainty_state": {
+          "$ref": "#/$defs/DirectionState",
+          "default": "tbd"
+        },
+        "growth_momentum_state": {
+          "$ref": "#/$defs/DirectionState",
+          "default": "tbd"
+        },
+        "moat_level": {
+          "$ref": "#/$defs/MoatLevel",
+          "default": "tbd"
+        },
+        "moat_state": {
+          "$ref": "#/$defs/DirectionState",
+          "default": "tbd"
+        }
+      },
+      "title": "ValueStateRefs",
+      "type": "object"
+    },
+    "VersionKind": {
+      "description": "三类版本事件语义不同，必须区分（`Ch9 §2.3.2` / `§3.4.2`）。",
+      "enum": [
+        "forecast_revision",
+        "financial_restatement",
+        "source_retraction"
+      ],
+      "title": "VersionKind",
+      "type": "string"
+    }
+  },
+  "description": "唯一真源 = facts/*.jsonl。本文件由 system/schema/build_jsonschema.py 生成，生成物需与 system/schema/models.py 一致。",
+  "objects": {
+    "baselines": "Baseline",
+    "benchmarks": "Benchmark",
+    "business_positions": "BusinessPosition",
+    "claim_propagation": "ClaimPropagation",
+    "claims": "Claim",
+    "companies": "Company",
+    "dependency_edges": "DependencyEdge",
+    "events": "Event",
+    "expectations": "ExpectationSample",
+    "impacts": "Impact",
+    "industry_nodes": "IndustryNode",
+    "prices": "PriceSnapshot",
+    "products": "Product",
+    "recommendations": "Recommendation",
+    "relations": "Relation",
+    "securities": "Security",
+    "sources": "Source",
+    "tasks": "Task"
+  },
+  "title": "AI 产业链研究 Agent · facts 8 类对象 schema（Ch9 §3.3.3）"
+}

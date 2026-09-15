@@ -1,0 +1,60 @@
+{
+  "files": {
+    "rules/banned_tokens.yaml": {
+      "bytes": 8245,
+      "locked_mode": "0o444",
+      "sha256": "f6bab7ee92ac617f1ed3d7f3d89cbfc45b65049ff62f77686d98a5d15a811ca0"
+    },
+    "rules/benchmark.yaml": {
+      "bytes": 3985,
+      "locked_mode": "0o444",
+      "sha256": "45950bb2149d75ac917517a2ab14d3f0f8ad85989f89d35e1d46d46394f51b99"
+    },
+    "rules/data-sources.allowlist.yaml": {
+      "bytes": 2863,
+      "locked_mode": "0o444",
+      "sha256": "13f34a4fdd6f9914c2aa8bba1a54e3d02ffb6adeae711dc48b8ba7df83166ed6"
+    },
+    "rules/freeze.yaml": {
+      "bytes": 16012,
+      "locked_mode": "0o444",
+      "sha256": "eed26a53b0ffe9f137b38438a21e641912ea4b90cd176dee9db5b25ce598352a"
+    },
+    "rules/notification.yaml": {
+      "bytes": 1285,
+      "locked_mode": "0o444",
+      "sha256": "ef5bef9f07449fe51172eb9222ad96ce48e43b005cc78054dc51dfa9b5a2600e"
+    },
+    "rules/pipeline.yaml": {
+      "bytes": 3313,
+      "locked_mode": "0o444",
+      "sha256": "6a537fdb5d9f7aa56690cd6ed1554b754ab163805942b07e5597f81afe4ea3a5"
+    },
+    "rules/publish.yaml": {
+      "bytes": 2176,
+      "locked_mode": "0o444",
+      "sha256": "5fb085c3e3cfcb19d20ae59f9d122ad7032367de171e1cb8879e3a5657654952"
+    },
+    "rules/review.yaml": {
+      "bytes": 2488,
+      "locked_mode": "0o444",
+      "sha256": "58c2b918270d4d5efe5eda6aa99e4def19f1c99e7f846001cf96a29a43146ef9"
+    },
+    "rules/schedule.yaml": {
+      "bytes": 1763,
+      "locked_mode": "0o444",
+      "sha256": "8b874044849ec27e929235e20c0530ed7ad31f3ec291c2ce21fdfdfa2bf04e16"
+    },
+    "rules/scope.yaml": {
+      "bytes": 2329,
+      "locked_mode": "0o444",
+      "sha256": "7d14de8e3fcd3ae29ada7c867bc557c9a24fbd4af8b84e02f5439ae395ac2934"
+    }
+  },
+  "locked_at": "2026-09-15T16:34:55+00:00",
+  "locked_by": "system/scripts/ops/lock_rules.py",
+  "note": "本清单是 rules/ 的 SHA256 快照。校验方 scripts/checks/rules_lock_guard.py；改动流程见 lock_rules.py 文档头。",
+  "owner_writable": false,
+  "spec_anchor": "Ch9 §3.10 J9 / 施工图 §8 纪律 9-10",
+  "version": 1
+}

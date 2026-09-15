@@ -1,0 +1,41 @@
+# rules/scope.yaml —— 推荐范围声明（Ch3 §B-17 / §E）
+#
+# 权威出处：`Ch3 §B-17`（推荐范围声明）/ `Ch3 §E`（推荐范围与覆盖解耦）
+#
+# ★ 单一真源纪律：推荐范围的**值** = `rules/freeze.yaml::p03`（`recommended_security_scope`）。
+#   本文件只声明**结构与解耦不变量**，不复制该值（防双写漂移）。
+#
+# ★ 解耦不变量（C3-1 / B-17）：**研究覆盖集合 ⊇ 推荐范围集合**；
+#   **不得因"推荐范围未定"而缩小研究覆盖**。
+# 只读：0444 + SHA256。
+
+version: 1
+spec_anchor: "Ch3 §B-17"
+
+recommended_security_scope:
+  value_param_ref: p03                     # ← 指针：值只在 rules/freeze.yaml::p03
+  frozen: false                            # 未冻结 → 范围可切换，**但不改变研究覆盖**
+  option_tokens: [us_only, us_and_non_us]  # 与 freeze.yaml p03 的 option_set 取值一一对应
+
+coverage_scope:
+  # 覆盖（研究范围）与推荐范围**分别可查**
+  superset_invariant: "research_coverage_set ⊇ recommended_security_scope_set"
+  shrink_coverage_when_recommendation_unfrozen: false   # ★ 禁止
+  dimensions:
+    - {name: position_listed, type: bool, chapter_ref: "Ch3 §C.2 N3.2-04"}
+    - {name: research_depth, type: enum, values: [position_listed, relations_verified, baseline_done, tracking],
+       rollback_allowed: true, chapter_ref: "Ch3 §C.2 N3.2-05/B-05"}
+    - {name: scan_frequency, type: string, per_node: true, chapter_ref: "Ch3 §C.2 N3.2-06"}
+
+# ── 反对"虚假覆盖"（N3.2-03/05）────────────────────────────────────────────
+fake_coverage_guard:
+  in_graph_is_not_researched: true         # "在图即视为已研究" = 虚假覆盖
+  guard_ref: "scripts/views/neutrality_check.py"
+
+# ── 首版边界（N3.3-03/04/05 / Ch3 §F.2）────────────────────────────────────
+first_version_boundary:
+  delivers_until: research_and_stock_recommendation
+  excluded: [portfolio_weight_optimization, account_management, trade_execution]
+  position_required_for_research: false    # 不以缺少持仓阻止独立个股研究
+  short_selling: false
+  guard_ref: "scripts/checks/module_denylist.py"

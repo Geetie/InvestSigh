@@ -1,0 +1,291 @@
+# rules/freeze.yaml —— 11 项待冻结参数的**唯一真源**（Ch11 §C / §D）
+#
+# 权威出处：`Ch11 §C`（schema）/ `Ch11 §D.1`（A 档 6 项）/ `Ch11 §D.2`（C 档 5 项）
+# 源稿原文：`02_可编辑源稿_v2.md` §「文档确认时需要冻结的参数」（source_state 逐字留痕）
+#
+# ★ 单一真源纪律（Ch11 §D.2 / 纪律 5）：
+#   参数值**唯一真源 = 本文件 `freeze_params`**。
+#   `rules/schedule.yaml`（p07）与 `rules/data-sources.allowlist.yaml`（p09）
+#   由对应 `freeze_param` **指向**，**不另存同一参数的第二份值**（防双写漂移）。
+#
+# ★ 红线一（Ch11 §E.1 / 源稿第 386 行）：
+#   全 11 项**只做"基准 / 范围 / 口径 / 披露"**，**不进决策函数**；
+#   参数名与建议值不得含 `rules/banned_tokens.yaml` 禁词；
+#   **不得把待定项补成新的策略门槛**。
+#
+# ★ 拍板前恒 tbd（Ch11 §F.1）：`freeze_status = tbd`；`tbd → frozen` 单向、不可原地回退。
+#   每项 `option_set` ≥1 条 `{value, basis}`；`suggested_value` **是建议，不是门槛**。
+#
+# 本文件只读：0444 + SHA256 锁；模型对 rules/ 无写权（Ch9 §3.10 J9 / 纪律 10）。
+
+version: 1
+frozen_at: tbd                    # 全部冻结的时点；未完成前恒 tbd
+single_source_of_truth: true      # 参数值唯一真源标志（防双写）
+ban_new_gate_anchor: "Ch11 §E.1"  # 红线一锚点（节号锚点，禁绝对行号）
+
+freeze_params:
+  # ───────────────────────── A 档 6 项（需求方拍板；值可配置待冻结） ─────────────────────────
+  - param_id: p01
+    param: benchmark_id                                    # 主基准 ETF
+    source_state: "建议 AGIX，依据需求方已有持仓提出；待本需求文档确认"
+    param_tier: a
+    option_set:
+      - {value: AGIX, basis: "需求方已有持仓；源稿建议；AGIX 官方定位覆盖 AI 硬件/基础设施/应用"}
+      - {value: other_etf, basis: "待需求方给出替代口径（须仍满足‘基金本身行情、不得用公开指数替代整只基金’）"}
+    suggested_value: AGIX
+    freeze_status: tbd
+    decision_owner: requester
+    source_capability: "westock MCP 连接器可取 ETF 行情与基金回报（复用 Ch9 §3.2 数据源接入层）"
+    impact_note: "基准是‘比较的尺子’；不定则相对收益口径无法落地，T06/T07 无法判定"
+    blocking_targets: ["Ch3 §N3.4-06", "Ch10 §N10.3-04"]
+
+  - param_id: p03
+    param: recommended_security_scope                     # 股票建议范围
+    source_state: "美股为主、全球关键公司参与研究；非美上市证券是否纳入推荐另定"
+    param_tier: a
+    option_set:
+      - {value: us_only, basis: "默认；风险可控；首批 44 节点中仅 SK hynix 无美股证券，影响面极小"}
+      - {value: us_and_non_us, basis: "含非美上市证券；需额外处理币种/时段/公司行动口径差异"}
+    suggested_value: us_only
+    freeze_status: tbd
+    decision_owner: requester
+    source_capability: "MCP 连接器覆盖 A 股/港股/美股行情；非美需逐一核验证券要素"
+    impact_note: "只影响‘推荐范围’，**不得因推荐范围未定而缩小研究覆盖**（Ch3 §E / N3.2）"
+    blocking_targets: ["Ch3 §B-17", "Ch7 §E"]
+
+  - param_id: p06
+    param: negative_return_relative_lead_policy           # 负收益但相对领先
+    source_state: "禁止新增买入已确定；既有积极建议的处置方式待样例校准"
+    param_tier: a
+    option_set:
+      - value:
+          new_buy: forbidden
+          existing_positive_recommendation: sell_by_default
+          override_requires_human_approval: true
+          override_reason_required: true
+        basis: "与 T07 一致（预计跑不赢基准即卖出）；‘相对领先’为由保留须人工批准并记录理由"
+      - value: {existing_positive_recommendation: keep_until_sample_calibrated}
+        basis: "保守（仅保留既有建议、不做处置）；待完整样例校准"
+    suggested_value:
+      new_buy: forbidden
+      existing_positive_recommendation: sell_by_default
+      override_requires_human_approval: true
+      override_reason_required: true
+    freeze_status: tbd
+    decision_owner: requester
+    source_capability: "GIT/文件系统留痕 + 人工审批入口（Ch11 §D.1 p08 分层政策）"
+    impact_note: "‘禁止新增买入’已定，**不得被本项改写**；本项只定‘既有积极建议的处置’"
+    blocking_targets: ["Ch7 §D.1"]
+
+  - param_id: p08
+    param: publish_and_review_policy                     # 发布与人工复核
+    source_state: "建议默认自动研究、回写和版本留存；争议关系与重大修订的精确发布规则待确认"
+    param_tier: a
+    option_set:
+      - value:
+          routine_research: auto
+          graph_update: auto
+          benchmark_change: human_approval
+          external_publish: explicit_authorization
+          material_recommendation_change: auto_marked_inferred
+          disputed_inference: auto_marked_inferred
+        basis: "按对象分层：省事与把关的平衡点（`00_待拍板项清单` A6）"
+      - value: {all: fully_auto}
+        basis: "全自动——会让基准变更、对外发布无人把关"
+      - value: {all: fully_manual}
+        basis: "全人工——退回手工时代"
+    suggested_value:
+      routine_research: auto
+      graph_update: auto
+      benchmark_change: human_approval
+      external_publish: explicit_authorization
+      material_recommendation_change: auto_marked_inferred
+      disputed_inference: auto_marked_inferred
+    freeze_status: tbd
+    decision_owner: requester
+    source_capability: "Git 版本留存 + 人工审批闸门（Ch9 §3.4.12 基准变更人工审批）"
+    impact_note: "重大/争议项以 `published_as=inferred` 发布，**不得伪装成已验证结论**"
+    blocking_targets: ["Ch3 §N3.4-09", "Ch8 §C8-1", "Ch9 §张力 C5"]
+
+  - param_id: p10
+    param: review_caliber                                # 复盘口径
+    source_state: "建议同时间、美元市场价格总回报；信号生效价、费用、观察窗口需冻结"
+    param_tier: a
+    option_set:
+      - value:
+          same_start_end: true
+          currency: USD
+          price_kind: market_price_total_return
+          caliber_terms: {signal_effective_price: tbd, transaction_cost: tbd, pre_tax_caliber: tbd, review_window: tbd}
+        basis: "源稿建议；口径可版本化、可 as-of 回看"
+      - value: {price_kind: nav_total_return}
+        basis: "净值口径——**仅作诊断**，不得用于相对收益判定（Ch3 §D.2 / N3.4-07）"
+    suggested_value:
+      same_start_end: true
+      currency: USD
+      price_kind: market_price_total_return
+      caliber_terms:
+        signal_effective_price: tbd      # 信号生效价（取下一可交易时点，承 Ch9 §3.4.9）
+        transaction_cost: tbd            # 交易成本
+        pre_tax_caliber: tbd             # 税前口径
+        review_window: tbd               # 观察窗口（1Q–1Y）
+    freeze_status: tbd
+    decision_owner: requester
+    source_capability: "行情快照 + 公司行动表 + `scripts/benchmark/return_guard.py`（已建）"
+    impact_note: "**Ch10 §N10.3-04/08/11 的唯一输入**；两章须同批交付（承 C10-2 / C11-4）"
+    blocking_targets: ["Ch10 §N10.3-04", "Ch10 §N10.3-08", "Ch10 §N10.3-11"]
+
+  - param_id: p11
+    param: notification_and_sharing                      # 通知与分享
+    source_state: "展示入口、提醒渠道、多人访问权限、外部分享方式待产品设计确定"
+    param_tier: a
+    option_set:
+      - value: {notification_channels: internal_only, notification_aggregation: daily_digest, publish_policy: tbd}
+        basis: "首版只开‘内部可见 + 每日一次汇总’；接口先定、值后补（`00_待拍板项清单` A9）"
+      - value: {notification_channels: [internal, push], notification_aggregation: realtime}
+        basis: "实时推送——后置项，首版一个人使用不必要"
+    suggested_value:
+      notification_channels: internal_only
+      notification_aggregation: daily_digest
+      publish_policy: tbd
+    freeze_status: tbd
+    decision_owner: product_design
+    source_capability: "present_files + 腾讯文档 + 只读快照（Ch9 §3.4.10 三层权限）"
+    impact_note: "**接口先定、值 tbd**；`rules/notification.yaml` / `rules/publish.yaml` 承载，且由本项指向"
+    blocking_targets: ["Ch8 §K ③"]
+
+  # ───────────────────────── C 档 5 项（实现方给方案 + 可切换实现） ─────────────────────────
+  - param_id: p02
+    param: first_batch_company_product_relations         # 首批公司与产品关系
+    source_state: "NVIDIA 核心生态已确认；具体名单由公开证据核验后附表，不凑数量"
+    param_tier: c
+    option_set:
+      - value:
+          policy: evidence_verified_only_no_padding
+          list_versioning: registry_source_registry_v1_v2
+          min_required_fields: [raw_source, inclusion_reason, evidence_strength]
+        basis: "核验后仅 N 家即收录 N 家，不补凑、也不为凑数降门槛（Ch3 §D.4 / N3.1-01/08/09/10）"
+      - value: {policy: target_count_driven}
+        basis: "按目标数量收录——**被 denylist 明确禁止**（`target_company_count` 等），仅登记为反例"
+    suggested_value:
+      policy: evidence_verified_only_no_padding
+      list_versioning: registry_source_registry_v1_v2
+      min_required_fields: [raw_source, inclusion_reason, evidence_strength]
+    freeze_status: tbd
+    decision_owner: implementer
+    source_capability: "MCP 连接器 + WebSearch/WebFetch 取公开证据；`scripts/scope/anti_padding.py` 已建"
+    impact_note: "名单规模 = **过门槛对象数**；‘重要性高但证据弱’进研究线索队列，不占首批名额"
+    blocking_targets: ["Ch3 §N3.1-08", "Ch10 §N10.1-06"]
+
+  - param_id: p04
+    param: recommendation_horizon                        # 每条建议的期限
+    source_state: "范围为一个季度到一年；具体期限按论点设定并记录，不任意滚动延后"
+    param_tier: c
+    option_set:
+      - value:
+          range: [1Q, 1Y]
+          set_by_thesis: true
+          rolling_constraint_ref: rules/review.yaml#anti_delay
+        basis: "范围含边界；滚动受反拖延阈值约束，命中即转人工复核 + 记 vision_drift（Ch2 §D.3）"
+      - value: {range: [1Q, 1Y], set_by_thesis: true, rolling_constraint_ref: none}
+        basis: "无滚动约束——**禁止**：不得静默延期"
+    suggested_value:
+      range: [1Q, 1Y]
+      set_by_thesis: true
+      rolling_constraint_ref: rules/review.yaml#anti_delay   # 阈值 N 只在 rules/review.yaml，不在此处复制
+    freeze_status: tbd
+    decision_owner: implementer
+    source_capability: "`horizon` + `start_date` 必填（Ch2 §D.2）；`reason` 留痕"
+    impact_note: "期限**不得任意滚动延后**；延长是可疑信号而非正常操作"
+    blocking_targets: ["Ch2 §D.3", "Ch7 §E"]
+
+  - param_id: p05
+    param: return_forecast_method                        # 收益预测方法
+    source_state: "个股与 AGIX 使用同一期间和情景口径；具体方法通过样例确定"
+    param_tier: c
+    option_set:
+      - value:
+          same_period_same_scenario_as_benchmark: true
+          method_versioning: required
+          algorithm: tbd
+          resolved_at: delivery_stage_2
+        basis: "样例校准确定算法；方法版本化，可 as-of 复核（承 Ch11 §F.2：阶段②需 p05 样例方法）"
+      - value: {individual_optimistic_vs_benchmark_pessimistic: true}
+        basis: "情景错配——**禁止**（源稿：‘不能比较个股乐观情景与基准悲观情景’）"
+    suggested_value:
+      same_period_same_scenario_as_benchmark: true
+      method_versioning: required
+      algorithm: tbd
+      resolved_at: delivery_stage_2
+    freeze_status: tbd
+    decision_owner: implementer
+    source_capability: "`scripts/compute/`（确定性计算层，阶段②交付）；`method_version` 字段"
+    impact_note: "属‘该阶段触及’非硬门——阶段②需本项方法，但不阻塞阶段① 开工（Ch11 §F.2）"
+    blocking_targets: ["Ch3 §N3.4-06", "Ch5 §C.1", "Ch9 §3.9"]
+
+  - param_id: p07
+    param: run_schedule_and_latency_target               # 运行时刻与延迟目标
+    source_state: "已确定日度加事件；具体时区、时间、触发阈值和处理目标由实现方评估"
+    param_tier: c
+    option_set:
+      - value:
+          cadence: daily_and_event
+          anchor: us_market_close
+          timezone_explicitly_recorded: true
+          latency_cap: public_data_update_frequency
+          schedule_pointer: rules/schedule.yaml
+          time_value: tbd
+        basis: "美股收盘后 + 时区显式记录；时效上限 = 公开数据更新频率（不可承诺超过来源能力）"
+      - value: {cadence: daily_and_event, anchor: realtime_push}
+        basis: "毫秒级响应——**禁止**：源稿明确‘事件触发不代表毫秒级响应’"
+    suggested_value:
+      cadence: daily_and_event
+      anchor: us_market_close
+      timezone_explicitly_recorded: true
+      latency_cap: public_data_update_frequency
+      schedule_pointer: rules/schedule.yaml       # 指针；值不在此复制
+      time_value: tbd
+    freeze_status: tbd
+    decision_owner: implementer
+    source_capability: "WorkBuddy Automation（`rrule`）+ `rules/schedule.yaml` 配置化"
+    impact_note: "随**阶段④ 前置**冻结（Ch9 §3.10 J3 / `00_交付施工图 §7 N-05`）；现在留 tbd"
+    blocking_targets: ["Ch8 §D", "Ch9 §3.10 J3"]
+
+  - param_id: p09
+    param: public_data_and_budget                        # 公开数据与预算
+    source_state: "仅公开信息已确认；可用接口、模型和部署费用、检索预算需实现方列明"
+    param_tier: c
+    option_set:
+      - value:
+          data_scope: public_only
+          allowlist_pointer: rules/data-sources.allowlist.yaml
+          connector_cost_policy: free_quota_zero_cost
+          budget: tbd
+        basis: "D-01（2026-09-15 已拍板）：iFinD/pandadata 标 `license_tier=free_quota` / `cost=0`，可进首版清单但**不得写入裁决逻辑**"
+      - value: {data_scope: public_plus_paid}
+        basis: "付费数据订阅——**不作为首版启动条件**（源稿第 368 行 / Ch11 §E.2 红线二）"
+    suggested_value:
+      data_scope: public_only
+      allowlist_pointer: rules/data-sources.allowlist.yaml    # 指针；值不在此复制
+      connector_cost_policy: free_quota_zero_cost
+      budget: tbd
+    freeze_status: tbd
+    decision_owner: implementer
+    source_capability: "已连接 MCP 连接器（westock / iFinD / pandadata）+ WebSearch/WebFetch"
+    impact_note: "**若未来转付费，须按 Ch2 §N2.1-14 重新评估**；预算值 tbd 不阻塞开工"
+    blocking_targets: ["Ch6 §D.5", "Ch9 §3.10 J1"]
+
+# ── 参数状态不变量（Ch11 §F.1，由 scripts/checks/freeze_guard.py 强制）────────
+invariants:
+  - id: I11-01
+    statement: "拍板前恒 tbd：freeze_status == 'tbd' 或 confirmed_at 非空"
+    anchor: "Ch11 §F.1"
+  - id: I11-02
+    statement: "freeze_status 单调：tbd → frozen 单向；回退须新版本（append-only），不得原地改"
+    anchor: "Ch11 §F.1"
+  - id: I11-03
+    statement: "切换原子性：一次冻结 = 一次 commit（携带 param_id + confirmed_by + confirmed_at + version）"
+    anchor: "Ch11 §F.1"
+  - id: I11-04
+    statement: "blocking_targets 一律节号锚点（形如 ChN §...），禁绝对行号"
+    anchor: "Ch11 §G G11-05 / 纪律 6"

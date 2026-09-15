@@ -1,0 +1,217 @@
+# rules/banned_tokens.yaml —— 全包唯一禁词源（Ch2 §B.2）
+#
+# 权威出处：`Ch2 §B.2 ★禁止项清单（可直接落地为自动化检查）`
+# 作用域通则：`Ch2 §B.1 ★禁词作用域通则`（P-09 / P-04 同族，通用于全部禁词）
+#
+# ★ 硬纪律（Ch2 §B.1 通则 / 00_开发Agent开工提示词.md §七 纪律 3）：
+#   1. 任一禁词写入本文件之前，必须先 `grep` 该 token，确认是否存在**合法同名用途**；
+#   2. 若存在合法同名用途，该 token **必须**声明 **token 级 `scope`**；**无 `scope` 不得入库**；
+#   3. scope 必须是**函数级 / 对象级**的**可执行断言**，不得写成"人工注意"之类不可检查的措辞；
+#   4. 本通则的三次实例：P-09（决策作用域）/ P-04（Recommendation 字段名作用域）/ 检查器命名空间免扫。
+#   三次实例只做"消歧"，**不新增禁止项、不放松约束**。
+#
+# 本文件只读：0444 + SHA256 锁；模型对 rules/ 无写权（承 Ch9 §3.10 J9 / 纪律 10）。
+
+version: 1
+spec_anchor: "Ch2 §B.2"
+scope_general_rule_anchor: "Ch2 §B.1"
+
+# ── 所有检查器共享的免扫命名空间 ────────────────────────────────────────────
+# Ch2 §B.1 通则第 4 点：检查器自身的函数名 / 变量名可能含禁词
+# （如 assert_no_composite_score / check_no_weight），朴素扫描会误报。
+exempt_namespaces:
+  - "system/scripts/checks/**"
+  - "system/tests/**"
+
+# ── 决策作用域判定（P-09 scope 的可执行定义）────────────────────────────────
+# Ch2 §B.3 Checker-1 ★设计约束：is_decision_scope = 位于 decision/gate 模块或
+# classify_*/assert_* 调用链。四类调整方向不同，勿合并。
+decision_scope:
+  include_paths:
+    - "system/scripts/decision/**"
+    - "system/scripts/graph/**"
+  include_call_chain: ["classify_*", "assert_*"]
+  # · 纳入：通知 / 每日页排序函数属决策作用域（排序统一走 priority_order 字典序）
+  #   —— N8.1-07 / N8.1-09
+  include_modules:
+    - "notification_sort"
+    - "daily_page_sort"
+  # · 排除：复盘标记字段不在决策作用域内（标记字段不得进入 decision/graph 作用域）
+  #   —— N10.3-12
+  exclude_fields:
+    - eval_layer
+    - error_axis
+    - error_axis_note
+  # · 排除：freeze_param 读取不在决策函数 scope 内（参数为配置 / 标记，非决策输入）
+  #   —— N11.2-12
+  exclude_markers:
+    - "get_param"
+    - "freeze_param"
+    - "load_freeze"
+    - "ParamResolution"
+
+# ── 禁词表 ──────────────────────────────────────────────────────────────────
+tokens:
+  # ── P-01 禁止项：投资规则 9（不得增设最低超额收益门槛）──
+  - token: min_excess_return
+    rule: P-01
+    layers: [L2, L3]
+    scope: {kind: global}
+  - token: minimum_alpha
+    rule: P-01
+    layers: [L2, L3]
+    scope: {kind: global}
+  - token: safety_margin
+    rule: P-01
+    layers: [L2, L3]
+    scope: {kind: global}
+  - token: excess_threshold
+    rule: P-01
+    layers: [L2, L3]
+    scope: {kind: global}
+
+  # ── P-02 禁止项：N2.3-02（不得有固定置信度门槛）──
+  - token: confidence_threshold
+    rule: P-02
+    layers: [L2, L3]
+    scope: {kind: global}
+  - token: min_confidence
+    rule: P-02
+    layers: [L2, L3]
+    scope: {kind: global}
+  - token: confidence_gate
+    rule: P-02
+    layers: [L2, L3]
+    scope: {kind: global}
+
+  # ── P-03 禁止项：投资规则 11（禁止损）——L1 schema 字段存在性断言 ──
+  - token: stop_loss
+    rule: P-03
+    layers: [L1]
+    scope: {kind: recommendation_field_scope}
+  - token: stop_price
+    rule: P-03
+    layers: [L1]
+    scope: {kind: recommendation_field_scope}
+  - token: price_stop
+    rule: P-03
+    layers: [L1]
+    scope: {kind: recommendation_field_scope}
+
+  # ── P-04 禁止项：投资规则 3（建议对象上不得出现仓位/持仓/成本类字段）──
+  # ★ scope：仅 `Recommendation` 字段名。裸词 position 的禁止语义与"产业链位置"**无关**。
+  #   合法同名词（不得误报）：position_listed / business_positions
+  - token: quantity
+    rule: P-04
+    layers: [L1]
+    scope: {kind: recommendation_field_scope}
+  - token: position
+    rule: P-04
+    layers: [L1]
+    scope:
+      kind: recommendation_field_scope
+      legit_homonyms:
+        - position_listed      # "产业链位置"收录态（Ch3 §C.2 N3.2-04）
+        - business_positions   # 公司×节点多业务位置数据对象（Ch9 §2.1.3 / §3.3.3）
+  - token: shares_held
+    rule: P-04
+    layers: [L1]
+    scope: {kind: recommendation_field_scope}
+  - token: cost_basis
+    rule: P-04
+    layers: [L1]
+    scope: {kind: recommendation_field_scope}
+  - token: portfolio_weight
+    rule: P-04
+    layers: [L1]
+    scope: {kind: recommendation_field_scope}
+
+  # ── P-05 禁止项：N2.2-06（action 枚举不得含做空）——L1 枚举断言 ──
+  - token: short
+    rule: P-05
+    layers: [L1]
+    scope: {kind: recommendation_action_enum}
+  - token: short_sell
+    rule: P-05
+    layers: [L1]
+    scope: {kind: recommendation_action_enum}
+
+  # ── P-06 禁止项：规则 4/5/7/12（这些**不得**作为买入门输入）——L4 门输入结构断言 ──
+  # 依据 Ch2 §B.3 Checker-3 的 forbidden 集合。
+  - token: moat_required
+    rule: P-06
+    layers: [L4]
+    scope: {kind: gate_input_scope}
+  - token: catalyst_required
+    rule: P-06
+    layers: [L4]
+    scope: {kind: gate_input_scope}
+  - token: official_confirmation_required
+    rule: P-06
+    layers: [L4]
+    scope: {kind: gate_input_scope}
+  - token: profitability_required
+    rule: P-06
+    layers: [L4]
+    scope: {kind: gate_input_scope}
+  - token: realization_required
+    rule: P-06
+    layers: [L4]
+    scope: {kind: gate_input_scope}
+  - token: moat
+    rule: P-06
+    layers: [L4]
+    scope:
+      kind: gate_input_scope
+      note: "裸词 moat 仅作为**门输入**时才禁；moat_level / moat_state 是合法字段名（Ch2 §C.2 A-02）"
+  - token: catalyst
+    rule: P-06
+    layers: [L4]
+    scope:
+      kind: gate_input_scope
+      note: "裸词 catalyst 同上；催化剂语义本身允许存在于展示层（Ch7 §E）"
+
+  # ── P-07 禁止项：无 source_id 的聚合预测（承 Ch5 C.2）——L1 schema 字段断言 ──
+  - token: consensus
+    rule: P-07
+    layers: [L1]
+    scope: {kind: recommendation_field_scope}
+  - token: market_view
+    rule: P-07
+    layers: [L1]
+    scope: {kind: recommendation_field_scope}
+  - token: average_forecast
+    rule: P-07
+    layers: [L1]
+    scope: {kind: recommendation_field_scope}
+
+  # ── P-09 禁止项：这些通用词**仅在决策函数内**命中才 fail（承 Ch6 B.3）──
+  # ★ scope：decision_scope_only。否则业务代码里的普通 score/weight 变量会误报，
+  #   在"命中即 fail、禁 warn-only"下形成死锁。
+  - token: weight
+    rule: P-09
+    layers: [L2]
+    scope: {kind: decision_scope_only}
+  - token: score
+    rule: P-09
+    layers: [L2]
+    scope: {kind: decision_scope_only}
+  - token: vote
+    rule: P-09
+    layers: [L2]
+    scope: {kind: decision_scope_only}
+  - token: sentiment
+    rule: P-09
+    layers: [L2]
+    scope: {kind: decision_scope_only}
+  - token: follower_count
+    rule: P-09
+    layers: [L2]
+    scope: {kind: decision_scope_only}
+
+# ── P-08 / P-10 不由本表承载 ────────────────────────────────────────────────
+# P-08：依据 past_return 的收益预测 → 程序检查，承 Ch3 AGIX，落 Ch5 history_guard（引用）
+# P-10：展示层"买入置顶/紧迫色/隐藏反证" → L5，落 scripts/views/neutrality_check.py
+reference_only:
+  - {rule: P-08, anchor: "Ch5 §E history_guard", note: "不得用 past_return 做收益预测"}
+  - {rule: P-10, anchor: "Ch2 §B.3 Checker-5 / Ch3 §D.1", note: "展示层中立守卫"}

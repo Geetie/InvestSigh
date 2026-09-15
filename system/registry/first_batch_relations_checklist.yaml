@@ -1,0 +1,98 @@
+# registry/first_batch_relations_checklist.yaml —— 首批关系核验清单（阶段① 交付物 ②）
+#
+# 权威出处：
+#   `Ch11 §B` 阶段① 主要交付物 = 本文 + **首批关系核验清单** + 公开数据登记 + 基准及关键口径
+#   `Ch9 §4.1` 阶段1 最小可用数据集 → 产品与关系必须字段：
+#     **关系键（类型 / 双方 / 产品 / 阶段 / 有效期 / 经济暴露 / 证据引用）**
+#   `Ch9 §N9.1-06~09`（关系键、多关系并存、阶段枚举、有效期、经济暴露）
+#   `Ch3 §N3.1-02`（四类角色标签）/ `§D.4`（反凑数：三字段非空）
+#
+# ★★ 本清单是"**待核验项**"，不是"已断言的关系"。
+#   - 关系的**事实值**（对手方、金额、阶段）一律 `pending_verification` / `undisclosed`，
+#     **由公开证据核验后回填**（`Ch11 §D.2 p02`：「名单由公开证据核验后附表，不凑数量」）。
+#   - **不填入猜测的事实数值**（源稿明令）。未披露 = 显式 `undisclosed`，**不是 0**。
+#   - 节点标识 ≠ 可交易代码（源稿 §附录一）→ 节点↔公司/证券映射本身即是核验项。
+
+version: 1
+spec_anchor: "Ch11 §B / Ch9 §4.1"
+
+# ── 必填字段契约（每条关系核验通过后，必须回填以下字段才允许进正式名单）──
+required_fields_for_relation_key:
+  - field: subject_id
+    statement: "主体（公司或产品）—— 公司须 company_id（稳定代理键），不得用公司名/代码"
+    anchor: "Ch9 §N9.1-01/06"
+  - field: object_id
+    statement: "客体（公司或产品）"
+    anchor: "Ch9 §N9.1-06"
+  - field: related_product_id
+    statement: "涉及产品（产品级关系可为空，公司级关系必填）"
+    anchor: "Ch9 §N9.1-06"
+  - field: relation_type
+    statement: "关系类型（供应 / 客户 / 合作 / 竞争 等，枚举小写+下划线）"
+    anchor: "Ch2 §C.2 纪律 7"
+  - field: relation_progress_stage
+    statement: "合作阶段为**显式枚举**，且**不得自动跨级推进**（T03）"
+    anchor: "Ch9 §N9.1-07"
+  - field: valid_from / valid_to
+    statement: 有效期起止；区分「历史已完成的合作」与「当前采购」
+    anchor: "Ch9 §N9.1-08"
+  - field: economic_exposure
+    statement: "已知经济暴露（金额/份额/方向）；**未披露则显式 undisclosed**，不得填 0 或猜测值"
+    anchor: "Ch9 §N9.1-09 · N9.2-02"
+  - field: evidence_claim_ids
+    statement: "证据引用（**指向 claim_id 的外键**；证据不是独立实体）"
+    anchor: "Ch9 §2.1.5"
+  - field: raw_source / inclusion_reason / evidence_strength
+    statement: "入选三字段**非空**，否则不得进正式名单（反凑数）"
+    anchor: "Ch3 §D.4 ②"
+
+# ── 四类角色标签（N3.1-02）：每个对象必须能查询自己属于哪一类 ──
+role_taxonomy: [self_company, upstream, downstream_customer_partner, competitor]
+
+# ── 核验批次：按附录一 8 个产业位置分批 ──
+#    `verification_status` 取值：pending_verification / in_review / verified / rejected
+batches:
+  - batch_id: b01_node_to_entity_mapping
+    title: "节点 ↔ 公司 / 证券 映射（44 节点）"
+    why: "节点标识**不一定等于可交易代码**（源稿 §附录一）；映射不核实 → 建议无法映射到证券（N9.1-03）"
+    items_expected: 44
+    items_verified: 0
+    verification_status: pending_verification
+    required_fields: [company_id, security_id, listing_venue, currency, trading_session, verified]
+    anchor: "Ch3 §C.1 / N9.1-03"
+    note: "未上市实体（OpenAI / Anthropic）允许 **0 证券**（`Ch9 §2.1.3 R-08`）"
+
+  - batch_id: b02_nvda_core_ecosystem
+    title: "NVIDIA 核心生态上下游关系"
+    why: "源稿 §三 已确认「NVIDIA 核心生态」；阶段② 需完整经营/竞争/财务/估值底稿"
+    items_expected: tbd
+    items_verified: 0
+    verification_status: pending_verification
+    required_relation_key_fields: true
+    role_labels_required: true
+    anchor: "Ch11 §B / `00_待拍板项清单` C4"
+    note: "名单**证据核验后附表，不凑数量**（可能就十几家）"
+
+  - batch_id: b03_upstream_downstream_competitors
+    title: "上游 / 下游 / 竞争者关系（阶段③ 多公司传导前置）"
+    items_expected: tbd
+    items_verified: 0
+    verification_status: pending_verification
+    required_relation_key_fields: true
+    anchor: "Ch11 §B 阶段③"
+    note: "每条关系须能标出 role_label 与可标强度；**不得把联动标成同向**（N9.1-15）"
+
+# ── 边界情形（`Ch3 §D.4`）────────────────────────────────────────────────
+weak_evidence_policy:
+  statement: "「重要性高但证据弱」→ **不入选正式名单**，进研究线索 / 待核验队列，**不占首批名额**"
+  queue_kind: research_lead
+  occupies_first_batch_quota: false
+  anchor: "Ch3 §D.4 边界情形"
+
+# ── 反凑数（`Ch3 §D.4 ③`）────────────────────────────────────────────────
+anti_padding:
+  list_size_is_derived: true          # 名单规模 = 过门槛对象数
+  target_count_forbidden: true        # 禁 target_company_count / expected_list_size / companies_to_include
+  lowering_threshold_for_volume_forbidden: true
+  threshold_change_requires_versioning: true
+  guard: "scripts/checks/anti_padding.py"

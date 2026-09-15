@@ -1,0 +1,50 @@
+# rules/review.yaml —— 反拖延 / 反造信号阈值口径（Ch1 §F / Ch2 §D.3）
+#
+# 权威出处：`Ch2 §D.3`（反拖延检测，阈值 N 落本文件）
+#           `Ch1 §F`（反 KPI 守卫 G1-02）
+#           `00_待拍板项清单` B1 / B2（推荐值已确认，机制上仍可切换）
+#
+# ⚠️ 本文件是**阈值口径**，不是门槛：
+#   - B2 只触发"强制复查"，**不是止损线**（`Ch2 §D.4` / P-03 禁止损）；
+#   - 本文件的值**不得进入决策函数**（纪律 1 / Ch2 §B.2 P-01·P-02）。
+# 只读：0444。值走 `get_param` ？——不：本文件不属于 11 项待冻结参数，
+#   它是 B 档口径（已确认基线值），变更须版本化 + 留痕。
+
+version: 1
+spec_anchor: "Ch2 §D.3"
+tier: b                       # 消歧：B 档口径（非 param_tier 的 a/c）
+
+anti_delay:                   # ← 反拖延阈值 N（`00_待拍板项清单` B1）
+  threshold_n: 2              # 连续延长 2 次即报可疑
+  switchable: true
+  triggers:
+    - id: consecutive_extension_ge_n
+      statement: "连续延长 >= N 次"
+    - id: near_review_date
+      statement: "写入日距复查日 <= 3 天仍延长"
+    - id: assumption_unchanged
+      statement: "延长但未更新假设（assumption_changed is False）"
+  on_hit:
+    action: human_review
+    record: vision_drift
+    silent_extension_forbidden: true    # **禁止静默延期**
+  reset_condition: "有缩短则重置计数"
+  guard: "scripts/checks/... → 由 Ch2 §D.3 detect_horizon_extension 承载（阶段②/③ 实现）"
+
+forced_recheck:               # ← 价格下跌强制复查（`00_待拍板项清单` B2）
+  single_day_drop_pct: -7     # 单日 <= -7%
+  three_day_cumulative_pct: -12   # 3 日累计 <= -12%
+  switchable: true
+  semantics: recheck_trigger_only
+  is_stop_loss: false         # ★ 明确否定：**不是止损线**
+  auto_infer_undervalued: false   # 不自动判低估（承 Ch5 §F.5）
+  on_hit:
+    action: enqueue_recheck_task
+    keep_original_judgment_time: true    # T08：复查未完成时显示原判断时间
+
+anti_fake_signal:             # ← 反 KPI 阈值与口径（Ch1 §F G1-02）
+  no_signal_day_definition: "judgment_change 全为 False"
+  signals_emitted_must_be: 0            # 无变化日新增 buy/sell 信号数必须为 0
+  new_signal_requires_change_reason: true
+  warn_when_signals_exceed_changes: true   # 建议数 > 变化数 → 告警
+  guard: "scripts/checks/no_signal_day.py"

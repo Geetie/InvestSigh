@@ -1,0 +1,148 @@
+# registry/sources.yaml —— 来源登记表（Ch9 §3.4.8 / §N9.3-01~11）
+#
+# 权威出处：`Ch9 §3.4.8 来源登记表结构`（字段 = 7 项登记字段 + source_id / tier /
+#           quality_label / observed_stats / health）
+#           `Ch9 §N9.3`（7 字段的信息价值见 §2.5.1）
+#
+# ★ 字段构成（7 项登记字段，`Ch9 §N9.3`）：
+#   ① 公开入口 public_entry   ② 实际可获得内容 obtainable_content_type
+#   ③ 抓取方式 crawl_method   ④ 可预期延迟 expected_latency
+#   ⑤ 更新频率 update_frequency  ⑥ 访问限制 access_restriction
+#   ⑦ 备选来源 fallback_source_ids
+#
+# ★ 质量标签纪律（N9.3-11）：`quality_label` **仅人工标注**（ground truth）；
+#   `observed_stats` 为自动观测统计，**只能作辅助信号，不得被当作事实、
+#   不得直接用于证据加权**；**不得以模型自评替代人工核验样本**。
+#
+# ★ 驱动逻辑：`可承诺时效 = min(update_freq + latency)`；
+#   降级时 → 依赖对象标 `stale` + 显示延迟（T13）。
+#
+# ⚠️ 阶段① 的题目要求「公开数据登记」，因此**只登记接入面事实**，
+#   **不填入任何猜测的业务数值**（源稿：不填入猜测的事实数值；未披露就显式存"未披露"）。
+#   尚未核验的字段一律 `tbd`（口径占位），不得编造。
+# 只读：本文件非 rules/，但同属"登记层"，由 pre-commit 的追加式规则保护。
+
+version: 1
+spec_anchor: "Ch9 §3.4.8"
+registry_kind: source_registry
+# 阶段① 交付物（`00_交付施工图 §2 阶段① 退出物`：registry/sources.yaml）
+
+# 时效口径（N9.3-04/05）：可承诺时效**不得超过**来源更新频率所能支撑的范围
+latency_policy:
+  committable_timeliness: "min(update_frequency, expected_latency)"
+  show_delayed_when_not_realtime: true     # 只有延迟行情时显示"延迟"与行情时间，不标实时
+
+sources:
+  - source_id: src_westock_mcp
+    public_entry: "westock MCP 连接器（腾讯自选股）"
+    obtainable_content_type: structured_quotes_and_financials
+    crawl_method: api
+    expected_latency: tbd
+    update_frequency: tbd
+    access_restriction: none
+    fallback_source_ids: [src_ifind_mcp, src_pandadata_mcp]
+    tier: primary
+    quality_label: tbd                     # 人工核验样本到位前恒 tbd
+    observed_stats: {}
+    health: tbd
+    license_tier: free_quota               # 消歧：数据源许可（非来源分级 tier）
+    cost: 0
+    note: "D-01：免费额度；可进首版清单，但不得写入裁决逻辑"
+
+  - source_id: src_ifind_mcp
+    public_entry: "iFinD MCP 连接器"
+    obtainable_content_type: structured_quotes_and_financials
+    crawl_method: api
+    expected_latency: tbd
+    update_frequency: tbd
+    access_restriction: free_quota
+    fallback_source_ids: [src_westock_mcp, src_pandadata_mcp]
+    tier: primary
+    quality_label: tbd
+    observed_stats: {}
+    health: tbd
+    license_tier: free_quota
+    cost: 0
+    note: "D-01；若转付费按 Ch2 §N2.1-14 重评"
+
+  - source_id: src_pandadata_mcp
+    public_entry: "PandaData MCP 连接器"
+    obtainable_content_type: structured_quotes_and_financials
+    crawl_method: api
+    expected_latency: tbd
+    update_frequency: tbd
+    access_restriction: free_quota
+    fallback_source_ids: [src_westock_mcp, src_ifind_mcp]
+    tier: primary
+    quality_label: tbd
+    observed_stats: {}
+    health: tbd
+    license_tier: free_quota
+    cost: 0
+    note: "D-01；若转付费按 Ch2 §N2.1-14 重评"
+
+  - source_id: src_company_ir
+    public_entry: tbd                      # 公司 IR 站点因公司而异，逐公司登记
+    obtainable_content_type: full_text
+    crawl_method: web_fetch
+    expected_latency: tbd
+    update_frequency: tbd
+    access_restriction: none
+    fallback_source_ids: [src_regulatory_filing]
+    tier: primary                          # publisher_type=company_official → tier=primary（Ch6 §C.1）
+    quality_label: tbd
+    observed_stats: {}
+    health: tbd
+    note: "公司 IR / 官方财报材料 / 公开问答。**尊重登录、付费与访问限制**（N9.3-06）"
+
+  - source_id: src_regulatory_filing
+    public_entry: tbd                      # 监管披露入口（SEC EDGAR 等），逐市场登记
+    obtainable_content_type: full_text
+    crawl_method: web_fetch
+    expected_latency: tbd
+    update_frequency: tbd
+    access_restriction: none
+    fallback_source_ids: [src_company_ir]
+    tier: primary
+    quality_label: tbd
+    observed_stats: {}
+    health: tbd
+    note: "监管披露构成研究基础（源稿 §六）"
+
+  - source_id: src_public_media
+    public_entry: tbd
+    obtainable_content_type: snippet_or_summary    # 受付费/登录限制时**只保留合法片段**
+    crawl_method: web_search
+    expected_latency: tbd
+    update_frequency: tbd
+    access_restriction: mixed
+    fallback_source_ids: [src_company_ir, src_regulatory_filing]
+    tier: secondary_tertiary
+    quality_label: tbd
+    observed_stats: {}
+    health: tbd
+    note: "⚠️ 只能引用**实际取得的内容**，**不得声称读过全文**（源稿 §六 / N9.1-10）"
+
+  - source_id: src_social_kol
+    public_entry: tbd                      # X / YouTube / Substack 等
+    obtainable_content_type: snippet_or_summary
+    crawl_method: web_search
+    expected_latency: tbd
+    update_frequency: tbd
+    access_restriction: mixed
+    fallback_source_ids: [src_public_media]
+    tier: secondary_tertiary
+    quality_label: tbd
+    observed_stats: {}
+    health: tbd
+    note: "KOL 讨论**可用于识别叙事、分歧和待核验线索**；**热度不等于市场全体共识**（源稿 §五）"
+
+# ── 作者表现登记位（N9.1-12 / N9.3-10，P1/P2）─────────────────────────────
+author_registry:
+  note: "作者需稳定身份 id，支持‘作者表现按领域积累’；匿名/化名与转载作者的身份归并规则**未定**（N9.1-12 歧义项）"
+  authors: []
+
+# ── 领域质量积累位（N9.3-09，P1）──────────────────────────────────────────
+quality_by_domain:
+  note: "以**人工核验样本**为基准标签；`observed_stats` 仅辅助（N9.3-11）。领域划分粒度**未定**。"
+  domains: []

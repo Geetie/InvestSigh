@@ -1,0 +1,39 @@
+# rules/publish.yaml —— 发布策略（Ch8 §K ③ / Ch11 p08 · p11）
+#
+# 权威出处：`Ch8 §K ③`（发布配置：接口先定、值 tbd）
+#           `Ch11 §D.1 p08`（发布与人工复核：按对象分层）
+#           `Ch11 §D.1 p11`（publish_policy）
+#
+# ★ 单一真源纪律：本文件**不另存**发布政策的值；值 = `rules/freeze.yaml::p08` 与 `p11`。
+# ★ 三层权限（Ch9 §3.4.10）：内部 / 同事（只读版本化快照，强制显示资料日期 + 版本）/
+#   公开（白名单逐项权利清理；**非白名单拒绝渲染**）。
+# ★ 阶段归属：阶段④（`00_交付施工图 §3.1`）。本阶段只落可解析指针骨架，不提前实现。
+# 只读：0444 + SHA256。
+
+version: 1
+spec_anchor: "Ch8 §K ③"
+param_refs: [p08, p11]
+delivery_stage: 4
+implementation_status: pointer_skeleton
+
+interface:                                   # 接口先定（值 tbd）
+  publish_policy: tbd                        # ← 值只在 rules/freeze.yaml::p11
+  layered_review_policy: tbd                 # ← 值只在 rules/freeze.yaml::p08
+  routine_research: tbd
+  graph_update: tbd
+  benchmark_change: tbd                      # 期望 = human_approval（A6）
+  external_publish: tbd                      # 期望 = explicit_authorization（A6）
+  disputed_inference_marker: tbd             # 期望 = published_as=inferred（A6）
+  snapshot_must_show: [data_date, version]   # N9.2-07：分享须强制展示资料日期与版本
+
+three_layer_permission:
+  internal: {scope: full_read_write, restrictions: [access_limit, compliance_retention]}
+  colleague: {scope: read_only_versioned_snapshot, must_show: [data_date, version],
+              excludes: restricted_full_text, implies_reshare_authorization: false}
+  public: {scope: explicitly_authorized_items_only, whitelist: publish_manifest,
+           rights_clearance_per_item: true, auto_authorization: false}
+
+red_lines:
+  public_input_does_not_authorize_publish: true    # N9.2-08 ★
+  non_whitelisted_render_refused: true
+  render_failure_keeps_old_view: true              # Ch9 §3.5 阶段⑥：渲染失败 → 保持旧视图，不发布半成品
