@@ -1,0 +1,13 @@
+# --- AI 工具目录（与 FastInvest 仓库既有习惯一致：不收录 .workbuddy 快照）---
+.workbuddy/
+
+# --- OS / IDE ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# --- 临时产物 ---
+*.tmp
+~$*
+*~
