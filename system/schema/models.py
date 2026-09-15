@@ -705,7 +705,12 @@ class ExpectationSample(TimeMixin):
     period: str
     sample_value: str = TBD
     sample_size: int | None = None
-    source_id: str = ""
+    # ★ `source_id` **必填且非空**（`Ch5 §C2`：「`expectations` 每条必须有 `source_id`
+    #   + `provider` 身份（非空），**否则校验失败**」）。
+    #   初版写成 `source_id: str = ""` —— 于是"无源的外部预期"能入库，
+    #   而 P-07 禁的正是"无 source_id 的聚合预测"。由
+    #   `tests/conflict/test_schema_no_aggregate.py` 抓出。
+    source_id: str = Field(min_length=1)
 
 
 # ─────────────────────────── ⑦ 基准与建议 ───────────────────────────

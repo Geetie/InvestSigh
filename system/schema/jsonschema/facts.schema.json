@@ -1601,7 +1601,7 @@
           "type": "string"
         },
         "source_id": {
-          "default": "",
+          "minLength": 1,
           "title": "Source Id",
           "type": "string"
         }
@@ -1611,7 +1611,8 @@
         "security_id",
         "provider_id",
         "metric",
-        "period"
+        "period",
+        "source_id"
       ],
       "title": "ExpectationSample",
       "type": "object"
@@ -5032,7 +5033,7 @@
           "type": "string"
         },
         "source_id": {
-          "default": "",
+          "minLength": 1,
           "title": "Source Id",
           "type": "string"
         }
@@ -5042,7 +5043,8 @@
         "security_id",
         "provider_id",
         "metric",
-        "period"
+        "period",
+        "source_id"
       ],
       "title": "ExpectationSample",
       "type": "object"
