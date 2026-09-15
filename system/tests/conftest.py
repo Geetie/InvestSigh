@@ -32,6 +32,9 @@ if str(SYSTEM_ROOT) not in sys.path:
 #   ② `tests/**` 在反占位符扫描里是免扫命名空间。
 WORK_DIR = SYSTEM_ROOT / "tests" / ".work"
 
+# session 级：同一 `(脚本, code_root, 参数)` 的结果只算一次（见 `run_gate`）
+_GATE_RESULT_CACHE: dict[tuple[str, str, tuple[str, ...]], GateResult] = {}
+
 # 复制夹具时跳过的目录：缓存与**可重建**产物（index 可全量重建、reports 是运行产物）
 _COPY_SKIP = {"__pycache__", ".pytest_cache", ".venv", ".work", "index", "reports", ".locks"}
 # 阶段① 内必然为空的目录，夹具里补出来供注入测试写入
@@ -87,19 +90,134 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     shutil.rmtree(WORK_DIR, ignore_errors=True)
 
 
-def run_gate(script_rel: str, root: Path, *extra: str, timeout: float = 60.0) -> subprocess.CompletedProcess:
-    """跑**真实**检查器脚本，`code_root` 指向夹具副本。
+class GateResult:
+    """检查器一次执行的结果。属性名与 `subprocess.CompletedProcess` 对齐，
+    使原有的 `proc.returncode / .stdout / .stderr` 断言写法无需改动。"""
 
-    `extra` 追加到 `--no-report` 之后（如 `--timing ci` / `--fail-on warn`）。
+    __slots__ = ("returncode", "stdout", "stderr")
+
+    def __init__(self, returncode: int, stdout: str, stderr: str = "") -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def run_gate(script_rel: str, root: Path, *extra: str, timeout: float = 60.0) -> GateResult:
+    """跑检查器，`code_root` 指向夹具副本。默认走**进程内 `__main__` 入口**。
+
+    为什么不是子进程：一个测试套件里有 **80 次**检查器调用，每次子进程启动
+    ≈ 0.31s（解释器 + yaml/pydantic 导入），合计 ≈ 25s —— 这是整个套件
+    49s 里的全部大头（夹具复制实测只有 0.021s，不是瓶颈）。
+    `runpy` 执行的是**与命令行完全相同的入口**，不 mock 任何东西。
+
+    ★ 进程级保真度由这两条用例守住（它们必须用 `run_gate_subprocess`）：
+      - `tests/guards/...::test_cli_wiring_exits_with_main_return_code`
+      - `tests/guards/...::test_injection_blocks_at_process_level`
+        （注入违例 → **真进程** exit 1，AC-04 的最终证据）
+
+    ★ **同一 `(脚本, code_root, 参数)` 只跑一次**（session 级缓存）。
+      若某个测试在**同一 `code_root`** 上先跑一次、改动后再跑同一命令，
+      必须改用 `run_gate_subprocess` 或换一个 `code_root`（否则拿到旧结果）。
     """
+    key = (script_rel, str(root), extra)
+    hit = _GATE_RESULT_CACHE.get(key)
+    if hit is not None:
+        return hit
+    code, out = _exec_gate_script(script_rel, root, extra)
+    result = GateResult(code, out)
+    _GATE_RESULT_CACHE[key] = result
+    return result
+
+
+def run_gate_subprocess(script_rel: str, root: Path, *extra: str, timeout: float = 60.0) -> GateResult:
+    """跑检查器 —— **真子进程**（用于"CLI 接线"与"进程级阻断"这两类证据）。"""
     script = SYSTEM_ROOT / script_rel
     if not script.exists():
         raise FileNotFoundError(f"检查器脚本不存在: {script}")
     cmd = [sys.executable, str(script), str(root), "--no-report", *extra]
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    return GateResult(proc.returncode, proc.stdout, proc.stderr)
 
 
-def assert_rejected(proc: subprocess.CompletedProcess, *, rule_hint: str = "") -> None:
+def _exec_gate_script(script_rel: str, root: Path, extra: tuple[str, ...]) -> tuple[int, str]:
+    """执行脚本的 `__main__` 入口并捕获退出码（不 mock 任何东西）。"""
+    import contextlib
+    import io
+    import runpy
+
+    script = SYSTEM_ROOT / script_rel
+    if not script.exists():
+        raise FileNotFoundError(f"检查器脚本不存在: {script}")
+
+    argv = [str(script), str(root), "--no-report", *extra]
+    buf = io.StringIO()
+    old_argv = sys.argv
+    sys.argv = argv
+    try:
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            runpy.run_path(str(script), run_name="__main__")
+        code = 0
+    except SystemExit as exc:
+        # sys.exit(None) 等价于 0；sys.exit("msg") 等价于 1
+        code = exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
+    finally:
+        sys.argv = old_argv
+    return int(code), buf.getvalue()
+
+
+# 若某脚本**没有** `if __name__ == "__main__"` 块（只有 `main()`），
+# 上面的 runpy 会"跑完但什么都没发生"（退出码恒 0）—— 那是**静默的假通过**。
+# 这条断言把这种脚本挡在门外：调用后必须留下 `== <checker> ==` 的痕迹。
+def assert_gate_actually_ran(script_rel: str, result: GateResult) -> None:
+    assert "== " in result.stdout, (
+        f"{script_rel} 看似执行了但没有输出 —— 可能缺少 `__main__` 入口块"
+        f"（runpy 会静默返回 0，属于假通过）"
+    )
+
+
+# ── 进程内执行器（供"退出码契约"这类矩阵用例）────────────────────────────────
+#
+# ★ 为什么可以不用子进程：脚本的 `if __name__ == "__main__": sys.exit(main())`
+#   会在 `sys.exit` 处抛 `SystemExit`，捕获它就拿到了**真实退出码**。
+#   `runpy.run_path(..., run_name="__main__")` 执行的正是**命令行那条入口**，
+#   不 mock 任何东西，只是省掉解释器启动（每次 0.15~1.0s，全部花在启动与
+#   依赖导入上，与断言内容无关；实测这一项占整个测试套件 30s 以上）。
+#
+# ★ 不可用 `mod.main(argv)`：**17 个守卫脚本根本没有 `main()` 函数**，
+#   它们直接写 `sys.exit(run_checker(...))`（实测踩过 —— 30 条用例集体
+#   AttributeError）。`runpy` 对两种写法都成立。
+#
+# ★ 代价是被换掉的那点保真度，由子进程用例单独补回：
+#   `test_cli_wiring_exits_with_main_return_code` 证明 `python <脚本>`
+#   真能把退出码交给 shell；`test_unknown_option_is_not_silently_ignored`
+#   证明 argparse 真的拒绝未知参数。
+def run_gate_inproc(script_rel: str, root: Path, *extra: str) -> tuple[int, str]:
+    """在**本进程内**走被检脚本的 `__main__` 入口，返回 `(退出码, 合并输出)`。"""
+    import contextlib
+    import io
+    import runpy
+
+    script = SYSTEM_ROOT / script_rel
+    if not script.exists():
+        raise FileNotFoundError(f"检查器脚本不存在: {script}")
+
+    argv = [str(script), str(root), "--no-report", *extra]
+    buf = io.StringIO()
+    old_argv = sys.argv
+    sys.argv = argv
+    try:
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            runpy.run_path(str(script), run_name="__main__")
+        code = 0
+    except SystemExit as exc:
+        # sys.exit(None) 等价于 0；sys.exit("msg") 等价于 1
+        code = exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
+    finally:
+        sys.argv = old_argv
+    return int(code), buf.getvalue()
+
+
+def assert_rejected(proc: GateResult, *, rule_hint: str = "") -> None:
     """断言"注入违例后被真的拦下"。
 
     - `exit 1` = 阻断（期望）

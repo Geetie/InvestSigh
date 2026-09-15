@@ -42,6 +42,33 @@
 
 ---
 
+## 追加：性能与隔离缺陷（D-19 ~ D-23，用户反馈"测试跑一次不该这么久"后排查）
+
+用户反馈：**一次完整测试 49s 不正常**。排查结论是"**不是测得多，是三类纯浪费**"。
+
+| # | 缺陷 | 症状（实测） | 根因 | 修复 | 效果 |
+|---|---|---|---|---|---|
+| **D-19** | `check_L2` **O(n²)** | 单次 4.57s（加缓存前恶化到 8.4s） | 对"模块 + 每个函数"各做一次 `ast.walk`，且对**每个被访问节点**再 `ast.walk` 一次 | 改**单遍扫描**：作用域只覆盖自己的语句（模块级不穿透函数体），token 一次遍历产出 | 8.4s → **0.52s** |
+| **D-20** | **配置读取无缓存** | 每个函数都重读并 YAML 解析一次 `banned_tokens.yaml`（50 文件 × 上百函数 ≈ 数千次） | `matches_call_chain()` / `is_freeze_param_reader()` 均经 `decision_scope_config()` → `load_banned_tokens()` 直接读盘 | `_common._cached_yaml()`：键 = (路径, mtime_ns, size)，**夹具改配置后自动失效**（注入测试仍安全） | 与 D-19 合计：端到端 `conflict_scan` **1.36s → 1.0s** |
+| **D-21** | `check_L1` 白付 **pydantic 导入** | 0.449s（其中大头是导入，不是 JSON 解析） | `from schema.assertions import …` 会先执行 `schema/__init__.py`，而它**急切导入** `models`（pydantic ≈ 0.3s）——**每个守卫启动都付一次** | `schema/__init__.py` 改 **PEP 562 惰性导入**（`__getattr__`） | 0.449s → **0.022s**（20×） |
+| **D-22** | 测试**子进程启动**是全部耗时 | 49.2s ≈ **80 次调用 × 0.31s**（夹具复制实测仅 0.021s，**不是瓶颈**）；另有同一命令被两个用例各跑一遍 | 每次都起新解释器 + 重导入依赖；两个用例共享同一次执行却拆开写 | ① `run_gate` 改 **`runpy` 走真实 `__main__` 入口**（不 mock）② 同 `(脚本, root, 参数)` session 缓存 ③ 合并共享执行的断言 | 49.2s → **13.6s** |
+| **D-23** | **进程内执行的交叉污染** | 改进程内后 **16 条用例集体失败** | `schema_sync_guard._load_builder()` 会 `sys.path.insert` 并删 `sys.modules` 的 `schema*`；子进程里无害，**进程内会污染整个测试进程**（后续检查器从已删除的夹具目录导入 `schema`） | 用 `try/finally` **恢复 `sys.path` 与 `sys.modules`**：带全局副作用的加载器必须自己收尾 | 16 失败 → 0 |
+
+★ **同时修掉一个语义缺陷（与 D-19 同源）**：初版"模块作用域"会穿透进**所有**函数体，
+于是 `is_freeze_param_reader()` 的排除（`Ch11 §E.1`）在**决策目录内的文件上完全失效**——
+排除发生在函数作用域层，而模块作用域早已把函数体扫过一遍。现按作用域正确划分。
+
+★ **进程级保真度没有丢**：由两条**真子进程**用例守住 ——
+`test_cli_wiring_exits_with_main_return_code`（CLI 真能把退出码交给 shell）与
+`test_injection_blocks_at_process_level`（注入违例 → **真进程** `exit 1`，AC-04 的最终证据）。
+**"更快"不是靠少测**：用例从 188 条变为 173 条，减少的 15 条全部是**重复执行**，
+覆盖面未减（见 §三 文件表）。
+
+★ **证据留档**：`scripts/ops/verify.py` 一次跑完 pytest + 18 门禁 + 阶段判据并写
+`reports/verify_latest.log` —— **后续引用证据直接读该文件，不必重跑**。
+
+---
+
 ## 结论一句话
 
 **阶段① 的四条书面判据（`registry/delivery.yaml::prep.pass_criteria_testable`）全部真实满足，

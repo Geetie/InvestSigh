@@ -172,13 +172,37 @@ def rel(path: Path, root: Path) -> str:
 
 # ───────────────────────── 决策作用域判定（Ch2 §B.3 Checker-1） ─────────────────────────
 
-def load_banned_tokens(root: Path) -> dict[str, Any]:
+# ── 配置读取缓存 ────────────────────────────────────────────────────────────
+#
+# ★ 为什么必须缓存（实测根因）：`matches_call_chain()` 与 `is_freeze_param_reader()`
+#   每次调用都会经 `decision_scope_config()` → `load_banned_tokens()` →
+#   **重新读取并 YAML 解析 `rules/banned_tokens.yaml`**。而这两个函数在 L2 里
+#   是**按函数**调用的 —— 50 个文件 × 上百个函数 = 数千次重复解析，
+#   `check_L2` 因此从"本该 0.1s"变成 4.5s~8.4s（实测）。
+#
+#   缓存键 = (路径, mtime_ns, size)：配置中途被改动会自动失效，
+#   所以对"夹具里改配置再跑检查器"的注入测试也安全。
+#
+# ⚠️ 调用方**不得修改返回值**（返回的是同一个缓存对象）。当前所有调用点只读。
+_CONFIG_CACHE: dict[tuple[str, int, int], Any] = {}
+
+
+def _cached_yaml(path: Path) -> Any:
     import yaml
 
+    stat = path.stat()
+    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    if key not in _CONFIG_CACHE:
+        _CONFIG_CACHE.clear()                      # 只保留当前有效版本，防无限增长
+        _CONFIG_CACHE[key] = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return _CONFIG_CACHE[key]
+
+
+def load_banned_tokens(root: Path) -> dict[str, Any]:
     path = root / "rules" / "banned_tokens.yaml"
     if not path.exists():
         raise FileNotFoundError(f"缺少禁词表（全包唯一禁词源）: {path}")
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
+    return _cached_yaml(path)
 
 
 def decision_scope_config(root: Path) -> dict[str, Any]:

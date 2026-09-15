@@ -51,16 +51,34 @@ def _normalized(doc: object) -> str:
 
 
 def _load_builder(root: Path):
-    """加载 **被检 code_root** 的生成器（不是本脚本自己那份）。"""
-    root_str = str(root.resolve())
-    while root_str in sys.path:
-        sys.path.remove(root_str)
-    sys.path.insert(0, root_str)
-    for name in [m for m in sys.modules if m == "schema" or m.startswith("schema.")]:
-        del sys.modules[name]
-    from schema.build_jsonschema import build  # noqa: PLC0415
+    """加载 **被检 code_root** 的生成器（不是本脚本自己那份），且**用完不留副作用**。
 
-    return build
+    ★ 必须恢复 `sys.path` 与 `sys.modules`。初版直接 `sys.path.insert` +
+      删 `schema*` 缓存 —— 在"一次一个子进程"的语境下没问题，但测试改成
+      **进程内执行**后，它会污染整个测试进程：后续检查器会从**已被删除的夹具
+      目录**导入 `schema`，引发一批与本检查器毫无关系的失败（实测 16 条）。
+      **带全局副作用的加载器必须自己收尾** —— 这是"结论：别让工具改变环境"的实例。
+
+    返回的 `build` 仍可正常调用：它的 `__globals__` 持有夹具那份模块对象，
+    模块级已绑定 `JSONL_MODELS` / `_inline_refs`，不需要再走 import 系统。
+    """
+    root_str = str(root.resolve())
+    saved_path = list(sys.path)
+    saved_schema_modules = {
+        name: mod for name, mod in sys.modules.items() if name == "schema" or name.startswith("schema.")
+    }
+    try:
+        sys.path.insert(0, root_str)
+        for name in list(saved_schema_modules):
+            del sys.modules[name]
+        from schema.build_jsonschema import build  # noqa: PLC0415
+
+        return build
+    finally:
+        sys.path[:] = saved_path
+        for name in [n for n in sys.modules if n == "schema" or n.startswith("schema.")]:
+            del sys.modules[name]
+        sys.modules.update(saved_schema_modules)
 
 
 def check(root: Path) -> CheckReport:

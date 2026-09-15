@@ -42,10 +42,43 @@ gap_to_task.py 0.18s        traceback.py 0.18s           pipeline.py 0.20s
 stage_gate.py --stage prep 0.24s
 ```
 
-## 三、测试套件（**188 passed**，实测）
+## 三、测试套件（**173 passed / 13–14s**，实测）
 
-命令：`cd system && python -m pytest tests -q -p no:cacheprovider` → `188 passed in 49.36s`
+命令：`cd system && python -m pytest tests -q -p no:cacheprovider` → `173 passed in 13.59s`
 运行后 `tests/.work/` **无残留**（`pytest_sessionstart/finish` 双保险）。
+
+### 3.1 一次性验证 + 证据留档（**不必为贴证据重跑**）
+
+命令：`python system/scripts/ops/verify.py --quiet` → **全绿，总耗时 18.1s**
+
+```
+✓ pytest tests                       exit=0     14.21s
+✓ run_all_gates.py（18 项门禁）      exit=0      3.67s
+✓ stage_gate.py --stage all          exit=1      0.26s   阶段① PASS + 阶段②–⑤ 全部阻塞（纪律 12 预期行为）
+```
+
+★ `stage_gate --stage all` 的 `exit=1` 是**设计预期**（阶段未过即阻塞），
+但**不是笼统放过**：`verify.py` 显式校验「`prep: PASS` **且** 四个后续阶段逐个
+`BLOCKED`」，两条都成立才算合格 —— 否则"① 也失败了"会被掩盖。
+证据留档：`reports/verify_latest.log`（+ 最近 3 份带时间戳的）。
+
+### 3.2 耗时优化（原 **49.2s → 13.6s**，3.6×）
+
+用户反馈"跑一次全部也要不了这么久"。查下来**不是测试写得多，而是三类纯浪费**：
+
+| # | 问题（实测） | 根因 | 修法 | 效果 |
+|---|---|---|---|---|
+| 1 | `check_L2` 单次 **4.57s**（后恶化到 8.4s） | ① 嵌套 `ast.walk`：对每个被访问节点再 walk 一次 → **O(n²)**<br>② `matches_call_chain` / `is_freeze_param_reader` **每个函数**都重读并 YAML 解析一次 `banned_tokens.yaml`（数千次） | 改**单遍扫描** + token 建索引 + **配置读取缓存**（键含 mtime/size，注入测试仍安全） | L2 **8.4s → 0.52s**，端到端 `conflict_scan` **1.36s → 1.0s** |
+| 2 | `check_L1` **0.449s** | `from schema.assertions import …` 触发 `schema/__init__.py` 急切导入 `models` → 白付一次 **pydantic 导入**（每个守卫都付） | `schema/__init__.py` 改 **PEP 562 惰性导入** | 0.449s → **0.022s**（20×） |
+| 3 | 测试套件 49s | **80 次检查器调用 × 0.31s 子进程启动**（夹具复制实测仅 0.021s，**不是瓶颈**）；同一命令重复跑两遍 | ① `run_gate` 改 **`runpy` 走真实 `__main__` 入口**（不 mock 任何东西）② 同 `(脚本, root, 参数)` **session 级缓存** ③ 合并共享同一次执行的断言 | 49.2s → **13.6s** |
+
+★ 顺带修掉一个**语义缺陷**（与性能同源）：初版"模块作用域"会穿透进**所有**函数体，
+于是 `is_freeze_param_reader()` 的排除（`Ch11 §E.1`）在**决策目录内的文件上完全失效**——
+排除发生在函数作用域层，而模块作用域早已把函数体扫过一遍。现已按作用域正确划分。
+
+★ 进程级保真度**没有丢**，由两条**真子进程**用例守住：
+`test_cli_wiring_exits_with_main_return_code`（CLI 真能把退出码交给 shell）
+与 `test_injection_blocks_at_process_level`（注入违例 → **真进程** `exit 1`，AC-04 的最终证据）。
 
 | 文件 | 内容 |
 |---|---|
@@ -53,7 +86,7 @@ stage_gate.py --stage prep 0.24s
 | `tests/unit/test_scope_matchers.py` | **作用域匹配器直测**（glob→前缀 / 决策域 / 免扫命名空间 / `freeze_param` 读口排除） |
 | `tests/conflict/test_schema_no_stop.py` | `施工图 §3.4` 具名资产：P-03 止损类字段 + P-05 不得做空 |
 | `tests/conflict/test_schema_no_aggregate.py` | `施工图 §3.4` 具名资产：P-07 聚合字段 + `expectations.source_id` 必填 |
-| `tests/guards/test_exit_code_contract.py` | **18 个守卫 × 三条契约**：干净→0 / `code_root` 缺失→2 / 必报 `scanned` |
+| `tests/guards/test_exit_code_contract.py` | **18 守卫 × 2 条契约**（进程内矩阵）+ **2 条真子进程**保真用例 |
 | `tests/test_ch11_invariants.py` | `Ch11 §F` 不变量：11 项恰为 {p01..p11} · A 6 + C 5 · 锚点非行号 · 指针不双写 |
 | `tests/injection/test_guards_reject.py` | **注入违例 → exit 1**（L1–L5 / G11 / 红线二 / 基准口径 / 反凑数 / 反占位符）+ 反向对照 |
 | `tests/injection/test_audit_regressions.py` | **审计反例 D3/D4/E/E2 回归**（防止绕过路径被重新打开） |

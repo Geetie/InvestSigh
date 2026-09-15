@@ -191,32 +191,84 @@ def _collect_enum_values(defs: dict[str, Any]) -> set[str]:
 
 # ───────────────────────── L2：AST + 禁词表扫描（P-01 / P-02 / P-09） ─────────────────────────
 
-def _names_and_strings(node: ast.AST) -> Iterator[str]:
-    """变量名 / 函数名 / 属性名 / 字符串字面量 —— 全量比对禁词（`Ch2 §B.3` Checker-1）。"""
-    for sub in ast.walk(node):
-        if isinstance(sub, ast.Name):
-            yield sub.id
-        elif isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            yield sub.name
-        elif isinstance(sub, ast.Attribute):
-            yield sub.attr
-        elif isinstance(sub, ast.arg):
-            yield sub.arg
-        elif isinstance(sub, ast.Constant) and isinstance(sub.value, str):
-            yield sub.value
-        elif isinstance(sub, (ast.Import, ast.ImportFrom)):
-            for alias in sub.names:
-                yield alias.name
+def _iter_tokens(nodes: Iterable[ast.AST]) -> Iterator[tuple[str, int]]:
+    """单遍产出 `(token, 行号)`。
+
+    ★ 为什么不用 `ast.walk(node)` 包一层：初版对"每个被访问节点"又调一次
+      `ast.walk`，叠加外层的 scope 遍历 → **O(n²)**（`check_L2` 实测 4.57s，
+      占整个检查器 1.36s×多次调用里的大头）。
+      现在遍历一次树、就地取 token，复杂度回到 O(n)。
+    """
+    for node in nodes:
+        if isinstance(node, ast.Name):
+            yield node.id, node.lineno
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            yield node.name, node.lineno
+        elif isinstance(node, ast.Attribute):
+            yield node.attr, node.lineno
+        elif isinstance(node, ast.arg):
+            yield node.arg, node.lineno
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            yield node.value, getattr(node, "lineno", 0)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                yield alias.name, getattr(node, "lineno", 0)
                 if alias.asname:
-                    yield alias.asname
+                    yield alias.asname, getattr(node, "lineno", 0)
 
 
-def _iter_function_scopes(tree: ast.AST) -> Iterator[ast.AST]:
-    """产出模块级 + 各函数的扫描单元（用于函数级 decision-scope 判定）。"""
-    yield tree
-    for node in ast.walk(tree):
+def _outer_functions(tree: ast.AST) -> list[ast.AST]:
+    """所有"**不在另一个函数体内**"的函数（含类方法）—— 各自成作用域。
+
+    嵌套函数的 token 归其**外层函数**的作用域（与"函数级"语义一致），
+    不重复开作用域，避免同一处命中被报两遍。
+    """
+    out: list[ast.AST] = []
+
+    def visit(node: ast.AST) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                out.append(child)          # 不深入它的体
+            else:
+                visit(child)
+
+    visit(tree)
+    return out
+
+
+def _module_scope_nodes(tree: ast.AST) -> Iterator[ast.AST]:
+    """模块作用域的节点：整棵树，但**不进入函数体**。
+
+    ★ 这个划分同时修了一个**语义缺陷**（与性能问题同源）：
+      初版的"模块作用域"会穿透进**所有**函数体，于是
+      `is_freeze_param_reader()` 的排除（`Ch11 §E.1`：参数读口不属决策作用域）
+      在**决策目录内的文件上完全失效** —— 排除发生在函数作用域层，
+      而模块作用域早已把函数体扫过一遍。
+      现在函数体只由它自己的作用域扫，排除才真的生效。
+    """
+    stack = list(reversed(tree.body))
+    while stack:
+        node = stack.pop()
+        yield node
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            yield node
+            continue                       # 函数体交给它自己的作用域
+        for child in reversed(list(ast.iter_child_nodes(node))):
+            stack.append(child)
+
+
+def _scope_in_decision(scope_node: ast.AST, is_module: bool, module_in_decision: bool, root: Path) -> bool:
+    """该作用域是否属决策作用域（`Ch2 §B.3` Checker-1 判定）。
+
+    顺序即优先级：**调用链纳入优先** → 再判排除项 → 最后按目录归属。
+    """
+    if is_module:
+        return module_in_decision
+    name = getattr(scope_node, "name", "")
+    if name and matches_call_chain(name, root):
+        return True                        # `classify_*` / `assert_*`：无论置于何处均纳入
+    if is_freeze_param_reader(scope_node, root):
+        return False                       # 参数读口：不属决策作用域（`Ch11 §E.1`）
+    return module_in_decision
 
 
 def check_L2(root: Path, report: CheckReport) -> None:
@@ -226,11 +278,18 @@ def check_L2(root: Path, report: CheckReport) -> None:
     """
     banned = load_banned_tokens(root)
     l2 = _layer_tokens(banned, "L2")
+    # ★ token → entry 建索引：初版对每个出现过的名字线性扫 12 条禁词
+    by_token = {t["token"]: t for t in l2}
     scoped = {t["token"]: (t.get("scope") or {}).get("kind") for t in l2}
+    # 禁词都是标识符；比最长禁词还长的字符串**不可能**等于任何禁词，
+    # 直接跳过。这是**精确**剪枝（不是近似）：docstring 动辄数 KB，
+    # 对它们做 strip/lower 纯属浪费。
+    max_token_len = max((len(t) for t in by_token), default=0)
     py_files = walk_files(root, "scripts", (".py",)) + walk_files(root, "tests", (".py",))
     report.scanned["l2_py_files"] = len(py_files)
     report.scanned["l2_token_count"] = len(l2)
 
+    seen: set[tuple[str, str, int]] = set()
     for path in py_files:
         relpath = rel(path, root)
         if is_checker_namespace(relpath, root):
@@ -244,37 +303,35 @@ def check_L2(root: Path, report: CheckReport) -> None:
             continue
 
         module_in_decision = is_decision_scope_module(relpath, root)
-        for scope_node in _iter_function_scopes(tree):
-            in_decision = module_in_decision
-            if scope_node is not tree and module_in_decision:
-                # 排除：freeze_param 读取不在决策函数 scope 内（N11.2-12）
-                if is_freeze_param_reader(scope_node, root):
-                    in_decision = False
-            else:
-                # 纳入：classify_*/assert_* 调用链无论置于何处均属决策作用域
-                name = getattr(scope_node, "name", "")
-                if name and matches_call_chain(name, root):
-                    in_decision = True
+        scopes: list[tuple[ast.AST, bool]] = [(tree, True)]
+        scopes += [(fn, False) for fn in _outer_functions(tree)]
 
-            for node in ast.walk(scope_node):
-                for raw in _names_and_strings(node):
-                    tok = _normalize(raw)
-                    for entry in l2:
-                        if tok != entry["token"]:
-                            continue
-                        if scoped[entry["token"]] == "decision_scope_only" and not in_decision:
-                            continue                   # P-09：非决策函数内不触发
-                        if tok in _legit_homonyms(entry):
-                            continue                   # 合法同名词（如 position_listed）不误报
-                        report.violations.append(
-                            Violation(
-                                entry["rule"],
-                                f"命中禁词 {entry['token']!r}"
-                                + ("" if in_decision else "（全局作用域）"),
-                                relpath,
-                                getattr(node, "lineno", 0),
-                            )
-                        )
+        for scope_node, is_module in scopes:
+            nodes = _module_scope_nodes(tree) if is_module else ast.walk(scope_node)
+            in_decision = _scope_in_decision(scope_node, is_module, module_in_decision, root)
+            for raw, lineno in _iter_tokens(nodes):
+                if len(raw) > max_token_len:
+                    continue                   # 精确剪枝：不可能等于任何禁词
+                entry = by_token.get(_normalize(raw))
+                if entry is None:
+                    continue
+                if scoped[entry["token"]] == "decision_scope_only" and not in_decision:
+                    continue                   # P-09：非决策函数内不触发
+                if raw in _legit_homonyms(entry):
+                    continue                   # 合法同名词（如 position_listed）不误报
+                key = (entry["rule"], relpath, lineno)
+                if key in seen:                # 去重：嵌套/多作用域可能覆盖同一行
+                    continue
+                seen.add(key)
+                report.violations.append(
+                    Violation(
+                        entry["rule"],
+                        f"命中禁词 {entry['token']!r}"
+                        + ("" if in_decision else "（全局作用域）"),
+                        relpath,
+                        lineno,
+                    )
+                )
 
 
 def _legit_homonyms(entry: dict[str, Any]) -> set[str]:
