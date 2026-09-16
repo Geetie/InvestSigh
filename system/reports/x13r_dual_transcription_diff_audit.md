@@ -243,29 +243,66 @@ RESULT: PASS（0 violations）
 
 ---
 
-## §4 B 版两处建议复核点（**只报差异 + 原文，不下判词**）
+## §4 ~~B 版两处建议复核点~~ → **两条均已证伪并撤回**（原文保留备查）
 
-### 4.1 `conversion_chain_per_model_class.hardware` 合并了段
+> **★ 本节状态：撤回（2026-09-16，同日）**
+>
+> 我提出的两条「建议复核」经 **team-lead 独立证伪**，我**逐条实测复核后确认我错**。
+> 两条的形态**与我 §2.2 自陈的「跨节误读」完全同源** —— 我在承认了一次之后，又用同一形态犯了两次。
+> **原文不删除**：留痕的意义在于表明这是"同类错误的第三、第四次"，**不是三个独立疏忽**；
+> 也让后来者看见这个坑的完整形状。
+> 我已向 `ws-ch2-rules` 发出更正、收回这两条暗示（避免其去查不存在的问题）。
 
-B 版：`hardware: '订单→排产/出货→验收→收入/回款'`（5 段）
+### 4.1 ~~`conversion_chain_per_model_class.hardware` 合并了段~~ → **错，B 版是对的**
 
-设计原文 `04/02:129`：`stages: [order, production_schedule, shipment, acceptance, revenue, collection]`（**6 段**）
+**我当时的（错误）判断**（原文保留）：
 
-⇒ B 版把 `production_schedule`+`shipment` 合为「排产/出货」、`revenue`+`collection` 合为「收入/回款」，并译为中文。`N4.1-07`「硬件六段呈现且**不跳级**」是 P0 条目 ⇒ **"六段"这个数可能是有契约的**，合并为 5 段值得复核。
+> B 版：`hardware: '订单→排产/出货→验收→收入/回款'`（5 段）
+> 设计原文 `04/02:129`：`stages: [order, production_schedule, shipment, acceptance, revenue, collection]`（**6 段**）
+> ⇒ B 版把 `production_schedule`+`shipment` 合为「排产/出货」、`revenue`+`collection` 合为「收入/回款」，并译为中文。`N4.1-07`「硬件六段呈现且**不跳级**」是 P0 条目 ⇒ **"六段"这个数可能是有契约的**，合并为 5 段值得复核。
 
-同理 `conversion_chain_per_model_class.cloud`（B 版 4 段中文）vs `04/02:134`（5 段英文 `[contract, energized, online, utilization, billing]`）；`software`（B 版 4 段）vs `:138`（5 段）。
+**证伪依据（我实测）**：
 
-**B 版无争议的部分**：`conversion_chain_generic_stages: [获取, 交付, 使用, 变现]` —— `04/02:108` 逐字「**转化链路分段模型**（通用四段，按商业模式实例化）：**获取 → 交付 → 使用 → 变现**」✅ 出处确凿。
+```
+$ grep -nE "stages:" system/rules/metric-sets.yaml
+38:    stages: [order, production_schedule, shipment, acceptance, revenue, collection]
+48:    stages: [contract, energized, online, utilization, billing]
+59:    stages: [usage, paid, renewal, retention, upsell]
+```
 
-### 4.2 `assumption_grid.risk_assumption` 的键名
+⇒ **`stages:` 恰好 6 / 5 / 5 token，与 `§C.1`（`04/02:129/134/138`）逐字一致。B 版没有漏转、没有合并、没有压缩。**
 
-B 版：`growth_assumption: '±1 个百分点'` / `margin_assumption: '±0.5'` / `risk_assumption: '±0.5'`
+**我的误读机理**：B 版**同时**承载了**两节**的表达 ——
 
-`00_待拍板项清单.md:60` B13 逐字：「**增长率 ±1 个百分点 / 利润率 ±0.5 / 折现率 ±0.5**」
+- `§C.1` 的**结构化落点**：`stages:`（英文 token，6/5/5）✅ 这是判据的权威落点；
+- `§B.1` 的**散文口径**：`:96` 的 `conversion_chain_generic_stages`（通用四段「获取 → 交付 → 使用 → 变现」，`04/02:108` 逐字）＋ `conversion_chain_per_model_class`（该通用四段**按商业模式实例化**后的中文链）。
 
-⇒ **值逐字 ✅**（B 版保留了 `±` 与原单位，比我拆成 `step: 0.5` 更忠实 —— 我丢了 `±` 与"个百分点"，这是我第三处偏差）。但第三项原文是**折现率**，键名 `risk_assumption`（风险）与原文**不同名**。建议复核键名。
+**两节是两层表达，不是同一事实的两个版本。** 我看的是 `§B.1` 那层，却拿它去质疑 `§C.1` 的落点。
+⇒ 教训：**同一事实在不同节有不同表述形态时，必须先确定"这条判据的权威落点在哪一节"，再拿那一节比对**；否则"发现差异"只是自己把两节叠在了一起。
 
-**B 版正确处**：`grid_search_upper_bound: tbd` —— B13 只给粒度、未给上界；`§I.2` 逐字「网格搜索上界（`rules/valuation-methods.yaml`）」⇒ `tbd` 合理 ✅。
+### 4.2 ~~`assumption_grid.risk_assumption` 的键名~~ → **错，B 版是对的**
+
+**我当时的（错误）判断**（原文保留）：
+
+> B 版：`growth_assumption: '±1 个百分点'` / `margin_assumption: '±0.5'` / `risk_assumption: '±0.5'`
+> `00_待拍板项清单.md:60` B13 逐字：「**增长率 ±1 个百分点 / 利润率 ±0.5 / 折现率 ±0.5**」
+> ⇒ 值逐字 ✅，但第三项原文是**折现率**，键名 `risk_assumption`（风险）与原文**不同名**。建议复核键名。
+
+**证伪依据（我实测）**：
+
+```
+$ sed -n '45,47p' system/rules/valuation-methods.yaml
+  risk_assumption: "±0.5"                   # B13 逐字（折现率；同上）
+  reinvestment_assumption: tbd              # B13 未给（只给 增长率/利润率/折现率 三项）⇒ 设计未给值
+  duration_assumption: tbd                  # 同上：B13 未给；**设计未给，待需求方拍板**
+```
+
+⇒ **B 版在 inline 注释里已写明 `risk_assumption` 对应 B13 的「折现率」** ⇒ 这是**带出处标注的译名选择**，不是我暗示的"隐患"。而且紧邻两项的 `tbd` 各带"B13 未给"的 `basis` —— **严谨度高于我**。
+
+**我的误读机理**：我只读了上游 B13 的取值三项，**没有读被质疑文件里紧邻的注释**就下了"不同名"的判断 —— 而那条注释**正是为解释这个映射而写的**。
+⇒ 教训：**"先查再判"里的"查"必须包含被质疑对象自己的自述**（注释、docstring、报告），不能只看上游设计。
+
+**B 版正确处**（这一条我原文判断是对的）：`grid_search_upper_bound: tbd` —— B13 只给粒度、未给上界；`§I.2` 逐字「网格搜索上界（`rules/valuation-methods.yaml`）」⇒ `tbd` 合理 ✅。
 
 ---
 
@@ -287,8 +324,60 @@ B 版：`growth_assumption: '±1 个百分点'` / `margin_assumption: '±0.5'` /
 | 3 | `MS-GENERIC.model_class` 我内部不一致 | 我的问题 | A | 同上 |
 | 4 | 我漏写全部 `validator_ref`/`guard`（设计逐字给了） | 我的漏项 | A | 同上 |
 | 4b | 我在沟通中**误报**了一处"施工图与 taskbook 脚本清单对不上"（实为完全一致） | **我的沟通错误** | 沟通 | 已更正队友 + §2.5 留痕；根因是 `grep -` 路径前缀漏读了同表内不带前缀的条目 |
-| 5 | **D1：4 份已安装 `rules/` 文件仍自称"候选/尚未安装" + `install_target`/`install_note`** | **真缺陷** | **投入物** | **建议修**（§3.5），主理人执行 |
-| 6 | `conversion_chain_per_model_class` 6 段 → 5 段 + 译中 | 待复核 | 投入物 | 复核 `N4.1-07`「六段不跳级」是否约束 |
-| 7 | `risk_assumption` 键名 vs 原文「折现率」 | 待复核 | 投入物 | 复核键名 |
-| 8 | 我的旧分支 `ws/ch13r-rule-candidates` 若整体合入会**重建双真源** | **风险** | A | **建议废弃**，勿整体合入 |
-| 9 | `rules/` 候选→安装是纯人工、无机器绑定（与 `G-13R-5` 同族） | 缺口 | 流程 | D1 即该缺口的实证：安装后无人清候选期元数据 |
+| 5 | **D1：4 份已安装 `rules/` 文件仍自称"候选/尚未安装" + `install_target`/`install_note`** | **真缺陷** | **投入物** | **已修复**：主理人 `0f618a9` 剥离候选期自我描述 + 重锁，`rules_lock_guard` 14/14 PASS、关键值未变 |
+| 6 | ~~`conversion_chain_per_model_class` 6 段 → 5 段 + 译中~~ | **已证伪 · 撤回** | 投入物 | **无动作**：`stages:` 实测 6/5/5 逐字正确；我误把 `§B.1` 那层当成了 `§C.1` 的落点（§4.1） |
+| 7 | ~~`risk_assumption` 键名 vs 原文「折现率」~~ | **已证伪 · 撤回** | 投入物 | **无动作**：B 版 inline 注释已写明该映射，是我没读被质疑对象自己的自述（§4.2） |
+| 8 | 我的旧分支 `ws/ch13r-rule-candidates` 若整体合入会**重建双真源** | **风险** | A | **主理人已批准废弃**：保留分支不删（留痕）· **永不合并** · 理由 = 会引回 `registry/rule-candidates/` |
+| 9 | D1（4 份安装件自称"候选"） | **已修复** | 投入物 | 主理人 `0f618a9` 已剥离候选期自我描述 + 重锁；该缺口的"安装后清单"仍**无机器绑定**（§3.4 的锁盲区） |
+| 10 | 我一次把 `Edit` 指向了**主仓库工作区**（而非 worktree） | **纪律违规 · 已自愈** | A | 未提交即发现并 `git checkout --` 复原；详见 §7.3 |
+
+---
+
+## §7 本轮踩到的三个坑（留痕，供后续复用）
+
+### 7.1 工具坑：macOS `grep` 的 BRE **不支持 `\|`** —— 同一坑**踩了两次**
+
+```
+$ grep -rn "scenario_tag\|independent_judgment\|implied_ref" --include="*.md" .
+（零命中）        # ← 假阴性！BSD grep 把 \| 当字面量
+```
+
+而 `05_价格与市场预期研究/02_实现方案.md:21` **逐字就有**这三个键名。
+
+- **第一次**（§3 之前）：我用 `grep -n "候选\|rule-candidates\|install_target\|install_note"` 查那 4 份 rules 文件 → **零命中**，于是差点向 team-lead 报一条**不存在的事件**（"有人并发改了 `rules/` 文件"）。靠"`sed` 的输出与 `grep` 的结果**互相矛盾** → 重查"才发现是 grep 的用法问题。
+- **第二次**：查这三个新字段的设计出处 → **零命中**，差点得出"**设计里根本没有这三个字段 ⇒ `G-13R-1` 是我自己制造的假缺口 ⇒ (D) 不该做**"的完全错误结论。靠**继续往下查**（列目录、查 `valuation` 相关行）才发现原文就在 `:21`。
+
+⇒ **规矩**：本仓库内做 alternation 搜索**一律用 `grep -E`**（或直接用 Grep 工具 / ripgrep）。
+并且：**"零命中"与"东西不存在"是两件事** —— 零命中之后必须**换一种方式复核**（`sed -n` 看该行、换工具、换模式），才允许下结论。
+
+### 7.2 工具坑：跑测试必须用**官方入口**，否则会被 broker hook 拖到超时
+
+直接跑：**280s 超时、无任何输出**（连收集结果都不出）。
+换官方入口后：
+
+```
+$ python system/scripts/ops/verify.py --batch unit
+✓ [unit] tests/unit/（契约 + 作用域匹配器）  exit=0  2.34s/60s
+76 passed in 1.95s
+```
+
+⇒ **同一个测试集：280s+ vs 2.34s。** 差异来自沙箱 broker hook —— pytest 直接跑时子进程被拖慢，而 `verify.py` / `run_pytest.sh`「已自动为子进程关闭 broker hook」（脚本自己的提示语就是这么写的）。
+
+**次生灾难**（我造成的）：我连建了 **3 个** git worktree 逐个试跑，每次都在超时后被 SIGTERM 留下**卡在 D 状态的 pytest 进程**（宿主删除配额耗尽 ⇒ SIGTERM 无效），于是该树的 `system/tests/.work` 会话锁**永不释放**，后续跑一律被 `V-05` 拒 —— 而 `conftest.py:303` 的"陈旧锁自愈"依赖"holder 进程已死"，D 状态进程的 `_pid_alive()` 仍为真，自愈不触发。
+
+⇒ **规矩**：跑测试**先看 `CONVENTIONS.md` 给的入口**；若要试错，**不要在 git worktree 里反复试**（每次失败都污染一棵树，且清理成本递增）。
+
+### 7.3 纪律自陈：我把 `Edit` 指向了**主仓库工作区**而不是 worktree
+
+做 (D) 时我用 `Edit` 改 `Valuation`，路径写成了 `/Users/gaza/Developer/InvestSigh/system/schema/models.py` —— 那是 **main 的检出目录**，不是我的 worktree `.worktrees/ws-ch13r-rules/`。
+
+**处置（已自愈）**：
+
+1. 验证模型时发现字段数**仍是 6** ⇒ 立刻意识到路径写错了；
+2. `git status --short` → 确认只有这一处改动（`M system/schema/models.py`，26 insertions）；
+3. `git diff > /tmp/x13r/valuation_fields.patch` 保存 → `git checkout -- system/schema/models.py` **复原 main 工作区**（`status` 归空）；
+4. 在 worktree 里 `git apply` 重新落改动，再验证（字段集 9 ✅）。
+
+**影响**：main 工作区被未提交地修改了一小段时间（发现 → 复原之间），**未提交、未污染任何提交历史**，已复原干净。
+**根因**：本次会话我在 main 检出目录做了大量**只读**调查（`sed` / `grep` / `git log`），接着写操作时**沿用了同一个路径**，没有切回 worktree。
+⇒ **规矩**：写操作前先确认路径属于**自己的 worktree**；**只读与写操作混在同一会话时，写操作的路径要显式带上 `.worktrees/<mine>/` 前缀**。
