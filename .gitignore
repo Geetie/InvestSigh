@@ -13,5 +13,16 @@ Thumbs.db
 *~
 
 # --- 运行时状态（不进版本库；每次运行重写，可重建）---
-# 真源是 facts/ 与 derived/ 下的 JSONL；state.json 只是 resume 用的运行态快照。
+# ★ 唯一真源 = `system/facts/` 的 **18 个**追加式 JSONL（8 类对象；`00_交付施工图 §4`
+#   「facts/ 18 个追加式 JSONL（8 类对象唯一真源）」/ `Ch9 §3.3.3`），**不含** `derived/`。
+#   机器可读的旁证：`append_only_guard.py` 的 pathspec 恰为 `system/facts/*.jsonl` ——
+#   即"不可变追加式真源"这一性质**只**对 facts/ 声明。
+#   （旧注释写作"真源是 facts/ 与 derived/ 下的 JSONL"，把 derived/ 与 facts/ 并列，
+#     容易被读成 derived/ 也是唯一真源 —— 属**文档与设计不符**，已更正。）
 system/state.json
+# 派生输出：可由 `facts/` + `method_version` **确定性重算**，故非唯一真源、不进版本库。
+# ★ 不跟踪它恰恰是防"双真源"（`G-06`）：一旦入库，就会出现
+#   "以文件为准还是以重算为准"的第二条口径 —— 可复现性由
+#   **facts/ 的追加式不可变** + **method_version** 保证，而不是由跟踪派生物保证。
+# `.gitkeep` 仍跟踪（保证目录地基在，`施工图 §4` 的目录清单要求它存在）。
+system/derived/*.jsonl

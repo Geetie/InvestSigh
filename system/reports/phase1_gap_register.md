@@ -316,7 +316,42 @@ blocked = True
 | **`G-B10-03`** | `transmit` 的 `gain_map.undisclosed` **不在装载期校验**（不合规配置可能一路静默通过，`KeyError` 才在第一个未披露 hop 炸） | 中 | `OPEN`（修法一行；已记入批次 11 排期） |
 | **`G-B10-04`** | `raw/inbox/…amd…` 与 `raw/…amd…` **逐字节双份**（同源两份，未登记） | 低 | `OPEN` |
 | **`G-B10-05`** | 4 条真实 claim 全 `full_text_read: false`，而 `locator` 覆盖**全篇**且 `quote_hash` 相等 ⇒ `locator_check` 第 4 条判据是**单向**的（只约束 `true ⇒ 条件`），"全篇覆盖却标 false"**不告警** | 低 | `OPEN` |
-| **`G-B10-07`** | ★ **`classify_and_record` 非幂等**（自报"重复调用 0 新增"，**实测证伪**）：副本上连跑 `run_daily` 两次 → `claims` `5 → 10 → 12`（**run#1 +5、run#2 仍 +2**）；`claim_propagation` 全程 0 行。⇒ **不能接进日度步骤**（否则每次真跑都往真源追加，与 `G-B10-02` 同类）。**设计位置无误**（`Ch6 §6.3` 正是 step 2 的模型侧）—— **缺的是幂等性，不是位置**。**主理人接线已撤回**（`chain_steps.py` 注释留痕） | `Ch9 §3.4.2`（追加式不可变）· `Ch9 §3.5`（幂等键） | **高** | 🔄 **在修**（`ws/evidence-fix`，要求二次跑 0 新增 + 反向对照 + 逐行解释 run#1 的 +5） |
+| **`G-B10-07`** | ★ **`classify_and_record` 非幂等**（自报"重复调用 0 新增"，**实测证伪**）：副本上连跑 `run_daily` 两次 → `claims` `5 → 10 → 12`（**run#1 +5、run#2 仍 +2**）；`claim_propagation` 全程 0 行。⇒ **不能接进日度步骤**（否则每次真跑都往真源追加，与 `G-B10-02` 同类）。**设计位置无误**（`Ch6 §6.3` 正是 step 2 的模型侧）—— **缺的是幂等性，不是位置**。**主理人接线已撤回**（`chain_steps.py` 注释留痕） | `Ch9 §3.4.2`（追加式不可变）· `Ch9 §3.5`（幂等键） | **高** | ✅ **已修并已合入**（merge `35758a7`）；★ 根因比原判断更深（上游 step 1 追加丢字段版本），证据见 **§11.2**。<br>⚠️ **step 2 接线仍待恢复**：模块需先返回"本轮新写入的对象引用"以遵守 §11.3 的 `produced` 契约 |
+
+---
+
+## 11. 批次 11 收口（`G-RC-07` · `G-RC-08` · `G7` · `G-B10-01/02/07`）
+
+> **可信度基线**：本节每条都附**实测观测量**。凡"改了但机器上不生效"的，均已用**复原对照**
+> （取回旧实现复跑 → 断言必须变红）证伪过一次；未做复原对照的不进本节"已修"。
+
+### 11.1 新增缺陷
+
+| # | 缺口 | 设计锚点 | 严重度 | 状态 |
+|---|---|---|---|---|
+| **`G-RC-07`** | **夹具把真仓库的 `derived/` 一并复制进副本**（与 `G-RC-02` **同族**：观测量被"仓库里恰好有什么"污染）。`conftest._COPY_SKIP` 跳过了 `index` / `reports`，**唯独漏 `derived`**。项目早期 `derived/` 恰为空（只有 `.gitkeep`），耦合一直不显形；一旦真有运行写入 `derived/compute_gaps.jsonl`，**每个夹具就自带一份真实缺口记录** | `conftest` 真源契约（"每个 `code_root` 一律从**空真源**起步"） | 中 | ✅ **已修**：`derived` 并入 `_COPY_SKIP`（与可重建产物同等待遇）；`_ENSURE_DIRS` 补回空目录。实测 `tests/compute` 95 / `tests/daily` 43 / `tests/injection` 139 **全绿** |
+| **`G-RC-08`** | **跨目录混跑 pytest 会因同名 `conftest` 崩溃**：`tests/compute/conftest.py` 与 `tests/conftest.py` 同名 → 混跑时 `from conftest import SYSTEM_ROOT, …` 解析到**子目录**那份 → `ImportError: cannot import name 'assert_rejected'`，**7 个 injection 文件 collection 直接失败**（实测 `7 errors in 0.82s`）。现行 15 批次各自单目录，故**不构成当前缺陷**；但任何"顺手多跑两个目录"的即席验证都会得到**假红**，浪费排查时间 | `CONVENTIONS.md::V-02`（批次粒度） | 低 | `OPEN`（修法：把共享夹具抽成 `tests/_helpers.py` 之类**唯一命名**模块，或给子目录 conftest 加 `__init__.py` 隔离；**不得**靠"记得别混跑"这种口头约定） |
+
+### 11.2 已修（附复原对照证据）
+
+| # | 内容 | 证据 |
+|---|---|---|
+| **`G7`** | ★ **首日豁免是死代码**（"改了"但机器上不生效）。旧判据取 `parent_context.run_date`，而 `_write_check_record()` 写的 `parent_context` **不含该键**（run_date 落在 `check_record.run_date`）⇒ `min(...)` 得空串 ⇒ 豁免分支**永不进入**。**改用追加序判定**（`facts/tasks.jsonl` 是 append-only 真源，行序即时序），新增 `_holds_valid_result()` 取两载体并集（`last_valid_result_ref` ∪ `done`+`output_refs`） | 真仓库 `degrade_first_day_exempt` **0 → 2**、`daily_run` BLOCKED → **PASS**、`--stage all` 违例 9 → 7。<br>★ **复原对照**：`git checkout` 取回 `4f95c3d` 的旧实现复跑 → 新用例 `test_first_day_degrade_exemption_is_effective_and_counted` **变红**（实测 `degrade_first_day_exempt: 0` + FATAL 在）→ 换回修复版 **14 passed**。commit `fd49a20` |
+| **`G-B10-02`** | **编排层重复落库**：按 `Ch9 §3.5` ② 行幂等键 `(source_id, quote_hash)` 补行幂等 | ✅ **已修并已合入**（merge `a29ec90` / 实现 `aa8a3ee`）。`ws/idempotency` 回修后判别式**实测打印**：round1 `produced=[claim…] skipped=[] claims_lines=2` → round2 `produced=[] skipped=[claim…] claims_lines=2`；去闸门复原对照 **4 条变红** |
+| **`G-B10-07`** | **`classify_and_record` 真幂等**。根因（`ws/evidence-fix` 查明，**比原判断更深**）：**上游 step 1 每次追加一版不含派生字段的重复 claim** → 旧基线"取最新版本行的值"被该版**抹成 None** → 每次都重写。修法：基线改为"该 `claim_id` **最近记录到的非空值**"（`_last_recorded_values`，按 `recorded_seq` 升序），并核过 `is not None` 判断（`count=0` 是合法值，**无真值陷阱**） | ✅ **已修并已合入**（merge `35758a7` / 实现 `9ba54a8`）。与 `ws/idempotency` **叠加**后实测 run#1 `+4` / **run#2 `+0`（双文件）**。<br>⚠️ 接线**尚未恢复**：需模块先返回"本轮新写入的对象引用"以遵守 `produced` 契约（见 §11.3），`chain_steps.py` 的注释留痕仍在 |
+
+### 11.3 接线契约的两条裁定（主理人，`main` commit `4f95c3d`）
+
+| # | 争议 | 裁定 | 依据 |
+|---|---|---|---|
+| **R1** | `executor.STATUS_SKIPPED`（行幂等命中）可否作为 `IngestResult` 状态域的**第 4 个取值**？ | ✅ **允许**。理由**不是"内容对"**，而是**消费侧构造上就 fail-safe**：`ingest_step.py` 的分支是 `if OK / elif SKIPPED / else: degraded = True` ⇒ **未知取值落到 `degraded`**（"不算成功"一侧），新增取值**不可能凭沉默获得成功语义** | 已注明命名空间：executor 的 = **对象粒度**；`pipeline.STATUS_SKIPPED` = **整步被 `resume` 跳过**。两者不同粒度 |
+| **R2** | 幂等命中的对象**是否计入 `produced`**？ | ❌ **驳回**。`produced` 语义已被 `tests/compute/test_step_wiring.py:48`（"幂等重跑未新增落库 → `produced` 必须为空"）钉死为**本轮真正新写入的集合**。同一字段两套语义 ⇒ `G1-05` 在各步之间**不可比**；且会**重新掩盖** `G-B10-07` 要暴露的信号（重跑 vs 首跑的差别正是 `produced` 由 N 变 0，折进去则两轮观测量完全相同） | ✅ 已执行：`StepOutcome`/`StepResult` 新增 `skipped`；`G1-05` 空执行判据改为 `not produced and not skipped`。**强度未削弱**（双空才判违例，桩处理器仍被拦，双向对照见 `tests/injection/test_idempotency_rows.py`） |
+
+### 11.4 `derived/` 的归属更正（文档与设计不符）
+
+`.gitignore` 原注释写作"真源是 `facts/` 与 `derived/` 下的 JSONL"，把 `derived/` 与 `facts/` **并列**，易被读成 `derived/` 也是唯一真源。据 `00_交付施工图 §4`「`facts/` **18 个**追加式 JSONL（8 类对象**唯一真源**）」与机器旁证（`append_only_guard` 的 pathspec 恰为 `system/facts/*.jsonl`）：
+**`derived/` 非唯一真源，是可由 `facts/` + `method_version` 确定性重算的派生输出** → 已加入 `.gitignore`（`system/derived/*.jsonl`），`.gitkeep` 仍跟踪。
+★ 不跟踪它**恰恰是防"双真源"**（`G-06`）：一旦入库就会出现"以文件为准还是以重算为准"的第二条口径；可复现性由 **`facts/` 的追加式不可变** + **`method_version`** 保证。
 
 
 

@@ -35,8 +35,21 @@ WORK_DIR = SYSTEM_ROOT / "tests" / ".work"
 # session 级：同一 `(脚本, code_root, 参数)` 的结果只算一次（见 `run_gate`）
 _GATE_RESULT_CACHE: dict[tuple[str, str, tuple[str, ...]], GateResult] = {}
 
-# 复制夹具时跳过的目录：缓存与**可重建**产物（index 可全量重建、reports 是运行产物）
-_COPY_SKIP = {"__pycache__", ".pytest_cache", ".venv", ".work", "index", "reports", ".locks"}
+# 复制夹具时跳过的目录：缓存与**可重建 / 可重算**产物
+#   （`index` 可全量重建、`reports` 是运行产物、`derived` 可由 facts/ + method_version 重算）
+#
+# ★ `derived` 是**批次 11 补的**，缺陷 `G-RC-07`，与 `G-RC-02` **同族**：
+#   原先只跳 `index` / `reports`，**不跳 `derived`** → `copytree(SYSTEM_ROOT)` 会把
+#   真仓库的 `derived/*.jsonl` 一并复制进夹具。项目早期 `derived/` 恰好是空的
+#   （只有 `.gitkeep`），所以这个耦合一直不显形；一旦真有运行写入
+#   `derived/compute_gaps.jsonl`，每个夹具就**自带**一份真实缺口记录。
+#   这与 `G-RC-02` 的形态逐字相同：**测试的观测量被"仓库里恰好有什么"污染**。
+#   `derived` 已定为**非唯一真源**（见 `.gitignore` 的更正注释与
+#   `append_only_guard` 的 pathspec = `system/facts/*.jsonl`），
+#   故与 `index` / `reports` 同等待遇：**不复制**；`_ENSURE_DIRS` 会把空目录补回来。
+_COPY_SKIP = {
+    "__pycache__", ".pytest_cache", ".venv", ".work", "index", "reports", "derived", ".locks",
+}
 # 阶段① 内必然为空的目录，夹具里补出来供注入测试写入
 _ENSURE_DIRS = ("views", "raw", "derived", "snapshots", "index")
 
