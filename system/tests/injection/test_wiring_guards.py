@@ -146,6 +146,27 @@ def test_newly_declared_criterion_without_implementation_blocks_stage(code_root:
     )
 
 
+# ═══════════ 夹具不得继承**运行态**（`G-RC-07` 的文件版） ═══════════
+#
+# `state.json` 是运行态游标（含真仓库的 run 历史），`.gitignore` 明确它是"每次运行重写、可重建"。
+# `copytree` 复制的是**磁盘上的一切**（不只是 git 跟踪的东西）—— 原先 `_COPY_SKIP` 只列**目录**，
+# 于是 `state.json` 被带进每个夹具副本，`resume()` 会去续跑**真仓库**那一次运行。
+# 与 `G-RC-02` / `G-RC-07` 同一形态：**测试观测量取决于真仓库当前恰好有什么**。
+
+
+def test_fixture_does_not_inherit_runtime_state(code_root: Path) -> None:
+    """夹具副本**不得**含 `state.json`（否则 `resume()` 会续跑真仓库的运行）。"""
+    assert not (code_root / "state.json").exists(), (
+        "夹具继承了真仓库的 state.json —— `resume()` 会去续跑真仓库的那一次运行，"
+        "测试观测量因此与真仓库的运行历史耦合（G-RC-07 的文件版）"
+    )
+    # 机制层断言：防本用例因"真仓库恰好没有该文件"而变成**空转**
+    # （`G-03`：无被检对象 ≠ 已验证，故不能只靠运行时那一条）。
+    from conftest import _COPY_SKIP  # noqa: PLC0415
+
+    assert "state.json" in _COPY_SKIP, "夹具的复制跳过清单必须包含 state.json"
+
+
 def test_unimplemented_criteria_are_listed_as_notes(code_root: Path) -> None:
     """阶段②–⑤ 的未实现判据必须**逐条列出**（不得因"反正阻塞了"而藏起来）。
 

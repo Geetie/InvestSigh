@@ -47,8 +47,16 @@ _GATE_RESULT_CACHE: dict[tuple[str, str, tuple[str, ...]], GateResult] = {}
 #   `derived` 已定为**非唯一真源**（见 `.gitignore` 的更正注释与
 #   `append_only_guard` 的 pathspec = `system/facts/*.jsonl`），
 #   故与 `index` / `reports` 同等待遇：**不复制**；`_ENSURE_DIRS` 会把空目录补回来。
+# ★ `state.json` 是**文件**（不是目录）—— `_ignore()` 对 `names` 里的目录与文件一并过滤，
+#   故同一个集合即可覆盖。这是**批次 11 补的**，缺口 `G-RC-07` 的**文件版**，机理逐字相同：
+#   `copytree` 复制的是**磁盘上的一切**（不只是被 git 跟踪的东西），而 `state.json`
+#   在 `.gitignore` 里却**存在于磁盘**（实测 9 KB，含真仓库的 `run_2026-09-16_full` 历史）。
+#   原先只列目录 ⇒ 每个夹具副本都继承了真仓库的**运行态游标** ⇒
+#   `Pipeline._read_state()` / `resume()` 会去**续跑真仓库的那一次运行** ⇒
+#   "测试的观测量取决于真仓库当前恰好跑过什么"。这正是 `G-RC-02` / `G-RC-07` 的同一形态。
 _COPY_SKIP = {
     "__pycache__", ".pytest_cache", ".venv", ".work", "index", "reports", "derived", ".locks",
+    "state.json",
 }
 # 阶段① 内必然为空的目录，夹具里补出来供注入测试写入
 _ENSURE_DIRS = ("views", "raw", "derived", "snapshots", "index")
