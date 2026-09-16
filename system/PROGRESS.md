@@ -514,8 +514,9 @@ python scripts/ops/run_all_gates.py . --timeout 30
 
 **★ 诚实声明（`G-60` 排他窗口）**：本轮**未跑 pytest**（主理人指定窗口只给 `ws-degrade-contract`）。
 上述证据全部是**直连探针**（`py_compile` + 直接调读口/判据函数 + 守卫 CLI），**不含任何夹具批次读数**。
-新增的 pytest 用例（`test_solver` / `test_daily_explain` / `test_scenario_guard` / `test_valuation` 共 +13 例）
-**尚未执行** —— 窗口关闭后随 `verify.py --batch pricelayer` 一并复跑，届时在此处补报。
+本轮新增的 pytest 用例（`test_solver` / `test_daily_explain` / `test_scenario_guard` / `test_valuation`）
+**尚未执行** —— 窗口关闭后随 `verify.py --batch pricelayer` 一并复跑，届时在此处补报**实数**。
+（★ **不在此处写死条数**：手抄的计数会随新增静默过期 —— 唯一真源是 `verify.py::BATCHES` 跑出来的读数。）
 **待裁定 / 缺口（修订后；1 / 3 / 5 三项已由主理人答复，此处记答案不记问题）**：
 ① 两个规则文件**已由 `ws-ch2-rules` 装入**（`bb32863`）+ `bef9628` 补 `solution_set_display`，本流已按真键名读；
 ② `§E.2` 子串判据 vs `R-06 ①`（本流已改词元等价 + 结构判据）仍待主理人裁定是否修订设计表述；

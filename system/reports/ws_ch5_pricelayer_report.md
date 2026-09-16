@@ -291,6 +291,36 @@ $ python - <<'PY'    # 逐项改**真 rules/ 的副本**，再直接调该模块
 ```
 → **4 个对照 0 违例 + 6 个反例各 1 违例**。每一条都有对应的 pytest 用例（`exit 1` + `*-RULE-BINDING` 码面断言）。
 
+### V-1f ★ 本轮**未跑 pytest** —— 第三轮证据的性质声明（`G-60` 排他窗口）
+
+主理人指定本窗口**只给 `ws-degrade-contract`** 跑 pytest（配额判别实验）。故第三轮（裁定 ③ 落地）：
+
+- **没有跑任何 pytest**；上文 V-1d / V-1e 的证据**全部是"不建夹具、不删文件"的直连探针**：
+  `py_compile` + 直接调四个读口 / 四个 `_rule_binding_violations` + 守卫 CLI（真仓库根）。
+- **本轮新增的 pytest 用例尚未执行** —— 它们随 `verify.py --batch pricelayer` 在**窗口关闭后**复跑。
+  ★ **本报告刻意不写"新增了多少条"这个数**：手抄的条数会随新增静默过期，唯一真源是批次跑出来的读数
+  （与主理人对 `CONVENTIONS.md` 批次表的处置同一理由）。
+- 既有的 **168 passed / exit=0** 读数采集于**配额触顶之前**，仍然有效（见 §② V-0 / V-0′）。
+- **未**使用 `--no-report` / 环境变量 / 改 `_clear_work_dir` 等方式绕过 —— **绕过得来的绿不算证据**。
+
+### V-1g ★ 命令工具的可靠性（本轮环境告警后的**三重复核**）
+
+`ws-verify-shard` 广播：Bash 里 `grep` 解析到的是 **broker 包装器**（`which -a grep` 首位命中
+`…/shim/brokered-bin/grep`），症状是**静默返回空且退出码为 0** ⇒ "grep 无匹配"会被读成"确实没有"。
+本轮凡曾用 Bash `grep` 得出的结论，已**用 Python 逐条重算**（三选一里的第 3 条；亦可用 Grep 工具 / `/usr/bin/grep`）：
+
+| 结论 | Python 复算结果 | 判定 |
+|---|---|---|
+| `pre-commit.sh` 不含 pytest（口径 16） | `pytest`/`run_pytest`/`verify.py` 三者 `str.count` 与 `re.findall` **均 0**；正对照 `run_gate` = **14** | ✅ **成立** |
+| `value_source` 取值域 ∈ {`rules`,`design_default`} | 全仓 `pricelayer/*.py` 实测取值 = `['design_default','rules']` | ✅ **成立** |
+| `chmod` 只出现在夹具的副本处理 | 仅 `tests/pricelayer/conftest.py` ×1（真文件 0444 未被碰） | ✅ **成立** |
+| `pre-commit` 输出 0 FATAL | 保存件 `[FATAL]` = **0**、`全部门禁放行` = **1** | ✅ **成立** |
+| `verify.py` 批次数 | `': Batch('` = **23** | ✅ **成立** |
+| `load_unregistered_fallback` 调用点已全部改为 dataclass | 5 处代码调用点无残留元组解包（`valuation.py:201/577` 用 `.method_class`） | ✅ **成立** |
+
+★ 同时认领**同族第二处**（自查）：`python … | tail -8; echo $?` 报的是 **`tail` 的退出码**而非 python 的
+（与 `grep \|` 空真同一病灶：**测的不是被测对象**）。已改为 `cmd > file 2>&1; echo "exit=$?"`（不经管道）。
+
 ### V-2 六门禁在**真仓库真源**上运行（`code_root = system`）
 
 ```sh
