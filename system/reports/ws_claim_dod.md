@@ -58,13 +58,14 @@
 
 ### T-B  主张状态迁移是**有限状态机**；非法迁移**响亮拒绝**；`superseded` 能**传播**
 
-- [ ] **AC-01 真跑通**：真实 `facts/claims.jsonl` 里的 claim（采集层写入，初始 `status="active"`）
-      → `transition(..., "pending_verification")` → 落**新版本行**（追加式），`status` 变更、`recorded_seq` 递增
-      → 再 `→ "supported"` → 结果可读出。**主流程真跑到**（非仅函数单测）。
+- [ ] **AC-01 真跑通**：真实 `facts/claims.jsonl` 里的 claim（采集层写入，**初始态即 `status="pending_verification"`**，
+      `Ch6 §E.1` 首行；无"入口别名"）→ `transition(..., "supported")` → 落**新版本行**（追加式），`status` 变更、
+      `recorded_seq` 递增 → 结果可读出。**主流程真跑到**（非仅函数单测）。
 - [ ] **AC-02 持久化**：新状态**追加**为新行（**不改历史行**，`Ch9 §3.4.2` 追加式不可变）；
       删 `index/` 重建 → 末版状态仍在（write-read-reload）。
-- [ ] **AC-03 真接线**：`on_superseded` 调用 `scripts/graph/forward_closure`（复用第九章传播，**不新建第二套**，
-      `G-06`）；本模块 CLI 可被编排器 step ⑦ 调用（**接线由主理人集成时加**，见报告"需集成项"）。
+- [ ] **AC-03 真接线**：`on_superseded` **整体委托** `scripts/graph/propagate.py::propagate_retraction`
+      （`Ch6 §E.4` 复用第九章传播，**不新建第二套遍历/入队**，`G-06` / `Ch9 §3.4.3`）；本模块 CLI 可被编排器
+      step ⑦ 调用（**接线由主理人集成时加**，见报告"需集成项"）。
 - [ ] **AC-04 守卫真拦得住**：非法迁移（如 `superseded → supported`、`pending_verification → pending_verification`）
       **抛错 + CLI exit 1**（**不是 warn，不静默兜底、不自动纠正**）。
 - [ ] **AC-05 错误路径**：
@@ -79,14 +80,14 @@
       - **时间/序倒挂**：新版本 `recorded_seq` 不大于既有最大、或 `recorded_at` 早于原版 `first_seen_at` → **拒绝**。
 - [ ] **AC-07 无占位符**：`no_placeholder_guard.py` 对本模块 **exit 0**。
 - [ ] **AC-08 设计对齐**：迁移表逐条对应 `Ch6 §E.1`（状态图）/ `§E.2`（触发器/副作用）/ `§E.3`（`version_kind` 衔接）
-      / `§E.4`（`superseded` 复用 `forward_closure`）/ `§E.5`（`refuted` 可重开 vs `superseded` 终态）
-      + `Ch9 §3.5`（②行幂等键 `(source_id, quote_hash)`）。
+      / `§E.4`（`superseded` 复用第九章传播 `propagate_retraction`）/ `§E.5`（`refuted` 可重开 vs `superseded` 终态）
+      + `Ch9 §3.4.3`（T12 传播唯一实现）/ `Ch9 §3.5`（②行幂等键 `(source_id, quote_hash)`）。
 
 ### B 的状态机（允许迁移表，逐条对齐 `Ch6 §E.1` 状态图）
 
 ```
-        [入口] active（采集层默认 status，schema/models.py::Claim.status）
-                │  仅此一条入边（强制显式进入状态机）
+        [*] ②③④ 提取完成（初始态 = pending_verification，Ch6 §E.1 首行）
+                │
                 ▼
         pending_verification ──► supported ──► disputed ──► refuted ──► superseded(终态)
              │  ▲                    │            │            │
@@ -101,24 +102,31 @@
 
 | from ↓ \ to → | pending_verification | supported | disputed | refuted | superseded |
 |---|:--:|:--:|:--:|:--:|:--:|
-| `active`（采集默认，状态机之外） | ✅ | ❌ | ❌ | ❌ | ❌ |
-| `pending_verification` | ❌ | ✅ | ✅ | ✅ | ✅ |
+| `pending_verification`（初始态） | ❌ | ✅ | ✅ | ✅ | ✅ |
 | `supported` | ❌ | ❌ | ✅ | ✅ | ✅ |
 | `disputed` | ❌ | ✅ | ❌ | ✅ | ✅ |
 | `refuted` | ✅ | ❌ | ✅ | ❌ | ✅ |
 | `superseded`（终态） | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-> `active` 是采集层默认值（真库实测行 `"status": "active"`，见批次 5b 报告 §三），**不是** `Ch6 §E.1` 五态之一：
-> 本模块把它当**状态机入口别名**，**只允许** `active → pending_verification`（强制显式进入），
-> **不允许**它直跳 `supported`（未核验不得进证据集）。此取舍见报告 §四（设计张力，须主理人确认）。
+> ★ **无"入口别名"**：初始态由设计写死为 `pending_verification`（`Ch6 §E.1` 首行；`schema.models.ClaimStatus`
+> 默认值）。五态之外的取值（含历史违约值 `active`）一律 `UnknownClaimStatus` **响亮拒绝**（`R-04` 已由主理人裁定，
+> 见报告 §六）。此表**取代** v1 的 `active` 入口别名表。
 
 ### B 的 `superseded` 传播（复用，不重造）
 
-- 迁移到 `superseded` 时调用 `scripts/graph/forward_closure(claim_id, max_depth=3, detect_cycle=True)`（`Ch6 §E.4`）。
-- 对每个下游对象：入 **`recheck` 任务**（`TaskType.recheck`，`Ch9 §2.1.6` 控制面对象）承载"标记 stale"，
-  幂等键 `recheck::<claim_id>::<type>::<id>`（重跑不重复建单，`Ch9 §N9.1-26`）；
-  `parent_context.requires_recheck = (type ∈ {baseline, recommendation})`（`Ch6 §E.4` 只对结论入复查）。
-- `forward_closure` 不可解析 → **写库前**抛 `PropagationUnavailable`（**不静默兜底、不留半截数据**）。
+- 迁移到 `superseded` 时**整体委托** `scripts/graph/propagate.py::propagate_retraction(code_root, <claim 的 ref>, *, source="dependency_edges", apply=...)`
+  （`Ch6 §E.4`：直接调用第九章已有的传播，**不新增一套**；`Ch9 §3.4.3`）。该函数是"闭包遍历 → `baseline`/`recommendation`
+  入 `recheck` 队列 → 研究深度回退"的**唯一实现与唯一写入者**。
+- claim 在 `facts/dependency_edges.jsonl` 里的 **ref 形式**由 `object_index` + 边端点**判定**（裸 id 或 `claim:` 前缀，
+  **不猜测**；两种同时出现 → 响亮拒绝）。
+- "只对结论（`baseline` / `recommendation`）入复查"的语义由 `propagate_retraction` 的 **`RECHECK_STEM_TYPES`** 过滤
+  **表达**（≡ `Ch6 §E.4` 伪码 `if obj.type in {baseline, recommendation}`）—— **不**自造 `parent_context.requires_recheck`
+  布尔字段（设计中不存在该字段，见 §D.3 契约文本过期登记）。
+- `recheck` 任务幂等键 = **graph 口径** `recheck::<ref>::<target>`（`Ch9 §N9.1-26`，全库**唯一一套**键格式，`G-06`）。
+- **写序**：先解析/预飞（`apply=False` 干跑，把闭包/索引/ref 解析类错误挡在写库之前）→ 追加 claim 版本行 →
+  `apply=True` 落地。★ 残留 I/O 窗口（`R-04`，**不称"原子"**）：第 3 步与第 2 步是两次独立写盘，
+  第 3 步 I/O 失败仍会留"claim 已 `superseded`、task 未落"的残留（见报告 §D.2）。
+- `propagate_retraction` 不可解析 → **写库前**抛 `PropagationUnavailable`（**不静默兜底、不留半截数据**）。
 
 ---
 
@@ -131,3 +139,38 @@
 | C-3 | 不实现 `scripts/graph/forward_closure` | 属 `ws/graph` 工作流；本模块只**接线** |
 | C-4 | 不改 `schema/models.py` 的 `Claim.status` 默认值 | 非本模块清单；默认 `"active"` 的处置见报告 §四 |
 | C-5 | 不改 `scripts/guard/**` | 批次 4 已两轮独立审计（禁改） |
+
+---
+
+## D. v3 · N-2 跨流缺陷根治（本批次增量，§九 独立审计抓出）
+
+> §九 独立审计判定：`ws/claim` 的 `superseded` 传播为**阻断级跨流缺陷 N-2**。本节登记根治口径与新增 AC。
+
+### D.1 N-2 根因（旧实现，逐一确认）
+
+| # | 缺陷 | 证据 |
+|---|---|---|
+| N-2-a | **签名不符**：旧 `_propagate` 调 `forward_closure(claim_id, max_depth=3, detect_cycle=True)`；真实签名为 `forward_closure(code_root, start, *, max_depth, source, edges, known_refs, valid_asof)`（**无 `detect_cycle`**）→ `TypeError` | 复现见报告 §D.1 |
+| N-2-b | **返回形状不符**：`list(forward_closure(...))` —— 真实返回 `ClosureResult`（frozen dataclass，**不可迭代**）；`_normalize_ref` 期望 `.object_type/.object_id`，真实 `reached` 是**裸 ref** | 同上 |
+| N-2-c | **先写后传播**：`_append_claim` 在 `_propagate` **之前** → 传播失败留"半数据" | 报告 §D.2 `wc -l` |
+| N-2-d | **重复幂等键**：旧 `recheck::<claim>::<type>::<id>`（4 段）≠ graph `recheck::<ref>::<target>`（3 段） | 报告 §D.3 |
+
+### D.2 根治（复用唯一写入者 + 消灭半数据窗口）
+
+- [ ] **AC-N2-1（真跑通·不注入）**：真 `facts/claims.jsonl` + 真 `facts/dependency_edges.jsonl`（`claim→baseline→recommendation`）
+      → `superseded` → `facts/tasks.jsonl` **真落** `recheck` 任务，幂等键 = `recheck::<ref>::<target>`。
+- [ ] **AC-N2-2（幂等）**：重跑传播**新增 0 条**；真源 `claims.jsonl` 历史行**逐字节未变**。
+- [ ] **AC-N2-3（ref 形式不猜测）**：边用 `claim:` 前缀 → 幂等键沿用该前缀（由 `object_index` + 边端点判定）。
+- [ ] **AC-N2-4（零写入）**：传播不可用 / 解析阶段失败 → `claims.jsonl` **不追加**、`tasks.jsonl` **不落**。
+- [ ] **AC-N2-5（反向对照）**：无下游边时 `superseded` **照常成功**（不误报阻断）。
+- [ ] **AC-N2-6（诚实登记残留窗口）**：第 3 步（`apply=True`）I/O 失败仍留残留 —— 用例**钉住**该行为（`R-04`）。
+
+### D.3 契约文本过期登记（**不偷偷改设计**）
+
+- 旧 DoD / 旧 `transition.py` docstring 曾写 `parent_context.requires_recheck = (type ∈ {baseline, recommendation})`。
+  核对设计 **`Ch6 §E.4` 伪码**：其表达为 `if obj.type in {"baseline", "recommendation"}: enqueue_review(...)`
+  —— **设计里并无 `requires_recheck` 布尔字段**。
+- 故：**不创建**该字段；把"只对结论入复查"的语义**落到** `propagate_retraction` 的 `RECHECK_STEM_TYPES`
+  （≡ 设计伪码的集合成员判定）。此为**契约文本（旧实现自造的字段名）过期**，**非设计变更**。
+- 本文件的 v1 表述（`requires_recheck` / `forward_closure(claim_id, max_depth=3, detect_cycle=True)` / 4 段幂等键）
+  一并标注为**过期**，以本节为准。

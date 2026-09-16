@@ -296,3 +296,98 @@ $ python -m pytest tests/validators tests/claim -q   # 临时副本叠加 b4f1fe
 - 本工作区基点 `205eb9c` **不含** `b4f1fe5`（`ClaimStatus`）与新增批次（`verify.py::BATCHES`）——
   二者均在 `main`/`integration`；`G-1` 禁 `merge`，故本工作区 `V-06` 仍红。
 - `B` 的两例预期红**只**因基点落后；集成到含 `b4f1fe5` 的分支后即转绿（`A` 已证）。
+
+---
+
+## 七、N-2 跨流阻断缺陷根治（v3 · 工作树 `fix-claim-propagation`，基点 `4756028`）
+
+- **工作区**：`/Users/gaza/Developer/InvestSigh/.worktrees/fix-claim-propagation`（分支 `fix/claim-propagation`，基点 `main` = `4756028`）
+- **触发**：§九 独立审计（`reports/ws_independent_audit_graph_claim.md`）判定 `ws/claim` 的 `superseded` 传播为
+  **阻断级跨流缺陷 N-2** —— 旧实现**自造了一套**遍历/入队，与真实 `scripts/graph` 的签名/返回形状全部不符。
+- **指令**：**根因修复、非打补丁**（复用唯一写入者 / 消灭半数据窗口 / 修测试桩 / 不偷偷改设计）。
+
+### 7.1 N-2 根因（复现证据，逐条确认）
+
+```
+$ python /tmp/n2_old_call.py system      # 复现旧 `_propagate:335` 的调用
+真实签名 : (code_root, start, *, max_depth=3, source='dependency_edges', edges=None, known_refs=None, valid_asof=None) -> ClosureResult
+ClosureResult iterable? False
+
+复现旧代码路径 `_propagate`：
+  list(forward_closure('c1', max_depth=3, detect_cycle=True))
+  -> TypeError: forward_closure() got an unexpected keyword argument 'detect_cycle'
+```
+
+| # | 缺陷 | 根因 |
+|---|---|---|
+| N-2-a | 签名不符 | 旧码把 `claim_id` 当 `code_root` 传、并传入不存在的 `detect_cycle` → `TypeError` |
+| N-2-b | 返回形状不符 | `ClosureResult` 不可迭代；`reached` 是**裸 ref**，旧 `_normalize_ref` 期望 `.object_type/.object_id`（或 dict `type/id`） |
+| N-2-c | 先写后传播 | `_append_claim` 先于 `_propagate` → 传播失败留"半数据" |
+| N-2-d | 重复幂等键 | 旧 `recheck::<claim>::<type>::<id>`（4 段）≠ graph `recheck::<ref>::<target>`（3 段） |
+
+### 7.2 改了什么（仅本模块清单内）
+
+| 文件 | 改动 |
+|---|---|
+| `scripts/claim/transition.py` | **整体委托** `scripts/graph/propagate.py::propagate_retraction`（唯一写入者）；**删除**自建的 `_propagate` / `_normalize_ref` / `_append_recheck_task` / `resolve_forward_closure` / `_RECHECK_OBJECT_TYPES` / `_GRAPH_CANDIDATE_MODULES`；新增 `_resolve_claim_ref`（**经 `object_index` + 边端点判定 ref 形式，不猜测**，歧义响亮拒绝）；**写序前移**（`apply=False` 干跑先于 `_append_claim`）；参数 `forward_closure_fn` → `propagate_fn`；`TransitionResult.downstream` 改为 graph 口径的**裸 ref** `list[str]`，新增 `rolled_back_companies` |
+| `tests/claim/test_transition.py` | **删除**参数吞掉型桩 `_closure_fn(*_args, **_kwargs)`；**新增真实路径用例**（真 `claims.jsonl` + 真 `dependency_edges.jsonl`）；**强化**不可用用例（并**证明零写入**）；新增**反向对照**（无误报阻断）、**ref 形式判定**、**解析失败零写入**、**残留窗口诚实钉住**用例 |
+| `reports/ws_claim_dod.md` | 状态机表去 `active` 别名；`superseded` 传播段改为 `propagate_retraction` 契约；新增 §D（N-2 根因 + 新增 AC + 契约文本过期登记） |
+| `reports/ws_claim_report.md` | 本节 |
+
+**跨模块改动登记**：本 v3 **未修改** `scripts/graph/**`（`ws/graph` 归属另一工作流）。claim 流通过**调用**（而非修改）
+复用了 `propagate_retraction`。若将来需在 graph 侧调整 `RECHECK_STEM_TYPES`，属**跨流契约变更**，须另行派单。
+
+### 7.3 真实输出（命令 + 原始 stdout + 退出码）
+
+```
+$ sh system/scripts/ops/run_pytest.sh tests/claim tests/graph -q
+............................................................             [100%]
+60 passed in 8.80s
+EXIT=0
+```
+
+`tests/claim` 单跑：**24 passed**（含 8 条 `superseded` 传播用例，其中 6 条为 v3 新增/重写）。
+
+### 7.4 半数据窗口证据（`wc -l` before/after）
+
+```
+$ python /tmp/n2_window_evidence.py system
+N-2 写序证据 —— 写口 = facts/claims.jsonl + facts/tasks.jsonl
+
+[A 解析阶段失败（干跑，apply=False）]
+  outcome : RuntimeError: 解析阶段爆炸（模拟闭包/索引/ref 解析抛错）
+  claims.jsonl  wc -l : before=1 -> after=1     ← 零写入
+  tasks.jsonl   wc -l : before=0 -> after=0     ← 零写入
+
+[B 落地阶段失败（apply=True 写盘）]
+  outcome : OSError: 模拟第 3 步写盘失败（磁盘满 / 权限）
+  claims.jsonl  wc -l : before=1 -> after=2     ← 残留：claim 已 superseded
+  tasks.jsonl   wc -l : before=0 -> after=0     ← 残留：task 未落（R-04，诚实登记）
+```
+
+- **A**：解析类失败（绝大多数失败形态）**已挡在写库前** → `claims`/`tasks` **零写入**（半数据窗口前半段消灭）。
+- **B**：`apply=True` 与追加 claim 是**两次独立写盘**，I/O 层失败仍留残留。设计区无事务机制，本模块**无法**消除该窗口 ——
+  **不称"原子"**，如实登记为 `R-04`。
+
+### 7.5 `requires_recheck` 判定路径（设计锚点）
+
+- **设计锚点**：`06_公开信息与证据筛选/02_实现方案.md` **`Ch6 §E.4` 伪码**逐字为
+  `for obj in forward_closure(...): ... if obj.type in {"baseline", "recommendation"}: enqueue_review(target=obj.id, kind="recheck")`
+  —— **设计里没有 `requires_recheck` 字段**。
+- **判定**：**不创建**该布尔字段；语义由 `propagate_retraction::RECHECK_STEM_TYPES = ("baselines", "recommendations")`
+  表达（≡ 伪码的集合成员判定）。
+- **登记**：旧 `transition.py` docstring / 旧 DoD 的 `parent_context.requires_recheck` 表述属**契约文本过期**
+  （旧实现**自造**的字段名），**非设计变更** —— **未改设计区**。已在 DoD §D.3 登记。
+
+### 7.6 v3 全局一致性审查
+
+- **跨文件 import**：`transition` → `scripts.graph.propagate`（函数内惰性）/ `scripts.graph.adjacency`（`_resolve_claim_ref` 惰性）
+  / `schema.{models,store}`（惰性）；**无循环**；包 `__init__` 仍走 `importlib`，导入不牵出 pydantic。
+- **接口契约**：`transition` 调 `propagate_retraction(root, ref, *, source, apply)` —— 与真实签名**逐字一致**（签名不符的 N-2-a 已消除）。
+- **数据流**：claim 行（dict）→ `Claim.model_validate` → 迁移 → `append_records`（唯一写口）；传播经 `propagate_retraction`
+  唯一写入 `tasks`/`companies`（追加式）。**无第二条传播/第二条幂等键**（N-2-d 已消除）。
+- **无越界**：`scripts/graph/**`（未改）、`schema/models.py`、`verify.py`、`CONVENTIONS.md`、`conftest.py`、`rules/**`、
+  设计区 —— 均**未改**。
+
+**IS_PASS: YES**（v3）—— N-2 四条根因全部根除；`tests/claim tests/graph` **60 passed**；未改设计区 / 未改 graph 侧实现；
+残留 I/O 窗口如实登记为 `R-04`。

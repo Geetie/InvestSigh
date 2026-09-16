@@ -26,13 +26,35 @@ pending_verification ──► supported ──► disputed ──► refuted �
 状态迁移**不改历史行**：每次迁移**追加**一行带新 `status` 与递增 `recorded_seq` 的 claim 版本，
 `as_of` 按业务键取 `recorded_seq` 最大者（`Ch9 §3.4.1`）。
 
-## `superseded` 传播（复用，不重造；`Ch6 §E.4`）
+## `superseded` 传播（**复用 `scripts/graph`，不重造**；`Ch6 §E.4`）
 
-调用 `scripts/graph/forward_closure(claim_id, max_depth=3, detect_cycle=True)`，对每个下游对象入一条
-`recheck` 任务（`TaskType.recheck`，`Ch9 §2.1.6` 控制面对象）承载"标记 stale"，
-幂等键 `recheck::<claim_id>::<type>::<id>`（重跑不重复建单，`Ch9 §N9.1-26`）；
-`parent_context.requires_recheck = (type ∈ {baseline, recommendation})`（`Ch6 §E.4`）。
-`forward_closure` 不可解析 → **写库前**抛 `PropagationUnavailable`（不留半截数据）。
+`Ch6 §E.4` 逐字要求「**直接调用第九章已有的** `forward_closure()` … **不新增一套传播**」。
+本模块据此**整体委托** `scripts/graph/propagate.py::propagate_retraction` ——
+该函数是"闭包遍历 → `baseline`/`recommendation` 入 `recheck` 队列 → 研究深度回退"的
+**唯一实现与唯一写入者**（`Ch9 §3.4.3`）：
+
+- 入口：`propagate_retraction(code_root, <claim 的 ref>, apply=...)`；
+  本模块**不再**自建遍历 / ref 归一 / 入队（此前的自建版本与真签名不兼容，是缺陷 N-2 的根因）。
+- "只对结论（`baseline` / `recommendation`）入复查"的语义由 `propagate_retraction` 的
+  `RECHECK_STEM_TYPES` 过滤**表达**（≡ `Ch6 §E.4` 伪码的 `if obj.type in {baseline, recommendation}`）——
+  本模块**不再**自造 `parent_context.requires_recheck` 布尔字段（设计中不存在该字段）。
+- `recheck` 任务幂等键 = `recheck::<claim 的 ref>::<下游 ref>`（graph 口径，`Ch9 §N9.1-26`）——
+  全库**唯一一套**键格式（`G-06` 唯一真源）。
+
+### 写序（消灭"半数据窗口"）
+
+旧版**先写库、后传播**：传播一旦失败，`facts/claims.jsonl` 会留下 `status=superseded` 而 `tasks` 为空。
+现改为：
+
+1. **解析 / 预飞**：解析 claim 的 ref 形式、并以 `apply=False` **干跑**一次传播 ——
+   把"闭包遍历 / 对象索引 / ref 解析"这些**可能抛错**的动作**全部前移到写库之前**；
+2. `_append_claim(...)` 追加 `superseded` 版本行；
+3. `propagate_retraction(..., apply=True)` 落 `recheck` 任务与深度回退。
+
+★ **诚实登记的残留窗口**（`R-04`，不称为"原子"）：第 3 步与第 2 步是**两次独立写盘**；
+若第 3 步**在 I/O 层**失败（磁盘满 / 权限），仍会留下"claim 已 `superseded`、task 未落"的状态。
+设计区无事务机制，本模块**无法**消除该窗口，只能把**解析类**失败（绝大多数失败形态）
+挡在写库之前。
 
 ## 退出码（CLI，`CONVENTIONS.md::G-01`）
 
@@ -46,7 +68,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
@@ -73,13 +95,20 @@ ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
 }
 """**允许迁移表**（`Ch6 §E.1` 逐边）。表外一律非法。"""
 
-_RECHECK_OBJECT_TYPES = frozenset({"baseline", "recommendation"})
-"""`Ch6 §E.4`：仅对"依赖结论"（baseline / recommendation）入复查队列。"""
-
 _LOCATOR_GATED_TARGETS = frozenset({"pending_verification", "supported", "disputed", "refuted"})
 """这些迁移目标受"定位前置门"约束（`Ch6 §D` 程序拦截）；retirement(`superseded`) 不受限。"""
 
-_GRAPH_CANDIDATE_MODULES = ("scripts.graph", "scripts.graph.traversal", "scripts.graph.propagation")
+_PROPAGATE_MODULE = "scripts.graph.propagate"
+"""`superseded` 传播的唯一实现所在模块（`Ch6 §E.4` 复用第九章传播，`G-06` 不另建）。"""
+
+_PROPAGATE_ATTR = "propagate_retraction"
+"""`Ch9 §3.4.3` T12 传播入口（唯一写入者）。"""
+
+_EDGE_SOURCE = "dependency_edges"
+"""依赖图真源边表（`Ch9 §3.4.3`）。"""
+
+_CLAIM_REF_PREFIXES = ("claim:", "claims:")
+"""依赖图边端点里 claim 的**带前缀**写法（裸 id 之外的第二形式；判定见 `_resolve_claim_ref`）。"""
 
 
 class ClaimTransitionError(RuntimeError):
@@ -103,20 +132,26 @@ class ClaimLocatorInvalid(ClaimTransitionError):
 
 
 class PropagationUnavailable(ClaimTransitionError):
-    """`superseded` 传播所需的 `scripts/graph/forward_closure` 不可解析（写库前失败，不留半截数据）。"""
+    """`superseded` 传播所需的 `scripts.graph.propagate::propagate_retraction` 不可解析
+    （**写库前**抛出，不留半截数据）。"""
 
 
 @dataclass
 class TransitionResult:
-    """一次状态迁移的结果（含 `superseded` 传播的下游与新建 `recheck` 任务）。"""
+    """一次状态迁移的结果（`superseded` 时含复用 `propagate_retraction` 的传播结果）。
+
+    `downstream` / `recheck_tasks` / `rolled_back_companies` 直接来自
+    `scripts.graph.propagate.PropagationResult`（graph 口径：下游为**裸 ref**）。
+    """
 
     claim_id: str
     from_status: str
     to_status: str
     recorded_seq: int
     version_kind: str | None = None
-    downstream: list[tuple[str, str]] = field(default_factory=list)
+    downstream: list[str] = field(default_factory=list)
     recheck_tasks: list[str] = field(default_factory=list)
+    rolled_back_companies: list[str] = field(default_factory=list)
     reason: str = ""
 
 
@@ -160,19 +195,13 @@ def _module_available(modname: str) -> bool:
         return False
 
 
-def resolve_forward_closure() -> Callable[..., Iterable[Any]] | None:
-    """**惰性**解析 `scripts/graph` 的 `forward_closure`（复用第九章传播，`G-06` 不另建）。
+def _propagation_available() -> bool:
+    """**纯可用性探测**：`scripts/graph.propagate` 是否可解析（`Ch6 §E.4` 复用的传播实现）。
 
-    候选模块逐个探测；全部不可用 → `None`（由调用方折叠为 `PropagationUnavailable`）。
+    不可用 → 调用方折叠为 `PropagationUnavailable`（**写库前**）。本函数**不**返回可调用对象
+    —— 实现由调用方按真签名（`code_root, ref, *, source, apply`）导入并委托，杜绝"猜接口"。
     """
-    for modname in _GRAPH_CANDIDATE_MODULES:
-        if not _module_available(modname):
-            continue
-        module = importlib.import_module(modname)
-        fn = getattr(module, "forward_closure", None)
-        if fn is not None:
-            return fn
-    return None
+    return _module_available(_PROPAGATE_MODULE)
 
 
 def _validate_prior(row: Mapping[str, Any]) -> Any:
@@ -266,84 +295,41 @@ def _append_claim(root: Path, claim: Any) -> None:
     append_records(root, "claims", [claim])
 
 
-def _normalize_ref(item: Any) -> tuple[str, str]:
-    """把 `forward_closure` 的下游项归一化为 `(object_type, object_id)`。
+def _resolve_claim_ref(root: Path, claim_id: str) -> str:
+    """确定该 claim 在 `facts/dependency_edges.jsonl` 中的 **ref 形式**（**不猜测**）。
 
-    接受对象（`.object_type`/`.object_id`）或映射（`type`/`id`）；无法归一化 → **响亮拒绝**。
+    `Ch9 §3.4.3` 的边端点在真实数据里存在两种写法（裸 id `"c1"` / 带前缀 `"claim:c1"`）。
+    判定顺序：
+
+    1. **先看真实边端点**：在候选形式（裸 id、`claim:<id>`、`claims:<id>`）中，
+       恰有一种出现在端点集合里 → 采用它；
+    2. 两种同时出现（图数据不规范）→ **响亮拒绝**（不猜）；
+    3. 没有任何边引用该 claim → 回退 `object_index`：命中原语对象则用**裸 id**
+       （该 claim 无下游，传播为空集，**合法**）；否则 → **响亮拒绝**（不把"未知对象"静默当"无下游"）。
     """
-    if isinstance(item, Mapping):
-        obj_type = item.get("object_type") or item.get("type") or item.get("obj_type")
-        obj_id = item.get("object_id") or item.get("id") or item.get("ref")
-    else:
-        obj_type = getattr(item, "object_type", None) or getattr(item, "type", None)
-        obj_id = (
-            getattr(item, "object_id", None)
-            or getattr(item, "id", None)
-            or getattr(item, "ref", None)
-        )
-    if not obj_type or not obj_id:
+    from scripts.graph.adjacency import load_edges, object_index
+
+    endpoints: set[str] = set()
+    for edge in load_edges(root, _EDGE_SOURCE):
+        if edge.from_ref:
+            endpoints.add(edge.from_ref)
+        if edge.to_ref:
+            endpoints.add(edge.to_ref)
+
+    candidates = [claim_id, *(f"{prefix}{claim_id}" for prefix in _CLAIM_REF_PREFIXES)]
+    present = [c for c in candidates if c in endpoints]
+    if len(present) > 1:
         raise ClaimTransitionError(
-            "forward_closure 返回项无法归一化（需 .object_type/.object_id 或 dict type/id）: "
-            f"{item!r}"
+            f"claim {claim_id!r} 在 {_EDGE_SOURCE} 中出现多种 ref 形式 {present} —— 图数据不规范，拒绝猜测"
         )
-    return (str(obj_type), str(obj_id))
-
-
-def _existing_task_keys(root: Path) -> set[str]:
-    """既有任务的幂等键集合（用于"重跑不重复建单"，`Ch9 §N9.1-26`）。"""
-    from schema.store import read_records
-
-    return {str(r.get("idempotency_key", "")) for r in read_records(root, "tasks")}
-
-
-def _append_recheck_task(
-    root: Path,
-    key: str,
-    claim_id: str,
-    version_kind: str | None,
-    obj_type: str,
-    obj_id: str,
-) -> None:
-    """追加一条 `recheck` 任务（承载"标记 stale"与"入复查队列"，`Ch6 §E.4`）。"""
-    from schema.models import Task, TaskStatus, TaskType
-    from schema.store import append_records
-
-    task = Task(
-        task_id="task_{0}".format(key.replace("::", "_")),
-        task_type=TaskType.recheck,
-        status=TaskStatus.queued,
-        idempotency_key=key,
-        input_refs=[claim_id],
-        parent_context={
-            "invalidated_by": claim_id,
-            "version_kind": version_kind,
-            "stale_object_type": obj_type,
-            "stale_object_id": obj_id,
-            "requires_recheck": obj_type in _RECHECK_OBJECT_TYPES,
-        },
+    if len(present) == 1:
+        return present[0]
+    if claim_id in object_index(root):
+        return claim_id
+    raise ClaimTransitionError(
+        f"无法解析 claim {claim_id!r} 的 ref 形式：{_EDGE_SOURCE} 无边引用、"
+        "object_index 中亦无此对象 —— 不静默当'无下游'"
     )
-    append_records(root, "tasks", [task])
-
-
-def _propagate(
-    root: Path,
-    claim_id: str,
-    version_kind: str | None,
-    forward_closure: Callable[..., Iterable[Any]],
-) -> tuple[list[tuple[str, str]], list[str]]:
-    """沿 `forward_closure` 把失效传播到下游：逐个入 `recheck` 任务（幂等）。"""
-    downstream_raw = list(forward_closure(claim_id, max_depth=3, detect_cycle=True))
-    refs = [_normalize_ref(item) for item in downstream_raw]
-    existing = _existing_task_keys(root)
-    created: list[str] = []
-    for obj_type, obj_id in refs:
-        key = f"recheck::{claim_id}::{obj_type}::{obj_id}"
-        if key in existing:
-            continue
-        _append_recheck_task(root, key, claim_id, version_kind, obj_type, obj_id)
-        existing.add(key)
-        created.append(key)
-    return refs, created
 
 
 def transition(
@@ -357,19 +343,23 @@ def transition(
     recorded_at: datetime | None = None,
     recorded_seq: int | None = None,
     enforce_locator: bool = True,
-    forward_closure_fn: Callable[..., Iterable[Any]] | None = None,
+    propagate_fn: Callable[..., Any] | None = None,
 ) -> TransitionResult:
-    """执行一次**合法**状态迁移：校验迁移表 → （定位前置门）→ 追加新版本行 → （`superseded` 传播）。
+    """执行一次**合法**状态迁移：校验迁移表 → （定位前置门）→ （`superseded`：解析/预飞）
+    → 追加新版本行 → （`superseded`：`apply=True` 落地传播）。
 
     - 非法迁移 / 未知状态 / 未知 claim / 定位无效 / 传播不可用 → 抛 `ClaimTransitionError` 子类。
     - `reason` 仅供调用方 / CLI 记录，**不落库**（`Claim` 无该字段）。
-    - `forward_closure_fn` 用于注入遍历实现（测试 / 定制）；缺省惰性复用 `scripts/graph`。
+    - `propagate_fn` 用于注入传播实现（测试 / 定制）；缺省惰性导入
+      `scripts.graph.propagate::propagate_retraction`（真签名）。
+    - **写序**：`superseded` 的解析/预飞在 `_append_claim` **之前**，故解析类失败**零写入**；
+      `apply=True` 为独立写盘，其 I/O 失败仍可能留下残留（见模块 docstring）。
     """
     root = Path(code_root)
     prior_row, all_rows = _latest_claim(root, claim_id)
     prior_obj = _validate_prior(prior_row)
-    # `prior_obj.status` 在新契约下是 `ClaimStatus`（`str` 枚举）—— 直接 `str()` 会得到
-    # `'ClaimStatus.xxx'` 而非五态值，故取 `.value`（对旧式纯 `str` 回退为原值）。
+    # `prior_obj.status` 是新契约下的 `ClaimStatus`（`StrEnum`）—— 直接 `str()` 未必得五态值，
+    # 故取 `.value`（对旧式纯 `str` 回退为原值）。
     from_status = str(getattr(prior_obj.status, "value", prior_obj.status))
     assert_transition(from_status, to_status)
 
@@ -388,14 +378,23 @@ def transition(
                 f"claim {claim_id} 定位无效，拒绝迁移 {from_status} -> {to_status}: {detail}"
             )
 
-    closure_fn: Callable[..., Iterable[Any]] | None = None
+    # ── `superseded`：先解析/预飞（全部可能抛错点前移到写库之前），再委托 propagate_retraction ──
+    prop: Callable[..., Any] | None = None
+    claim_ref: str | None = None
     if to_status == "superseded":
-        closure_fn = forward_closure_fn or resolve_forward_closure()
-        if closure_fn is None:
+        if propagate_fn is not None:
+            prop = propagate_fn
+        elif _propagation_available():
+            from scripts.graph.propagate import propagate_retraction as prop
+        else:
             raise PropagationUnavailable(
-                "superseded 传播需 scripts/graph/forward_closure（Ch6 §E.4 复用第九章传播），"
-                "但当前不可解析 —— 写库前失败，不留半截数据"
+                f"superseded 传播需 {_PROPAGATE_MODULE}::{_PROPAGATE_ATTR}"
+                "（Ch6 §E.4 复用第九章传播），但当前不可解析 —— 写库前失败，不留半截数据"
             )
+        claim_ref = _resolve_claim_ref(root, claim_id)
+        # 干跑（apply=False）：真跑一遍闭包 + 对象索引 + 幂等键计算，但**不落库**。
+        # 任何解析类错误在此抛出 → 下面的 `_append_claim` 永不执行 → 零写入。
+        prop(root, claim_ref, source=_EDGE_SOURCE, apply=False)
 
     at = recorded_at or datetime.now(timezone.utc)
     seq = _next_recorded_seq(all_rows, recorded_seq)
@@ -410,10 +409,12 @@ def transition(
         version_kind=version_kind,
         reason=reason,
     )
-    if to_status == "superseded" and closure_fn is not None:
-        result.downstream, result.recheck_tasks = _propagate(
-            root, claim_id, version_kind, closure_fn
-        )
+    if to_status == "superseded" and prop is not None and claim_ref is not None:
+        # 落地（apply=True）：`recheck` 任务与深度回退由 propagate_retraction 唯一写入。
+        applied = prop(root, claim_ref, source=_EDGE_SOURCE, apply=True)
+        result.downstream = list(applied.downstream)
+        result.recheck_tasks = list(applied.created_task_ids)
+        result.rolled_back_companies = list(applied.rolled_back_companies)
     return result
 
 
@@ -424,7 +425,7 @@ def on_superseded(
     *,
     supersedes: str | None = None,
     recorded_at: datetime | None = None,
-    forward_closure_fn: Callable[..., Iterable[Any]] | None = None,
+    propagate_fn: Callable[..., Any] | None = None,
 ) -> TransitionResult:
     """上游版本事件（预测修订 / 财务重述 / 原文撤回）→ 主张 `superseded` → 下游入复查（`Ch6 §E.4`）。"""
     return transition(
@@ -434,7 +435,7 @@ def on_superseded(
         version_kind=version_kind,
         supersedes=supersedes,
         recorded_at=recorded_at,
-        forward_closure_fn=forward_closure_fn,
+        propagate_fn=propagate_fn,
     )
 
 
@@ -468,10 +469,12 @@ def _run_transition(args: Any) -> int:
         f"  recorded_seq={result.recorded_seq}"
         + (f"  version_kind={result.version_kind}" if result.version_kind else "")
     )
-    for obj_type, obj_id in result.downstream:
-        print(f"  downstream stale: {obj_type}:{obj_id}")
-    for key in result.recheck_tasks:
-        print(f"  recheck task: {key}")
+    for ref in result.downstream:
+        print(f"  downstream: {ref}")
+    for task_id in result.recheck_tasks:
+        print(f"  recheck task: {task_id}")
+    for company_id in result.rolled_back_companies:
+        print(f"  depth rollback: {company_id}")
     if result.reason:
         print(f"  reason: {result.reason}")
     return 0
