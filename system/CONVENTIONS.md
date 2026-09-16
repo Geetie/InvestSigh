@@ -265,16 +265,23 @@ python system/scripts/ops/verify.py --batch <名>       # 已内置同一环境�
 
 ---
 
-### V-07 **新建工作树后，第一步必须跑 `bootstrap_worktree.sh`**
+### V-07 **新建工作树后、以及每次 `git merge` 之后，第一步必须跑 `bootstrap_worktree.sh`**
 
 ```sh
 sh system/scripts/ops/bootstrap_worktree.sh
 ```
 
 **为什么**（系统性伪影，不是谁的代码错）：纪律 9 要求 `rules/` 全 `0444`，但
-**git 只跟踪可执行位、不跟踪只读位** → 任何 `git worktree add` / 新 clone 出来的
-`rules/*.yaml` 都是 `0644` → `rules_lock_guard` **必红**（实测：`fix/claim-propagation`
+**git 只跟踪可执行位、不跟踪只读位** → 任何 `git worktree add` / 新 clone / **`git merge`**
+出来的 `rules/*.yaml` 都是 `0644` → `rules_lock_guard` **必红**（实测：`fix/claim-propagation`
 与 `fix/compute-silent-defects` 两个工作树首次提交各被拦下 10 条）。
+
+★ **`git merge` 也在触发面内**（批次 13 补，缺口 `G-53`）：`ws-ch2-rules` 在 `git merge main` 后
+实测 `ls -l rules/*.yaml` = `-rw-r--r--`（644）—— 合并会按索引重写这些文件，**只读位同样丢失**。
+`rules_lock_guard.py` 有 `st_mode & 0o777 == 0o444` 的显式检查 ⇒ 它**会红（不是静默失效）**，
+但症状是"**每次合并都白红一次**"，且合并与下一次门禁之间存在一个**可写窗口**（窗口内的写入仍会被
+SHA256 抓到，故仍是"检测得到"，非"静默"）。
+⇒ 一律在 `git merge` 之后立刻跑本脚本；**不要**在各人自己的 `chmod` 上打补丁，更**不是**用 `--no-verify` 绕过。
 
 **天天误报的门禁一定会被关掉**（`G-01`）→ 必须在流程层根治，而不是让每个工程师各自 `chmod`，
 更**不是**用 `--no-verify` 绕过。

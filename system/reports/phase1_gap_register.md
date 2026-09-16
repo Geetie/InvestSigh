@@ -515,5 +515,55 @@ blocked = True
 ③ **顺手改共享的会话锁，恰恰会引入同类静默风险**（该锁本身刚因 `G-RC-10` 被修过）。
 ⇒ 登记为低优先 `OPEN`，**不顺手改**。
 
+### 13.5 `G-53` / `G-54`（批次 13 集成期，主理人实测发现）
+
+| # | 缺口 | 严重度 | 状态 |
+|---|---|---|---|
+| **`G-53`** | `git merge` / 检出会把 `rules/*.yaml` 的 **0444 还原成 644**（权限位不在 git 管理范围内）⇒ 每次合并后必然红一次 | 低 | `OPEN`（有检测，见下） |
+| **`G-54`** | `unit` 测试批 **高方差且逼近/越过超时**：同一套件（76 例）两次实测 **48.73s** 与 **66.72s**，而原超时 **60s** ⇒ **会随机被判 TIMEOUT** | **高** | 超时已上调（安全网）；**根因待修** → 卡 13-F |
+
+**`G-53` —— 不是"静默失效"，是"必然红一次 + 一个可写窗口"**（`ws-ch2-rules` 提出"纪律 9 被静默破坏"，主理人**更正措辞**）：
+
+| 事实 | 证据 |
+|---|---|
+| 合并后 `rules/` 权限变 644 | `ws-ch2-rules` 在 `git merge main` 后实测 `ls -l` = `-rw-r--r--` |
+| **但守卫会红** —— 不是静默 | `scripts/checks/rules_lock_guard.py:78-82` 实测**检查 `st_mode & 0o777 == 0o444`**，不符即报 `权限为 0o644，应为 0o444` |
+| 且内容改动也会被抓 | 锁清单是 SHA256 逐件比对 |
+| 真正的残余风险 | 合并与下次门禁之间的**可写窗口**——但窗口内的写入**仍会被 SHA256 抓到** ⇒ 是"**检测得到**"，不是"静默" |
+
+⇒ **处置**：把"**每次 `git merge` 之后必须重跑 `bootstrap_worktree.sh`**"写进 `CONVENTIONS.md::V-07`（该脚本只 chmod + 自检，不碰内容）。
+★ **为什么值得修**：它的症状是"**每次合并都红一次**"，而本项目铁律是「**天天误报的门禁一定会被关掉**」——
+一个必然产生噪音的门禁，最终会被人用 `--no-verify` 绕过去（我本人刚在这条纪律上栽过一次，见 `PROGRESS.md §7.5` 第 4 条）。
+
+**`G-54` —— 这条比"慢"严重：它让 `unit` 批的门禁**不可信**。**
+
+实测（同一套件、同一命令、间隔数分钟，宿主有 6 条流并发）：
+
+| 次序 | 命令 | 结果 |
+|---|---|---|
+| 1 | `verify.py --batch unit` | `76 passed in 48.73s`（批墙钟 49.35s / 超时 60.0s） |
+| 2 | `pytest tests/unit -q --durations=8` | `76 passed in **66.72s**` ← **已越过 60s 上限** |
+
+`--durations=8` 的前 8 名**全部是 `setup`**，单个 **4.46s ~ 5.20s**：
+
+```
+5.20s setup  tests/unit/test_schema_expand.py::test_project_driver_model_fails_loudly_on_dangling_ref
+5.16s setup  tests/unit/test_contracts.py::test_get_param_without_any_value_fails_instead_of_returning_none
+5.11s setup  tests/unit/test_contracts.py::test_freeze_has_exactly_11_params_all_tbd
+5.00s setup  tests/unit/test_contracts.py::test_get_param_unknown_id_fails_loudly
+4.88s setup  tests/unit/test_schema_expand.py::test_new_table_row_roundtrips_through_the_real_store[...]
+```
+
+★ **疑似根因（待 13-F 证实）**：共享 fixture（`tests/conftest.py::code_root` 一族）**每例做整树拷贝**，
+而树体已显著变大（`schema/jsonschema/facts.schema.json` 数千行 + 174 个 py 文件 + 22 张真源 + 14 件规则）
+⇒ **代价随仓库体积线性增长**，且**每新增一个测试目录都会拖慢所有人**。
+若成立，则这不是"unit 慢"，而是**整个验证体系的成本模型有问题**——阶段③④⑤ 还要继续加测试。
+
+⇒ **处置**：
+① **立即**：`unit` 超时 60s → **270s**（`V-02`：以较慢一次 66.72s 为基准 ≈ 4.0×，≤300s）。**先让门禁可信。**
+② **根因**：立卡 **13-F**（共享 fixture 成本）交 `ws-verify-shard`（它建的验证分片与 `V-02` 口径）。
+③ ★ **本项目的教训要复用**：`P-01` 已明令"跨行/全树 AST 扫描单遍"，但**夹具成本**这条一直没有量化口径。
+⇒ 13-F 必须同时产出**"每个批次的实测耗时 vs 超时"对照表**（含方差），把"超时余量"变成**可核数据**而不是"当初估的"。
+
 
 
