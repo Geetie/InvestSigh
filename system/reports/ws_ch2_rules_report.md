@@ -1,10 +1,10 @@
-# ws/ch2-rules · 批次 13-R 报告 —— 4 份规则文件的**内容转写**（候选）
+# ws/ch2-rules · 批次 13-R 报告 —— 4 份规则文件的**内容转写**（候选 → 已安装）
 
 - **分支**：`ws/ch2-rules`（基点 `main` @ `d74a829`）
 - **工作树**：`/Users/gaza/Developer/InvestSigh/.worktrees/ws-ch2-rules`
 - **任务书**：`system/reports/batch13_taskbook.md` **卡 13-R**
-- **产出**：`system/registry/rule-candidates/` 下 4 个候选 YAML + 本报告
-- **安装**：由主理人执行（`chmod -R u+w system/rules` → 复制 → `python system/scripts/ops/lock_rules.py` 重锁）
+- **产出**：4 个候选 YAML（原在 `system/registry/rule-candidates/`）+ 本报告
+- **安装**：主理人已执行（`chmod -R u+w system/rules` → 复制 → `python system/scripts/ops/lock_rules.py` 重锁），见 §3 ⑧
 
 ## 0. 一句话
 
@@ -12,6 +12,11 @@
 其中数行为多键合并书写）；
 其中 **15 个键位**设计给了键但没给值 ⇒ 落 `tbd` + `basis`；**7 组**设计有语义但没给键名/没指派文件 ⇒ **未自创，单列在 §4.2**；
 **1 处**改为指针（`scenario.yaml::scenario_consistency.param_ref = p05`）。
+
+> **安装后状态（`main` @ `bb32863`）**：4 份候选已由主理人安装进 `rules/`（`rules/` 10 → 14），
+> `system/registry/rule-candidates/` **已删除**（避免与 `rules/` 构成双真源）；
+> git 记为 **rename** ⇒ provenance 不丢。**故本报告 §2 的键名仍有效，但文件路径已变为 `system/rules/*.yaml`**；
+> 主理人在安装时另做了 **1 处去双真源收口**（见 §3 ⑧-2），本报告 §2 对应行仍以候选内容为准、差异在该处标明。
 
 ---
 
@@ -25,7 +30,12 @@
 新增：system/reports/ws_ch2_rules_report.md                   （本报告）
 ```
 
-`system/rules/**` **零改动**（见 §3 证据 ④）。设计区（各章 `02_实现方案.md`、`00_交付施工图.md`、`00_待拍板项清单.md`）**只读未动**。
+> **安装后（`bb32863`，主理人提交）**：上述 4 个文件路径变为
+> `system/rules/{metric-sets,baseline,valuation-methods,scenario}.yaml`（git rename，non-provenance-loss），
+> `system/registry/rule-candidates/` 目录消失。本报告 §3 ④⑤ 的"`rules/` 零改动"是**本单交付时的实测事实**，
+> 与安装后 `rules/` 的变化**不矛盾**（改 `rules/` 的是主理人，不是我的工作树）。
+
+`system/rules/**` **在本单交付时零改动**（见 §3 证据 ④）。设计区（各章 `02_实现方案.md`、`00_交付施工图.md`、`00_待拍板项清单.md`）**只读未动**。
 
 ---
 
@@ -34,6 +44,9 @@
 > 表列 = `键 → 取值 → 设计出处（节号 + 原文片段）`。**每一行都有节号与原文片段**，无"根据惯例"。
 > 缩写：`04/02` = `04_公司价值研究与深度标准/02_实现方案.md`；`05/02` = `05_价格与市场预期研究/02_实现方案.md`；
 > `施工图` = `00_交付施工图.md`；`清单` = `00_待拍板项清单.md`（v2 · 2026-09-15，D-03 已确认）。
+> ★ **本表记录的是"我交付时的候选内容"**；安装件现位于 `system/rules/*.yaml`（`bb32863`）。
+> 二者**仅 1 处差异**：`baseline.yaml` 删除了 `form_completeness.require_locator_at_least` /
+> `require_derivation_at_least`（去双真源 `G-06`）—— 见 §3 ⑧-2。**其余文件逐字节相同**（git rename 100%）。
 
 ### 2.1 `metric-sets.yaml`（安装目标 `rules/metric-sets.yaml`）
 
@@ -105,8 +118,8 @@
 | `form_completeness.entry` | `form_complete` | `04/02` L362「`def form_complete(baseline, cfg) -> CheckResult:`」 |
 | `form_completeness.guard` | `scripts/valuelayer/completeness.py` | `04/02` L361「`# scripts/valuelayer/completeness.py`」 |
 | `form_completeness.sections` | `["①业务与产业位置","②增长驱动","③增长确定性","④护城河","⑤财务与估值","⑥价格与行动"]` | `04/02` L341-348（§G.1 表第一列逐字：① 业务与产业位置 / ② 增长驱动 / ③ 增长确定性 / ④ 护城河 / ⑤ 财务与估值 / ⑥ 价格与行动）；L354「六项 section 非空且达最小字段数」 |
-| `form_completeness.require_locator_at_least` | `1` | `04/02` L365「`has_locator(baseline) >= 1`」 |
-| `form_completeness.require_derivation_at_least` | `1` | `04/02` L366「`has_derivation(baseline) >= 1`」 |
+| `form_completeness.require_locator_at_least` | `1` | `04/02` L365「`has_locator(baseline) >= 1`」　★**安装时删除**（去双真源 `G-06`，§3 ⑧-2） |
+| `form_completeness.require_derivation_at_least` | `1` | `04/02` L366「`has_derivation(baseline) >= 1`」　★**安装时删除**（去双真源 `G-06`，§3 ⑧-2） |
 | `form_completeness.require_cross_section_consistent` | `true` | `04/02` L367「`cross_section_consistent(baseline)`」＋ L358「跨节引用一致（驱动出现在财务连接里）」 |
 | `form_completeness.failed_items_reported` | `true` | `04/02` L368「`return CheckResult(passed=all(checks), failed=[...])   # 形式上拦截空标题`」 |
 | `required_extra_fields_by_profitability.unprofitable` | `[business_model_note, path_to_profitability, cash_runway, funding_need, unit_economics]` | `04/02` L380「未盈利 \| `business_model_note`、`path_to_profitability`（里程碑）、`cash_runway`、`funding_need`、`unit_economics`」 |
@@ -307,6 +320,72 @@ commit-exit=0
 > **未跑**：`verify.py --batch <整目录>`（配额，任务书禁）。**未跑** `run_all_gates`（本单不新增测试目录、不动代码，
 > 门禁项不变；如主理人要求，可在合并后随批次统一跑）。
 
+### ⑧ 安装与安装后复核（**主理人执行**，`main` @ `bb32863`；本节为**转引**，非我实测）
+
+> ★ 声明：⑧-1 的数字是**主理人在合并/安装时实测并回报**的；我在自己工作树里复核到的只有 **⑧-3**（见下）。
+> 我不把转引的数字冒称为"我实测"（`G-03`）。
+
+**⑧-1 主理人回报的安装实测**
+
+- 三点 diff + 试合并**无冲突** → 合并 → 安装 → 重锁（`bb32863`）
+- `rules/` 文件数 **10 → 14**；`rules_lock_guard` **14/14 PASS**；全部 **0444**
+- `injection_guard` 的 `rules_files` 自动跟到 **14/14**（说明它按目录发现，不写死清单）
+- `run_all_gates` 仍只有那 **1 条真实非零**（本单无新增非零项）
+
+**⑧-2 ★ 主理人做的 1 处去双真源收口（`G-06`）—— 登记**
+
+安装时删除了候选里 `form_completeness.require_locator_at_least` / `require_derivation_at_least` 两个键
+（它们与 `thresholds.min_locator_count` / `min_derivation_count` 是**同一事实的两个存放处**，锚点与值都相同），
+改为指向 `thresholds.*` 的注释：
+
+```yaml
+form_completeness:
+  ...
+  # ★ 定位数 / 推导数的最小值**不在此处重复** —— 唯一存放处 = 上面 `thresholds.min_locator_count` /
+  #   `thresholds.min_derivation_count`（`G-06` 单一真源：同一事实不要两个存放处）。
+```
+
+⇒ **定位数 / 推导数的唯一存放处 = `thresholds.*`**。本报告 §2.2 对应两行（我写的是候选形态）**以此处为准**。
+
+**⑧-3 我在本工作树复核到的（`git merge main` 后实测）**
+
+```
+$ git merge main
+Updating 77df944..bb32863
+ rename system/{registry/rule-candidates => rules}/baseline.yaml        (95%)
+ rename system/{registry/rule-candidates => rules}/metric-sets.yaml     (100%)
+ rename system/{registry/rule-candidates => rules}/scenario.yaml        (100%)
+ rename system/{registry/rule-candidates => rules}/valuation-methods.yaml (100%)
+
+$ sh system/scripts/ops/bootstrap_worktree.sh
+  scanned files_on_disk: 14
+  scanned registered_files: 14
+  note: 锁清单 locked_at = 2026-09-16T13:01:57+00:00
+RESULT: PASS（0 violations）
+
+$ git status --short system/rules system/registry
+(无输出)          # 重锁后内容零改动、权限位复原
+exit=0
+
+$ grep -n "form_completeness" -A 7 system/rules/baseline.yaml
+54:form_completeness:
+55-  entry: form_complete
+56-  guard: scripts/valuelayer/completeness.py
+57-  sections: [...]
+58-  # ★ 定位数 / 推导数的最小值**不在此处重复** —— 唯一存放处 = 上面 `thresholds.min_locator_count` /
+59-  #   `thresholds.min_derivation_count`（`G-06` 单一真源：同一事实不要两个存放处）。
+```
+
+⇒ **⑧-2 的收口我本人核过**（安装件里两个键确已删除、注释在）；**git 确实记为 rename**（4 个文件 95%–100% 相似度），
+故"候选 → 安装件"的 provenance 未丢。
+
+**⑧-4 一处健忘，不是本卡的缺陷（登记）**
+
+主理人先给 13-A 的键名是 `min_locators` / `min_derivations`，**未同步本卡** ⇒ 我按自己的判断落了
+`min_locator_count` / `min_derivation_count`（`min_fields_per_section` / `min_nonnull_rate` 两侧本已一致）。
+**处置：以已安装件为准（我的 `*_count` 更精确），主理人已让 13-A 改。**
+★ 好在 13-A 的读法是"**缺键即 `exit 2`、不内置兜底**"⇒ 不一致会**响亮失败**，不会静默跑错阈值。
+
 ---
 
 ## 4. `tbd` 项 与 "设计未给" 项（**分开列**）
@@ -330,18 +409,20 @@ commit-exit=0
 ### 4.2 "设计未给"项（**设计有语义/有值，但没给键名、也没指派文件**）—— **未自创，故未进 YAML**
 
 > 这 7 组的共同点：设计**给了明确语义甚至明确数值**，但**没有**说它落在哪个 `rules/*.yaml`、也**没有**给出键名。
-> 按任务书硬约束 2（"设计根本没这个键 ⇒ 不要加"），我**没有转写**，在此单列请主理人裁决是否补做。
-> **注意区分**：它们不是"设计没写"，而是"设计写了但没给落位"——**若主理人要收，请指定文件与键名**，我按原文补。
+> 按任务书硬约束 2（"设计根本没这个键 ⇒ 不要加"），我**没有转写**，在此单列。
+> **主理人裁定：保持不收**（不得由实现方替设计新增键）。
+> 下面补上**归属建议**（★ 只标"谁管这段"，**不是新增键**）：属**代码面**的，由 13-B 判断能否用既有键承载；
+> **承载不了就上报主理人，不新增键**（主理人已把这份归属转给 13-B）。
 
-| # | 内容（含设计已给的值） | 出处 | 设计未给什么 |
-|---|---|---|---|
-| N-1 | 增长质量分档 `growth_quality ∈ {high, medium, low}` + 四判定项（`ROIIC vs WACC`、现金转化率、营运资金变动、融资依赖）；`ROIIC < WACC → low` + `value_destructive_growth=true` | `04/02` L224 / L232-236 | 未指派到 `baseline.yaml` 或其他文件；未给参数键名 |
-| N-2 | 收入增速 denylist 守卫（"收入增速不得作投资回报代理"） | `04/02` L236 / L567（J7「类型约束 + AST 检查（双保险）」） | 未指派文件；未给键名 |
-| N-3 | 倒填检测四条规则（参数后改 / 临界凑值 / 无历史假设 / 版本倒序） | `05/02` L189-192（§D.4） | 未指派到 `valuation-methods.yaml`；四条规则无键名（实现面在 `scripts/pricelayer/order_guard.py`，L133 施工图） |
-| N-4 | 三类输入分离 `input_source ∈ {fact, model_estimate, manual}` + `manual` 须留痕 + 冲突`unresolved` 不加权 | `05/02` L196-198（§D.5） | 未指派文件（代码侧已落 `schema/models.py::InputSource`） |
-| N-5 | 解集展示上限 `N` = **默认展示 3 组，最多 5 组** | `05/02` L460（J3）；`清单` B18（**已给值**） | 未指派文件（`05/02` §I.2 只把"离散粒度 + 网格搜索上界"指派给 `valuation-methods.yaml`，**不含**本项） |
-| N-6 | 反解数值方法 = **网格 + 单调剪枝**；未建模覆盖率阈值 = **已建模业务覆盖 ≥ 80%** | `05/02` L458（J1）/ L467（J10）；`清单` B4（**已给值**） | 未指派文件；未给键名 |
-| N-7 | `value_state` 三字段枚举 + `moat_level` 枚举（`tbd` 归一） | `04/02` L392-396（§H.1） | 属 **schema 层**（代码侧已落），设计未说进哪个 `rules/*.yaml` |
+| # | 内容（含设计已给的值） | 出处 | 设计未给什么 | ★ 归属建议（**仅定位，不新增键**） |
+|---|---|---|---|---|
+| N-1 | 增长质量分档 `growth_quality ∈ {high, medium, low}` + 四判定项（`ROIIC vs WACC`、现金转化率、营运资金变动、融资依赖）；`ROIIC < WACC → low` + `value_destructive_growth=true` | `04/02` L224 / L232-236 | 未指派到 `baseline.yaml` 或其他文件；未给参数键名 | **代码面**：`scripts/valuelayer/growth_quality.py`（`04/02` L229 / 施工图 L127）。判定逻辑不必是规则文件的键 —— 除非设计后来给键名 |
+| N-2 | 收入增速 denylist 守卫（"收入增速不得作投资回报代理"） | `04/02` L236 / L567（J7「类型约束 + AST 检查（双保险）」） | 未指派文件；未给键名 | **代码面**：同上模块 + 类型约束（`04/02` J7 明写"双保险"）。**不是 yaml 参数** |
+| N-3 | 倒填检测四条规则（参数后改 / 临界凑值 / 无历史假设 / 版本倒序） | `05/02` L189-192（§D.4） | 未指派到 `valuation-methods.yaml`；四条规则无键名 | **代码面**：`scripts/pricelayer/order_guard.py`（施工图 L133；`05/02` L192「版本倒序 → **拒绝**」是实现断言，非阈值） |
+| N-4 | 三类输入分离 `input_source ∈ {fact, model_estimate, manual}` + `manual` 须留痕 + 冲突`unresolved` 不加权 | `05/02` L196-198（§D.5） | 未指派文件（代码侧已落 `schema/models.py::InputSource`） | **Ch6/Ch5 边界 · schema 层**：取值域与留痕校验已在 `schema/models.py::AssumptionInput`（`@model_validator` 强制 `manual ⇒ author+modified_at`）。**无需规则文件承载** |
+| N-5 | 解集展示上限 `N` = **默认展示 3 组，最多 5 组** | `05/02` L460（J3）；`清单` B18（**已给值**） | 未指派文件（`05/02` §I.2 只把"离散粒度 + 网格搜索上界"指派给 `valuation-methods.yaml`，**不含**本项） | **代码面**：`scripts/pricelayer/solver.py` 或 `valuation.py` 的**展示折叠**参数（`05/02` L439「只保留**代表解 + 区间包络**（`solution_set` 上限 N，超出折叠）」）。**若 13-B 要落 yaml，须由主理人裁决**（值已由清单 B18 确认） |
+| N-6 | 反解数值方法 = **网格 + 单调剪枝**；未建模覆盖率阈值 = **已建模业务覆盖 ≥ 80%** | `05/02` L458（J1）/ L467（J10）；`清单` B4（**已给值**） | 未指派文件；未给键名 | **代码面**：反解方法 → `scripts/pricelayer/solver.py`（`05/02` L438 只把"离散粒度 + 网格搜索上界"给 yaml）；覆盖率阈值 → `benchmarks.modeled_coverage` 的判据（`05/02` L264），实现面在 Ch5 估值/底稿侧 |
+| N-7 | `value_state` 三字段枚举 + `moat_level` 枚举（`tbd` 归一） | `04/02` L392-396（§H.1） | 属 **schema 层**（代码侧已落），设计未说进哪个 `rules/*.yaml` | **schema 层**：`system/schema/models.py`（已落）。**不进规则文件** |
 
 ### 4.3 11 项待冻结参数的**指针**（唯一真源 = `rules/freeze.yaml::freeze_params`，`Ch11 §D.2`）
 
@@ -372,6 +453,7 @@ commit-exit=0
 | 与 `freeze.yaml` 只指针不双写 | §4.3（`scenario.yaml` → `p05`；其余 3 文件经逐项核对**无** 11 项之一） |
 | 绝不写 `system/rules/` | §3 ④⑤（`git status --short system/rules` 空 + `rules_lock_guard` PASS + 0444 位完好） |
 | 报告四段式 | 本文 §1 改了什么 / §3 测了什么 / §5 每条要求证据 / §6 剩余不确定性 |
+| 安装 + 重锁由主理人做（本卡不做） | §3 ⑧（主理人回报 `rules/` 10→14、`rules_lock_guard` 14/14 PASS、全部 0444；我在本树复核 git rename + 14/14 PASS + 去双真源注释在） |
 | 禁 `git add -A`；`pre-commit` 全绿（禁 `--no-verify`） | §3 ⑦（11 道门全 PASS + commit-exit=0；显式路径 `git add`，未用 `-A`） |
 | 未跑 `verify.py --batch <目录>` | §3 末尾声明 |
 
@@ -379,33 +461,42 @@ commit-exit=0
 
 ## 6. 剩余不确定性与缺口
 
-**A. 需要主理人/需求方裁决**
+**A. 已由主理人裁定的（原"待裁决"，**结论已落地**）**
 
-1. **`scenario_method_status` 是否其实是 `p05` 的取值面（§2.4 已标张力）**：`05/02` §E.4 与 §J5 说它"待样例转正"，
-   而 `freeze.yaml::p05` 也说 `algorithm: tbd` / `resolved_at: delivery_stage_2` —— 两者**同属"样例校准后转正"家族**，
-   但设计**没有**把 `scenario_method_status` 写成 p05 的键。我**照设计逐字**落 `pending`，**没有**擅自改成指针。
-   若主理人判定它就是 p05，应改成 `param_ref: p05` + 删值（**这需要一次显式裁决**）。
-2. **§4.2 的 7 组"设计有值但未指派落位"**（尤其 N-5 解集上限 3/5 组、N-6 反解方法与覆盖率 80% 阈值）：
-   是否要收进这 4 个文件之一？**请指定文件与键名**，我按原文补；我未自创。
-3. **`baseline.yaml` 的 `spec_anchor` 与任务书不一致**：任务书写"§B/§G"，但 `max_primary_drivers_per_business`
-   的设计原文在 **`04/02 §D.2`**（§B 全节无任何阈值）。我按**设计原文**锚定并在 `spec_anchor` 里把
-   `§D.2 / §B.2 / §G.2 / §G.4` 一并列出，请主理人核时以此为准。
+1. **`scenario_method_status` 不是 `p05` 的取值面** ⇒ **裁定：保持现状**（按设计逐字落 `pending`，**不改指针、不删值**）。
+   理由（主理人给）：`freeze.yaml::p05` 的键是 `algorithm`；`scenario_method_status` 是**另一个键**，设计**没有**把它绑到 p05。
+   若判它是 p05，等于**改设计的取值域** —— 不由实现方定。⇒ 主理人**登记为一条张力并上报需求方**。
+   （原张力陈述保留：`05/02` §E.4 与 §J5 说它"待样例转正"，`p05` 也说 `algorithm: tbd` / `resolved_at: delivery_stage_2`，
+   两者**同属"样例校准后转正"家族**，但设计未给出键级绑定。）
+2. **`清单 A2`（交易成本双边合计 20 bp）与 `freeze.yaml::p10` 的 `caliber_terms.transaction_cost: tbd` 不一致**
+   ⇒ **裁定：登记、不在本批次处理**（改 `freeze.yaml` 是 0444 冻结件、改 `清单` 是设计区，两侧都不该由实现方动）。主理人已上报。
+3. **§4.2 的 7 组"设计有值但未指派落位"** ⇒ **裁定：保持不收**（见 §4.2 的归属建议列；主理人把归属转给 13-B，
+   **由 13-B 判断能否用既有键承载；不能就上报，不新增键**）。
+4. **B 档"已确认值"是否算"设计写死"** ⇒ **裁定：算**（采纳"照抄已确认值 + 双锚点"）。
+   理由（主理人给）：`min_nonnull_rate` / `max_primary_drivers_per_business` 等**不属** 11 项 `freeze_param`
+   （本报告 §4.3 已逐项核过）⇒ 不触发"只指针不双写"；而 `施工图 §2 阶段②` 明写它们的家就是 `rules/baseline.yaml`
+   ⇒ **落值是对的，`tbd` 反而是错的**。
+5. **`baseline.yaml` 的 `spec_anchor`** ⇒ **裁定：采纳我的版本**（任务书写"§B/§G"是笔误；
+   `max_primary_drivers_per_business` 的原文在 `04/02 §D.2`，§B 全节无阈值）。**已按我的版本安装**。
+6. **15 个 `tbd` 键位** ⇒ **裁定：照现状，一个都不补值**。
 
-**B. 已知张力（**不是我的卡能改的**，如实上报）**
+**B. 仍开放的张力（**不是本卡能改的**，如实上报）**
 
-4. **`business_type` vs `model_class` 命名**：`04/02 §C.1/§C.2` 行文用 `business.model_class`，而 §B.1 的 schema 块与
+7. **`business_type` vs `model_class` 命名**：`04/02 §C.1/§C.2` 行文用 `business.model_class`，而 §B.1 的 schema 块与
    `04_.../01_需求拆解.md §4` 用 `business_type`；代码侧 `schema/models.py::Business` 已取 `business_type`。
    我在 `metric-sets.yaml` **照 §C.1 逐字**用 `model_class`（指标集侧字段名），**没有新增第三个名字**，文件头已登记该张力。
-5. **`tbd` 的两种语义**：本项目 `tbd` 同时用于"未冻结参数"与"设计未给值"。本次 12 个 `tbd` **全部是后者**
+   **（仍待需求方确认哪个是唯一名。）**
+8. **`tbd` 的两种语义**：本项目 `tbd` 同时用于"未冻结参数"与"设计未给值"。本次 **15 个 `tbd`**（§4.1）**全部是后者**
    （设计未给值），与 `freeze.yaml` 的 `freeze_status: tbd` **不是一回事** —— 已在每个 `tbd` 旁写 `basis` 区分。
-6. **旁证不一致（不属本卡，供主理人留意）**：`清单` **A2** 写"交易成本 = **双边合计 20 个基点（0.2%）**"，
-   而 `rules/freeze.yaml::p10` 的 `caliber_terms.transaction_cost` 仍是 `tbd`。两处对 `p10` 的值**口径不一致**
-   （一个是"已确认"、一个是 `tbd`）—— 本卡 4 个文件都不含该参数，故未处理，仅登记。
+9. **`scenario_method_status` 与 `p05` 的张力**（已按 §A-1 处理，**保留在此以便需求方回溯**）。
 
 **C. 覆盖边界（明确未做的事）**
 
-7. 本卡**只转写内容**，**不做**：安装进 `rules/`、重锁、写校验器、写测试、接线。
-   安装后需要有人核：`rules_lock_guard` 绿 + 消费方（`route_guard` / `completeness` / `valuation` / `scenario_guard`）
-   真的从这 4 个文件读值（**当前代码里这 4 个消费方尚未建**，属 13-A / 13-B 卡的范围）。
-8. 4 个候选文件**没有做 schema 校验器**（如"`stages` 数量必须与 `metric_set_id` 尾数一致"）——
-   设计未要求，且属 13-A/13-B 的测试面。
+10. 本卡**只转写内容**，**不做**：安装进 `rules/`、重锁、写校验器、写测试、接线。
+    （安装 + 重锁已由主理人完成，见 §3 ⑧。）
+11. 安装后需要有人核：**消费方**（`route_guard` / `completeness` / `valuation` / `scenario_guard`）
+    真的从这 4 个文件读值 —— **当前代码里这 4 个消费方尚未建**，属 13-A / 13-B 卡的范围。
+    ★ 安装 ≠ 接线：**现在还没有任何代码会读这 4 个文件**。
+12. 4 个规则文件**没有 schema 校验器**（如"`stages` 数量必须与 `metric_set_id` 尾数一致"、`tbd` 是否允许出现）——
+    设计未要求，且属 13-A/13-B 的测试面。
+
