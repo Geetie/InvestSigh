@@ -5,6 +5,10 @@
 - **依据**：`system/CONVENTIONS.md §九`（实现方不得自证完成）
 - **审计员立场**：**尽力证伪**。凡我构造过用例但**未能**推翻的，逐条明说"我试了 X、Y，未推翻"。
 - **审计时 HEAD**：审计开始为 `1c35154`，主体收尾时为 **`d1efa1d`**；**报告定稿时 `main` 已推进到 `d5a37f8`**（`git reflog` 实测：`d5a37f8 ← c2933c3 ← d1efa1d ← 1c35154`）。三者**均已超出被审范围**。本报告只对被审的 11 个提交下结论；范围外的改动只在 §⑥ 以"环境事实"登记，不作为交付结论。
+- **基线对齐（口径 10：报"当前态"必须带【对象 + 取样时刻】）**：
+  - 本报告**全部结论的对象 = `f0d9ee2..016f311` 这 11 个提交**；§⑧ 的复核对象 = `2a8ca32`；§⑥ 第 7 条与 `G-RC-11` 末尾复核的对象分别在各自条目标注。
+  - **`main` 稳态基线（我独立核验，非引用广播）**：对象 `69e0090`，取样时刻 **2026-09-16 22:44:57 +0800**。实测四项：`HEAD = 69e0090` ✅ · `.git/MERGE_HEAD` **不存在** ✅ · `git status --short` **0 项** ✅ · `G-61` 两要件均在 main（`cat-file -e HEAD:system/scripts/checks/scenario_tag_binding_guard.py` 命中 + `pre-commit.sh` 命中 1 处）✅。
+  - ⇒ **凡本报告中读到的 `git status` / `HEAD` 数字，一律以该时刻为界**；此后 `main` 继续推进属正常，不构成本报告任何结论的变更。
 - **定稿前复验（在本轮会话内重跑，非引用记忆）**：`G-42`（A1 击穿）在**当前 HEAD 的副本上重跑仍成立**（违例 6 → 0）；并新增一条 `G-RC-12`（夹具副本不完整时**静默继续**）。见 §③ 第 4 条与 §⑥ 第 6–7 条。
 - **纪律遵守声明**：全程**未修改任何被审文件**；一切实验在副本（仓库外的 `/tmp/investsigh-audit-b11/`，以及该目录在仓库内的旧位置 `system/tests/.audit-b11/`）中进行。
   ★ **"真源未被我触碰"的可核对表述（含时点，避免被后来的他人改动误读）**：
@@ -239,6 +243,12 @@
 - **可判定复现步骤**：见上框（脚本 `/tmp/investsigh-audit-b11/exp_fixture_integrity2.py`，逻辑即 `copytree(SYSTEM_ROOT, t, ignore=_ignore)` → `_ENSURE_DIRS` → `_make_writable` → `_reset_truth_source`，然后逐项核对 `_TRUTH_STEMS` + `registry/{corporate-actions,quality-labels,idempotency}.jsonl` + `audit/rule_changes.jsonl`；`N` 由 `sys.argv[1]` 给定）。
 - **贡献向量（实测发现）**：`system/tests/probe-f177bb76/` 是**不受 `.gitignore` 忽略的非点号目录**（`git status` 显示 `?? system/tests/probe-f177bb76/`，**1.7 MB**，内含 `system/tests/probe-f177bb76/system/tests/probe-f177bb76/…` **5 层递归自嵌套**）。而 `_ignore()` 只排除 `_COPY_SKIP` 与**以 `.` 开头**的名字 ⇒ **这个目录会被原样复制进每一个夹具副本**，且在源目录里它把"待复制项数"抬高 —— 而宿主对**单轮批量删除**有阈值（`G-RC-09`：`threshold: 9999, scope: "turn"`）。⇒ 它**同时**加重"复制更可能缺件"与"清理更可能被拒"两件事。（`system/tests/.probe-step56/` 因以 `.` 开头**不会**进副本 — 见 `_ignore()` 的 `n.startswith(".")`。）
 - **建议修法**：① `code_root` / `pristine_code_root` 在 `yield` 前加一条**响亮的完整性断言**（`for s in _TRUTH_STEMS: assert (target/"facts"/f"{s}.jsonl").exists()`，`registry`/`audit` 同理）—— 缺件时**报"夹具不完整"而不是报"产品坏了"**；② `_ENSURE_DIRS` 补 `facts`/`registry`/`audit`（或把它改为**从真源注册表派生**）；③ 清理 `probe-*` / `.probe-*` 之类实验残留，或把 `_ignore()` 改为按**前缀/白名单**排除（当前"非点号即复制"对在制品不设防）。
+- ★ **④ 补一条断言（这条是 `ws-ch2-rules` 补的，我原来的方案不够，如实归他）——"清空有效性"**：
+  我原来的①只能抓**缺件**。但 `G-60` 的实测形态是 **`SAFE_DELETE_BULK_CONFIRM_REQUIRED {"count":100267,"threshold":99999,"scope":"turn","targetCount":1}`** —— **`count` 越顶后连删 1 项也被拒**，于是 `pytest_sessionstart` 的 `_clear_work_dir()` 必失败。**这个形态下文件仍然在**（只是陈旧/不干净）⇒ **①抓不到**。
+  - ⇒ 必须再加一条：**sessionstart 之后断言工作目录确实为空**。否则观测上「**0 个文件被删**」与「**一切正常**」**不可区分**。
+  - ⇒ **两条断言各管一种失败**：① 管"**静默少文件**"，④ 管"**静默没删成**"。**缺任一条，那一半的失败就仍会被记成产品缺陷。**
+- **★ 同族归纳（这条比单个缺陷更值钱）**：`G-RC-12`（①/④）与我在本批次报的 **`G-42`（`skipped` 自报零校验）**、**`G-44`（适配器 `not outcome.skipped` 对 step 5/6 恒真）** 是**同一族** ——
+  **判据的强度不得建立在"被检对象自报"或"环境恰好为空"之上。** 三处的失败方式不同（自报可伪造 / 分支恒真 / 环境静默变空），但**都是"观测不到失败"**。建议在 `CONVENTIONS.md` 里给这一族一个**正式名字**（如"**静默等价态**"：两种语义相反的状态在观测上不可区分），并在守卫评审时逐条问"**这个判据失败时会不会静默？**"
 
 ### G-50 —— `G-48` 收口后**残留一处与 `.gitignore` 逐字相反**的注释（`conftest.py:47-49`）【严重度：**低**，但形态与 `G-48` 同族】
 

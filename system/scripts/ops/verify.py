@@ -124,6 +124,20 @@ Verdict = Callable[[int, str], tuple[bool, str]]
 #   与"测试坏了"**长得一模一样**，而本项目最怕的正是"把配额问题误当成代码缺陷去改断言"。
 QUOTA_MARKER = "SAFE_DELETE_BULK_CONFIRM_REQUIRED"
 
+# 第三类**环境性假红**（本单实测；与「超时」「配额」都不同类，症状也完全不同）：
+# `verify.py` 用 `sys.executable` 派生子进程（见 `_run` 的 `argv = [sys.executable] + …`），
+# 所以用**没有装 pytest 的解释器**跑它，每一批都在 0.2s 内 `exit=1`，输出只有一行：
+#
+#   $ python3 system/scripts/ops/verify.py --batch injection-d
+#   ✗ [injection-d] tests/injection/ 分片 D（…）  exit=1  0.16s/300s  exit=1
+#   /…/python3: No module named pytest
+#
+# ★ 与 `QUOTA_MARKER` 同样**只做归因，不做放行**（命中即判不合格）。
+#   要分开它的原因：0.16s 就全红的批次**极容易被读成"分片方案坏了 / 测试坏了"**，
+#   而真正要换的只是解释器（`run_pytest.sh` / `pre-commit.sh` 里的 `WORKBUDDY_PY`，
+#   或 `system/.venv`）—— 换个解释器同一批就是绿的。
+PYTEST_MISSING_MARKER = "No module named pytest"
+
 
 @dataclass(frozen=True)
 class Batch:
@@ -149,6 +163,13 @@ def _exit_zero(code: int, out: str) -> tuple[bool, str]:
             "而同一批里**不建夹具**的用例照常通过）。"
             "处置：**新开一轮**、只跑本片（配额按轮重置）；"
             "**不要**去改断言 —— 详见 `CONVENTIONS.md::V-08`。"
+        )
+    if PYTEST_MISSING_MARKER in out:
+        # ★ 仍然**不合格**，只是把归因说准（见 `PYTEST_MISSING_MARKER` 上方注释）。
+        return False, (
+            "**环境错误：当前解释器里没有 pytest** —— 这既不是测试失败、也不是配额。"
+            "`verify.py` 用 `sys.executable` 跑子进程，故要用装了 pytest 的解释器跑它"
+            "（实测用裸 `python3` 会 0.16s 全红）。处置：换解释器，**不要**改断言。"
         )
     return False, f"exit={code}"
 
