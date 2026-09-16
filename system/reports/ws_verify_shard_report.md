@@ -856,3 +856,51 @@ a: 27 tests collected     b: 28 tests collected     c: 27 tests collected
 d: 31 tests collected     e: 27 tests collected     f: 31 tests collected
 整目录: 171 tests collected          # 27+28+27+31+27+31 = 171 ✓（逐片合计与整目录逐位相符）
 ```
+
+### 8.10 终验收快照（`0a59915` 提交后，工作树零未提交改动）
+
+```
+$ python system/scripts/ops/verify.py --list
+可用批次（每批独立子进程 + 独立超时）：
+  injection-a tests/injection/ 分片 A（审计回归 + 链路接线）             超时   300s
+  injection-b tests/injection/ 分片 B（判据有效性 + 守卫防御性）           超时   300s
+  injection-c tests/injection/ 分片 C（守卫拦截 A 半 + 追加式）          超时   300s
+  injection-d tests/injection/ 分片 D（守卫拦截 B 半 + 幂等 + 时间契约）    超时   300s
+  injection-e tests/injection/ 分片 E（提示注入 + rules 锁）          超时   300s
+  injection-f tests/injection/ 分片 F（阶段闸门 + 接线守卫 + 分片绑定）      超时   300s
+# ⇒ **没有 `injection` 这一项** —— 那个"目录全量"入口已删除
+
+$ # 判据真源（按文件路径加载 verify.py 现读）
+BATCHES = 20 | ORDER = 20 | 键集合一致: True
+INJECTION_SHARDS = ('injection-a', 'injection-b', 'injection-c', 'injection-d', 'injection-e', 'injection-f')
+裸 injection 批还在吗: False
+六片超时 = [('injection-a', 300.0), ('injection-b', 300.0), ('injection-c', 300.0),
+           ('injection-d', 300.0), ('injection-e', 300.0), ('injection-f', 300.0)]
+ORDER 位置 = 3 ~ 8
+
+$ python -m pytest tests/injection/test_shard_coverage.py -q --noconftest -p no:cacheprovider
+......                                                                   [100%]
+6 passed in 4.48s
+
+$ python system/scripts/checks/verification_policy_guard.py system
+RESULT: PASS（0 violations）   # 20 批 / 26 目标 / test_files 56 / **未覆盖 0** / max_timeout_s 300
+
+$ sh system/scripts/ops/pre-commit.sh
+pre-commit ✓ 全部门禁放行        # 11 道，**未用 --no-verify**
+
+$ git status --short
+(空)
+
+$ git diff --stat HEAD -- '00_*.md' … '11_*'
+(空 —— 设计区零改动)
+
+$ git diff --stat 016f311 HEAD     # 本单碰过的文件，全部在授权范围内
+ system/CONVENTIONS.md                              | 117 ++-
+ system/reports/ws_verify_shard_report.md           | 858 +++++++++++++++++++++
+ system/scripts/ops/verify.py                       | 230 +++++-
+ system/tests/injection/_guard_common.py            |  84 ++
+ system/tests/injection/test_guards_reject_a.py     | 267 +++++++
+ ...st_guards_reject.py => test_guards_reject_b.py} | 291 +------
+ system/tests/injection/test_shard_coverage.py      | 388 ++++++++++
+# ⇒ 未碰 rules/**（仍 0444）、未碰 tests/conftest.py、未碰设计区
+```
