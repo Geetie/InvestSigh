@@ -147,10 +147,10 @@ def test_persist_false_writes_nothing_and_still_returns_ok(code_root: Path) -> N
 
 
 def test_ingest_handler_rerun_is_idempotent_not_degraded(code_root: Path) -> None:
-    """step 1 处理器对**同一投递文件**重跑：claims 行数不变、`degraded=False`、`produced` 非空。
+    """step 1 处理器对**同一投递文件**重跑：claims 行数不变、`degraded=False`。
 
-    ★ 最后一条是关键：若把"幂等命中"折进 `else: degraded=True`，重跑会被记成降级，
-      且 `produced` 为空 → 撞上 `G1-05`「报 ok 但 produced 为空（空执行）」→ **正常重跑变 blocked**。
+    ★ `produced` 只记**本轮真正新写入**（裁定 2 / `G-B10-07`）：
+      首跑 `produced` 非空、`skipped == []`；重跑 `produced == []`、命中对象进 `skipped`。
     """
     from scripts.orchestrate.ingest_step import make_ingest_handler
 
@@ -163,9 +163,91 @@ def test_ingest_handler_rerun_is_idempotent_not_degraded(code_root: Path) -> Non
     n1 = _line_count(code_root)
     assert n1 == 1, f"首次应落 1 行，实得 {n1}"
     assert first.degraded is False, "首次正常摄入不应降级"
+    assert first.produced and first.skipped == [], "首跑：produced 非空、skipped 为空"
 
     second = handler(date(2026, 9, 16), "sample")
     n2 = _line_count(code_root)
     assert n2 == n1, f"★ 重跑不得新增行：{n1} -> {n2}"
     assert second.degraded is False, "幂等重跑**不是**降级（重跑同日不重复落库是设计行为）"
-    assert second.produced, "幂等命中仍应报告已存在的对象引用（避免被 G1-05 空执行误判）"
+    assert second.produced == [], "★ 重跑未新写入 → produced 必须为空（produced = 本轮真正新写入）"
+    assert second.skipped == first.produced, "★ 命中对象走 skipped，且应与首跑 produced 同一批"
+
+
+# ───────────── (a) 双跑端到端对照：`G-B10-07` 的正解观测（produced vs skipped）─────────────
+
+
+def test_run_daily_twice_produced_then_skipped(code_root: Path) -> None:
+    """★ (a) 副本上跑两次 `run_daily`：第 1 轮 `produced` 非空且 `skipped==[]`；
+    第 2 轮 `produced==[]` 且 `skipped` = 第 1 轮那批 `claim_id` 的集合。
+
+    ★ 打印两次的 `(produced, skipped)` 实测量 —— 这是"幂等 vs 非幂等"的**判别式本体**：
+      幂等的正解是两轮观测**不同**（`produced` N→0、`skipped` 0→N）；把它们折进同一字段
+      会让两轮观测**完全相同**，`G-B10-07` 要暴露的信号即被重新掩盖。
+    """
+    from scripts.orchestrate.pipeline import Pipeline
+
+    inbox = code_root / "raw" / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    (inbox / "2026-09-15_amd_q2.txt").write_text("AMD MI300 guidance.\n", encoding="utf-8")
+    (inbox / "2026-09-16_nvda_q2.txt").write_text("NVIDIA data center revenue.\n", encoding="utf-8")
+
+    pipeline = Pipeline(code_root)
+    r1 = pipeline.run_daily(date(2026, 9, 16))
+    s1 = next(s for s in r1.steps if s.step == 1)
+    n1 = _line_count(code_root)
+    print(f"[(a) round1] produced={s1.produced} skipped={s1.skipped} claims_lines={n1}")
+
+    r2 = pipeline.run_daily(date(2026, 9, 16))
+    s2 = next(s for s in r2.steps if s.step == 1)
+    n2 = _line_count(code_root)
+    print(f"[(a) round2] produced={s2.produced} skipped={s2.skipped} claims_lines={n2}")
+
+    assert s1.produced and s1.skipped == [], "首跑：produced 非空、skipped 为空"
+    assert n2 == n1, f"★ 重跑不得新增行：{n1} -> {n2}"
+    assert s2.produced == [], "★ 重跑：produced 必须为空（本轮未新写入）"
+    assert set(s2.skipped) == set(s1.produced), (
+        "★ 重跑：skipped 应恰为首跑那批 claim_id（幂等命中的对象引用）"
+    )
+
+
+# ───────────── (b) `G1-05` 修正判据的**双向**对照（只证一边不算，批次 10 `C-03`）─────────────
+
+
+def _g1_05_empty_execution_reasons(result) -> list[str]:
+    """跑 `assert_steps_complete`，只取"空执行"类违例的 reason（隔离判据本体）。"""
+    from scripts.orchestrate.pipeline import assert_steps_complete
+
+    return [
+        v.reason
+        for v in assert_steps_complete(result, {"publish_hook": True, "verify_hook": True})
+        if "空执行" in v.reason
+    ]
+
+
+def test_g1_05_still_flags_truly_empty_step() -> None:
+    """(b) 反向：桩处理器 `produced=[] 且 skipped=[]` → **仍必须**判"空执行"违例（判据强度**未**削弱）。"""
+    from scripts.orchestrate.pipeline import STATUS_OK, RunResult, StepResult
+
+    result = RunResult(
+        run_date="2026-09-16",
+        scope="full",
+        steps=[StepResult(2, "s2", STATUS_OK, produced=[], skipped=[])],
+    )
+    assert _g1_05_empty_execution_reasons(result), (
+        "produced 与 skipped **双空**必须仍被判『空执行』违例（否则判据被削弱）"
+    )
+
+
+def test_g1_05_does_not_flag_idempotent_rerun() -> None:
+    """(b) 正向：桩处理器 `produced=[] 但 skipped=["claim-x"]` → **必须不**判"空执行"违例。"""
+    from scripts.orchestrate.pipeline import STATUS_OK, RunResult, StepResult
+
+    result = RunResult(
+        run_date="2026-09-16",
+        scope="full",
+        steps=[StepResult(2, "s2", STATUS_OK, produced=[], skipped=["claim-x"])],
+    )
+    assert _g1_05_empty_execution_reasons(result) == [], (
+        "幂等重跑（produced 空但 skipped 非空）**不得**被判『空执行』"
+    )
+

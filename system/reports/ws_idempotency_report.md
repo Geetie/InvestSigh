@@ -231,3 +231,96 @@ $ wc -l system/facts/{claims,dependency_edges,companies,tasks,baselines,recommen
 5. **未跑的验证**：按 `V-01`/`V-08` 只跑相关子集，**未跑全量** `verify.py --batch all`；
    `tests/guards`、`tests/graph`、`tests/daily` 等**未跑**（不在本单相关面）。`stage_gate` 的既有红
    **不在本单范围**，未处理。
+
+---
+
+## ⑤ 裁定与回修（第二轮）
+
+主理人两条裁定 + 回修。回修**只动我自己的两个文件**（`scripts/orchestrate/pipeline.py` 属共享契约，**未动**）。
+
+### 5.1 裁定 1：**允许** `executor.STATUS_SKIPPED` —— 采纳，`executor.py` 未改
+
+理由（记录在案）：消费侧构造上 fail-safe —— `ingest_step` 的分支是
+`if OK / elif SKIPPED / else: degraded=True`，未知取值落 `degraded`（"不算成功"一侧），
+故新增取值**不可能凭沉默取得成功语义**。命名空间已注明：`executor` 的 `skipped` =
+**对象粒度·行幂等命中**；`pipeline.STATUS_SKIPPED` = **整步被 resume 跳过**（不同粒度，勿混）。
+
+### 5.2 裁定 2：**驳回**"命中对象计入 `produced`" —— 已按契约回修
+
+- `scripts/orchestrate/ingest_step.py:244-249`：幂等分支由 `produced.append(...)` 改为
+  `skipped.append(...)`（独立列表）；
+- `:256`：`return StepOutcome(produced=produced, skipped=skipped, degraded=degraded, signals_emitted=0)`；
+- `:197-201` docstring **逐字改正**（不再称"计入 produced"）。
+- ★ **未**把命中**同时**放进 `produced` 与 `skipped`（那等于没改）。
+
+### 5.3 合并 main
+
+```
+$ git merge main
+a29ec90 (HEAD -> ws/idempotency, main) merge ws/idempotency: claim 写路径补行幂等键 ...
+```
+（快进；`StepOutcome.skipped` / `StepResult.skipped` / `G1-05` 判据修正由 main 的 `4f95c3d` 带入。）
+
+### 5.4 新增/更新用例（三组，缺一不可）
+
+**(a) 双跑端到端对照（`G-B10-07` 正解观测）** `test_run_daily_twice_produced_then_skipped`
+
+```
+$ sh system/scripts/ops/run_pytest.sh tests/injection/test_idempotency_rows.py -q -s
+[(a) round1] produced=['claim-inbox-2026-09-15_amd_q2.txt-7ccf4b51f693', 'claim-inbox-2026-09-16_nvda_q2.txt-ea86884f9f68'] skipped=[] claims_lines=2
+[(a) round2] produced=[] skipped=['claim-inbox-2026-09-15_amd_q2.txt-7ccf4b51f693', 'claim-inbox-2026-09-16_nvda_q2.txt-ea86884f9f68'] claims_lines=2
+9 passed in 12.52s
+```
+→ 两轮观测**不同**（`produced` N→0、`skipped` 0→N、`claims_lines` 不变）—— 正是"幂等 vs 非幂等"的判别式本体。
+
+**(b) `G1-05` 修正判据的**双向**对照**
+- `test_g1_05_still_flags_truly_empty_step`：桩 `produced=[] 且 skipped=[]` → **仍判**"空执行"违例（判据强度**未**削弱）；
+- `test_g1_05_does_not_flag_idempotent_rerun`：桩 `produced=[] 但 skipped=["claim-x"]` → **不判**违例（幂等重跑不再误报）。
+（二者含在上面同一 `9 passed` 内。）
+
+**(c) 复原对照（去闸门，副本 `/tmp/idem_control2` 内）**
+
+```
+[(a) round1] produced=[2 claims] skipped=[] claims_lines=2
+[(a) round2] produced=['claim-inbox-2026-09-15_amd_q2.txt-7ccf4b51f693', 'claim-inbox-2026-09-16_nvda_q2.txt-ea86884f9f68'] skipped=[] claims_lines=4
+FAILED tests/injection/test_idempotency_rows.py::test_same_source_same_quote_hash_does_not_append
+FAILED tests/injection/test_idempotency_rows.py::test_rerun_many_times_stays_single_row
+FAILED tests/injection/test_idempotency_rows.py::test_ingest_handler_rerun_is_idempotent_not_degraded
+FAILED tests/injection/test_idempotency_rows.py::test_run_daily_twice_produced_then_skipped
+4 failed, 5 passed in 0.66s   (EXIT=1)
+```
+→ 去掉闸门后 round2 `produced` 非空、`skipped` 空（回到非幂等），(a) 用例**变红** —— 判别力成立。
+
+### 5.5 验证（其他目录无受影响）
+
+| 目录 | 结果 | 退出码 |
+|---|---|---|
+| `tests/injection` | **139 passed** | 0 |
+| `tests/compute`（`test_step_wiring.py` 钉 `produced` 语义） | **95 passed** | 0 |
+| `tests/daily` | **43 passed** | 0 |
+| `tests/guards`（`test_exit_code_contract` 含 `pipeline`） | **56 passed** | 0 |
+
+- ★ `tests/orchestrate/` **不存在**；编排器面由 `tests/injection/test_chain_steps_wiring.py`
+  （step 1–6 接线 / `StepOutcome` / `G1-05`）与 `tests/compute/test_step_wiring.py` 覆盖，二者均在上述已跑目录内。
+- 无 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` 告警。
+- 合并后 `tests/injection` 的 `stage_gate` **既有红已消失**（139 passed 全绿）。
+
+### 5.6 pre-commit 与真源零污染
+
+```
+$ sh system/scripts/ops/pre-commit.sh
+pre-commit ✓ 全部门禁放行          (EXIT=0，无需 --no-verify)
+
+$ git status --short system/facts system/derived
+                                   (空 = 零污染)
+$ git diff HEAD --quiet -- system/facts system/derived && echo FACTS_MATCHES_HEAD=yes
+FACTS_MATCHES_HEAD=yes
+```
+（注：工作树 `facts/tasks.jsonl` 现为 **4 行** —— 这是 main 上其它工作流合并带来的**已提交**状态，
+**非本次写入**；本轮 `facts/`、`derived/` 与 HEAD **逐字一致**。）
+
+### 5.7 本轮提交
+
+- `d9fc241` 回修（`ingest_step.py` + `tests/injection/test_idempotency_rows.py`）；
+- 其后一笔 `docs(report)` 更新本节（哈希见 `git log`）。
+
