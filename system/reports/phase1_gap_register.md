@@ -689,3 +689,27 @@ main 的工作树**瞬时**处于「`pre-commit.sh` 已带入 `quote_provenance_
 
 ★ **它不是唯一的受害者形态**：错误信息**指向提交者自己树里不存在的文件** ⇒ 极易被误读成"我删了文件/我改坏了"——
 **又一个"工具会把证据变假"的实例**（与口径 1′、`G-60` 同族）。
+
+### 13.10 `G-60` **源码级升级**：`_clear_work_dir` 的"告警并继续"**从未生效**（`ws-degrade-contract` 取证）
+
+`main:system/tests/conftest.py::_clear_work_dir` 的注释明写：清不干净时**刻意不 raise**（理由："整批在 1s 内全红"比静默更坏）。
+**这个设计意图在闸门触发时不可能实现**：
+```
+sitecustomize.py:819 _exit_bulk_guard_control  →  :826 raise SystemExit(1)
+shutil.rmtree(child, ignore_errors=True)       →  只吞 OSError，吞不掉 SystemExit ⇒ 直接穿透
+```
+⇒ 所谓"告警并继续"的韧性**从未生效**，实际是 **`pytest_sessionstart` 硬死**。
+★ **与 `T-18` 同族**：**声明的行为与实现的行为不一致**。
+⇒ 卡 13-M 的取证要求追加一条：**修完后必须实测"闸门触发时仍能降级继续"**（而不是只看退出码）。
+
+★ **一处自我更正（`ws-degrade-contract` 撤回自己的"笔误"判断）**：`_clear_work_dir` 注释写 `threshold: 9999` ——
+它本要报"笔误"，**查历史载荷后撤回**：16:57~19:xx 那批载荷**确实是 `9999`**（本次也真读到），现在才是 `99999`。
+⇒ 该注释是**当时正确、现已过期** ⇒ 按「**过期文档**」记，**不是错误**。★ 与 `G-54` 的"阈值不是固定 9999"是同一条。
+
+### 口径 11 扩展之二（`ws-degrade-contract` 第 4 条方法学补充）
+★ **分支有多个 merge base 时，git 会警告并「任选其一」** ⇒ **`git diff main...b`（三点）的差分是*任意*的**，
+**不能**用来判"该分支新增了哪些文件"。
+⇒ 规矩：**缺口判别统一用两点 `git diff --numstat main..b`**（方向明确）+ `git cat-file -e main:<path>`（存在性）；
+**不要**用三点 `main...b` 做"新增文件"结论。
+★ 并记一条**新的失效模式**（第 4 种）：**分支上的 merge commit 本身**（标题形如 `Merge branch 'main' into <branch>`）
+就会让 `main..b = 1`，**而内容贡献为零** ⇒ 必须用两点内容差分排除。
