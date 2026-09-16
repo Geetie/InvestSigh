@@ -199,6 +199,21 @@ exit=1
 **如实标注"有无机器强制"** 的那张表在 §8 用例 4 的 `Q8` 自答里：
 有机器强制 = 薄壳正文形态 / 退出码契约 / 漂移可分；**没有** = ①方向②不自动报警 ②"钩子真被 git 调用"未验。
 
+### 8.4 ★ T1 的直接实测：在**真钩子环境**下解析到的根（最关键的一步）
+
+前面 §8.1–8.3 都还没回答一个问题：**薄壳在真钩子里**（`GIT_DIR` 已被 git 导出）解析出的根，
+到底是不是"发起提交的那棵树"？这是 `T1 同源` 的本体，必须实测。
+
+| 场景 | 注入的环境（模拟钩子） | 薄壳解析出的 `root` | 与 `pre-commit.sh` 的 `REPO_ROOT` | 结论 |
+|---|---|---|---|---|
+| **linked worktree**（`cwd` = `.worktrees/ws-ch2-rules`） | `GIT_DIR=/Users/gaza/Developer/InvestSigh/.git/worktrees/ws-ch2-rules` | `/Users/gaza/Developer/InvestSigh/.worktrees/ws-ch2-rules` | 同一棵树 | ✅ **同源成立**（**不是**主仓根 —— 旧钩子钉死的就是它） |
+| **主仓**（`cwd` = `/Users/gaza/Developer/InvestSigh`） | `GIT_DIR=/Users/gaza/Developer/InvestSigh/.git` | `/Users/gaza/Developer/InvestSigh` | 同一棵树 | ✅ **主仓行为不变**（== 旧钩子写死的那个根） |
+
+★ 两次都另测了 `[ -f "${root}/system/scripts/ops/pre-commit.sh" ]` ⇒ 均**为真** ⇒ 方向①（幽灵门禁）在两条路径上都不会再出现。
+★ 这同时说明**旧钩子为什么必错**：它把上表第一行的 `root` 硬写成第二行 —— **W 与 M 被同一个常量抹平**。
+★ 仪器/对象（`口径 10`）：`ws/ch2-rules` 树，`HEAD = 54a7885`，取样 **2026-09-16 23:10**；
+  只做 `rev-parse`（**只读**，未跑门禁、未改任何文件、未安装钩子）。
+
 ## 9. 交付状态与待批准的动作
 
 ### 9.1 已完成（**未安装任何共享文件**）
@@ -212,6 +227,7 @@ exit=1
 | **判红实测（E0–E5 六例全部符合预期）** | §8.1 |
 | **两份输出不同形（逐字）** | §8.2 |
 | **漂移可探测（`--check` = 1）** | §8.3 |
+| **★ T1 本体实测：真钩子环境下解析到"发起提交的那棵树"** | §8.4（worktree 与主仓两条路径都测） |
 | **安装前全量门禁** | 在本树跑**修改后**的 `sh system/scripts/ops/pre-commit.sh` ⇒ `exit=0`，14 道全 PASS（日志 `/tmp/ch2_pc_new.log`） |
 
 ### 9.2 待你批准（我**一律没做**）
