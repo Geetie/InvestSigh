@@ -2299,3 +2299,80 @@ $ git merge-base --is-ancestor 53de9a3 ea0ceae  → YES（53de9a3 更早）
 `f819bab`（采纳 merge-tree 干跑手法 + 更正 `76a2d5b`→`76ec851` + 精确化逐文件删除的作用域）、
 `261f8c9`（★ 撤回「逐文件删除」方向 + 三条验收判据 + `targetCount` 语义）、
 `28e1eff`（`口径 11` 扩展之三 + `口径 16`）、`3e644a2`（`G-61` 第二种形态）—— 即 §17.9/§17.10/§17.11 的结论已落主干。
+
+---
+
+### §17.13 卡 13-O（钩子同源化）收口 + ★ **一处对我自己的事实更正（`grep \|` 的根因我归错了）**
+
+**对象（`口径 10`）**：本树 `ws/ch2-rules`；`HEAD = ab2629b`（`54a7885` + `ab2629b`），树干净，
+`system/rules/*.yaml` 仍 `-r--r--r--`；**`refs/heads/main = 5b9bdc3`（2026-09-16 23:09:19）**，
+且 `git merge-base --is-ancestor main HEAD` **为假** ⇒ 本树**尚未**含 `5b9bdc3`。
+
+**一、交付（本卡的报告-of-record 是专门的设计短文，不在本节重复）**
+
+`system/reports/ws_hook_same_source_design.md`：§1 现象三份现场/两条流 · §2 根因两行代码 ·
+§3 为什么"每次 merge"不是解 · §4 目标 T1–T4 · §5 候选 A/B/C/D + **否决 B 的原理性理由**
+（"一棵树只能被它自己的规则判"）· §6 方向②处置 · §7 风险/共享影响/回滚 · §8 反例 + E0–E5 实测 ·
+§9 状态与待批 · §10 边界。
+
+代码：`install_hooks.sh`（薄壳单一真源 + `--print`/`--check` + 自动备份 + `--git-common-dir`）、
+`pre-commit.sh`（输入预检 + `rc=2`/`rc=1` 分流 + 收尾 `exit 2`）、
+`tests/guards/test_hook_same_source.py`（4 例，`--noconftest` 零夹具，`4 passed in 2.77s`）。
+
+**★ 本卡最关键的一步是 §8.4**：前面所有验证都**没有**回答"薄壳在**真钩子**里（`GIT_DIR` 已被 git 导出）
+解析出的根，是否就是发起提交的那棵树"。实测两条路径（**只读 `rev-parse`，未跑门禁、未改文件、未装钩子**）：
+
+| 场景 | 注入环境 | 解析出的 `root` | 结论 |
+|---|---|---|---|
+| linked worktree | `GIT_DIR=.git/worktrees/ws-ch2-rules` | `…/.worktrees/ws-ch2-rules` | ✅ 同源成立（**不是**主仓根） |
+| 主仓 | `GIT_DIR=.git` | `/Users/gaza/Developer/InvestSigh` | ✅ 行为不变（== 旧钩子写死的那个根） |
+
+⇒ **旧钩子为什么必错**：它把第一行的 `root` **硬写成**第二行 —— **两棵树被同一个常量抹平**。
+
+**二、★★ 事实更正：`grep 'a\|b'` 返回空，根因**不是** BSD grep（我此前归错了，且我已在别处引用过）**
+
+我在本批次里两次把 `grep -n 'x\|y' <file>` 返回空归因为「**BSD/macOS `grep` 不支持 BRE 交替**」，
+并按此形成纪律。`main` 的 `5b9bdc3` 标题更正为「**broker 包装器，非 BSD BRE**」。**我现场复测，结论站在 `5b9bdc3` 一边，我错了**：
+
+```
+$ command -v grep
+/Applications/WorkBuddy.app/…/cli/vendor/shim/brokered-bin/grep
+$ ls -l "$(command -v grep)"
+…/brokered-bin/grep -> codebuddy-toybox-dispatch          ← ★ PATH 上的 grep 是**broker 的 toybox 派发器**
+$ grep --version | head -1
+toybox 0.8.13 (is not GNU grep 9.0)                       ← ★ 括号里那句就是包装器加的
+
+$ grep -n 'alpha\|beta' /tmp/greptest.txt   → 空 · exit=1   ← 走 PATH ⇒ toybox ⇒ 不支持 \|
+$ /usr/bin/grep --version | head -1
+grep (BSD grep, GNU compatible) 2.6.0-FreeBSD
+$ /usr/bin/grep -n 'alpha\|beta' /tmp/greptest.txt
+1:alpha
+2:beta                                                     ← ★ 真 BSD grep **支持** \| · exit=0
+$ grep -nE 'alpha|beta' /tmp/greptest.txt   → 两行都中 · exit=0  ← -E 在两边都可用
+```
+
+**更正后的正确表述**：不是"BSD grep 不支持 `\|`"，而是
+「**本环境的 `grep` 是动态派发：PATH 上是被 broker 影子化的 toybox 派发器（不支持 `\|`），
+而 `/usr/bin/grep` 是真 BSD grep（支持 `\|`）**」。
+⇒ 纪律**不变但理由要改**：**一律 `grep -E`（两边都可用）或用 Grep 工具**；
+★ 新增一条更狠的推论：**凡在脚本里写裸 `grep`，其行为取决于"谁的 PATH"** ——
+门禁脚本、钩子、pytest 子进程可能各自解析到**不同的 `grep`**。这是一个**环境依赖的静默分支**，
+与 `G-61`/`G-62` 同族（**用"不携带我们要问的那个语义"的载体去回答那个语义问题**）。
+**我未去全仓搜裸 `grep '…\|…'` 的调用点**（不属本卡），如实登记，只报"理由改了"。
+★ 这条同时是 `口径 10` 的一次自救：我原先把**当时的读数**（空）配上了一个**未验证的归因**（BSD）——
+**"现象为真"不等于"归因为真"**，与 §17.12 的"较早时刻的标签 ≠ 操作时的对象"是同一类毛病。
+
+**三、本树与 `main` 的门禁面差异（自查答案：**暂时无差**）**
+
+```
+本树门禁数 = 14 · main 门禁数 = 14 · 逐条门禁名 diff **为空**
+```
+⇒ `5b9bdc3` 未新增门禁 ⇒ **本树此刻不会撞幽灵门禁**。
+★ 但这只是**此刻**的读数（`口径 10`/`口径 9`）：**一旦 `main` 再加一道门禁，本树立刻会撞** ——
+这正是 13-O 要治的病，也是它必须被安装（而非"每次 merge 一下"）的理由。
+
+**四、边界（如实）**
+1. **共享钩子未安装**：`.git/hooks/pre-commit` 仍是旧版（138 字节、mtime `00:13`）——
+   全 34 人共享，改坏则全体无法提交 ⇒ 我**一个字都没动**，已请 team-lead 的 go。**未用 `--no-verify`。**
+2. 方向②（判据旧于对象）**仍未实测** ⇒ 按 `G-03` 不计为已验证。
+3. 本节所有读数：**无耗时、无配额**（`口径 21`：本卡不含任何跑批测量）。
