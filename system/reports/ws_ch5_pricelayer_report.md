@@ -55,7 +55,7 @@
 | 项 | 内容 |
 |---|---|
 | 主理人实测 | 真 `rules/scenario.yaml` 顶层键含 **`scenario_method_blocking`** · **`scenario_method_status_domain`** · `scenario_method_status_note` · `scenario_method_status_promotion` |
-| 根因 | `scenario_guard.py:195`（首轮）把「`pending` ⇒ 阻塞相对判断生成」写成常量、取值域也写成常量 ⇒ 违反 `P-09` / `Ch11 §D.2`「**参数只能住 `rules/`，代码不得内置**」，并造成**规则文件改了、代码不改**（本项目反复出现的"声明与实现脱节"） |
+| 根因 | `scenario_guard.py` **首轮版**把「`pending` ⇒ 阻塞相对判断生成」的**取值域写成模块常量**（首轮 `SCENARIO_METHOD_STATUSES`；★ 该常量在 `9834f4f` 上位于**第 91 行**，本报告旧版此处引的 `:195` 当时就只是该函数的 **docstring**，见 §② `V-1n`）⇒ 违反 `P-09` / `Ch11 §D.2`「**参数只能住 `rules/`，代码不得内置**」，并造成**规则文件改了、代码不改**（本项目反复出现的"声明与实现脱节"） |
 | 修法 | 阻塞条件改读 `scenario_method_blocking.{when, effect, downstream_output, required_field_at_downstream}`；取值域改读 `scenario_method_status_domain`。`assert_relative_judgment_allowed` 改为按 **`policy.blocking`** 分支（不再看 `is_pending`）；报错文案内联规则文件给的口径原文 |
 | **不做假设** | `when` 用**刻意极小且严格校验**的语法解析：`<字段> == <单 token>`，字段必须**恰为** `scenario_method_status`；形态不认识 ⇒ `ScenarioGuardError("… 形态不认识 … 不发明表达式求值器")`。缺键 ⇒ 回落设计逐字条件 `scenario_method_status == pending`（`DESIGN_BLOCKING_WHEN`）并记 `NO_BLOCKING_RULE` note |
 | 真文件实测 | `blocking: True` ｜ `domain: ('pending','neutral','probability_weighted')` ｜ `blocking_effect: 'assert_scenario_match 无法建立一致口径 → **阻塞相对判断生成**'` ｜ `blocking_downstream: '待判断（而非建议）'` ｜ `required_field_at_downstream: 'benchmark_forecast'` ｜ `assert_relative_judgment_allowed` → **BLOCKED**（文案取自规则文件） |
@@ -466,7 +466,7 @@ $ python - <<'PY'    # 逐项改**真 rules/ 的副本**，再直接调该模块
 | `chmod` 只出现在夹具的副本处理 | 仅 `tests/pricelayer/conftest.py` ×1（真文件 0444 未被碰） | ✅ **成立** |
 | `pre-commit` 输出 0 FATAL | 保存件 `[FATAL]` = **0**、`全部门禁放行` = **1** | ✅ **成立** |
 | `verify.py` 批次数 | `': Batch('` = **23** | ✅ **成立** |
-| `load_unregistered_fallback` 调用点已全部改为 dataclass | 5 处代码调用点无残留元组解包（`valuation.py:201/577` 用 `.method_class`） | ✅ **成立** |
+| `load_unregistered_fallback` 调用点已全部改为 dataclass | 5 处代码调用点无残留元组解包（调用点取 `.method_class`；★ 本报告旧版此处引 `valuation.py:201/577`，那是 `f648a3d` 时**成立**的行号，**已漂**到 `valuation.py:211/600` —— 机理见 §② `V-1n`） | ✅ **成立** |
 
 ★ 同时认领**同族第二处**（自查）：`python … | tail -8; echo $?` 报的是 **`tail` 的退出码**而非 python 的
 （与 `grep \|` 空真同一病灶：**测的不是被测对象**）。已改为 `cmd > file 2>&1; echo "exit=$?"`（不经管道）。
@@ -774,6 +774,11 @@ $ git diff --stat 862e91c 2c30cee -- system/scripts/pricelayer
 ——它只是**看起来可falsify**。这与本卡 §③"不写死条数"是**同一条病**（`#84`/`#91` 同族）。
 ★ **若重取得到 `201`（在前提成立时）** ⇒ 才说明**真有组没被收集**，那时才该按配平表往下查。
 
+★★ **真源（不再由本流复述结论）**：本条已被主理人**落纸**为
+`system/CONVENTIONS.md` → `V-10` 元规矩 **推论二「用会漂的常数表达的预测，不是可判伪的预测」**
+（提交 `e17d743`，其 commit message 注明"`ws-ch5-pricelayer` 提出"）。
+★ 按 `V-11` 规则 9（引用位置/数字须**指真源**），后人应以**该处**为准，本行只作**当时读数的留档**。
+
 ★ **代价登记（诚实）**：本条对照**不是本流自己跑的批次**（本流遵主理人指令**不自起会话**），
 对象也不是本工作树；且 `ws-verify-shard` 已按其口径**明确拒绝**做 `202` vs `201` 的比较
 （`口径 21`：不同口径不得比大小）。本流在此**补上的是"差在哪"的机理**（对象差一个提交），
@@ -781,19 +786,84 @@ $ git diff --stat 862e91c 2c30cee -- system/scripts/pricelayer
 ★ **主理人裁定（第五轮）**：该读数**接受为"对象是另一棵树的合法读数"（`V-11`：举证半径 = 结论半径），
 可引用（**须标注对象** `ws-fixture-cost @ 2c30cee`）；但**不能替 `#101` 结案**，因本卡对象**不含**最后那个提交。
 
-★ **`G-60` 前提修正（本流自查代码证实，非转述）**：`verify.py::_child_env()`（`verify.py:620-625`）
-**显式**返回 `CODEBUDDY_SAFE_DELETE_ENABLED="0"`（`run_pytest.sh:35` 同；`3653c7c` 起，已在 main），
+★ **`G-60` 前提修正（本流自查代码证实，非转述）**：`verify.py::_child_env()` 的**返回值**里
+**显式**写着 `"CODEBUDDY_SAFE_DELETE_ENABLED": "0"`
+（★ **载荷行 = `verify.py:649`**（本对象 = `132cfc7`；该行在 `e17d743` 前后**均**为 `649` —— 因其插入点在其**下方**）；
+论证段 = `verify.py:637-643`；`run_pytest.sh:35`（`export CODEBUDDY_SAFE_DELETE_ENABLED=0`，本对象复核成立）；`3653c7c` 起，已在 main），
+★★ **自曝（本条旧版是"引错"，不是"漂"）**：旧版此处写 `（verify.py:620-625）` ——
+经查 `98af920` 那一版 `verify.py` 的 `620-625` 是 `_child_env()` **docstring 里关于 broker 卡死的那一段**，
+**根本不含** `SAFE_DELETE_ENABLED` ⇒ 该引用**在写下它的那次提交上就不成立**（机理与"漂"不同，见 §② `V-1n`）。
+★ 连带的诚实结论：`98af920` 那次我做的自查（把 §③ 改成"指真源"）**没有发现它** ——
+说明"改口径"不等于"复核了同一段里的每个引用"。
 该函数 docstring 写明这是 `E` 裁定的「**合法配置**、非绕过」，且"`E` 下即**生产/门禁口径**"。
 ⇒ **走包装器跑批次，删除守卫是关的**；撞配额的是**绕过包装器直接跑 `pytest`** 那条路径。
 ⇒ 故本卡原先"等窗口 / 会撞 `G-60`"的前置**对门禁口径不成立**，已订正。
-⇒ ★ **派生边界（本流登记，供主理人处置）**：`SAFE_DELETE_BULK_CONFIRM_REQUIRED` 这一整类
+⇒ ★ **派生边界（本流登记 → ★ 主理人已裁定并落纸，本行改为"指真源"）**：`SAFE_DELETE_BULK_CONFIRM_REQUIRED` 这一整类
 在**门禁口径里结构性不可达**。**"不可达"≠"不存在"** —— 绕过包装器那条路径上它**是活的**
 （`Bash` env 实测 `=1`）。若门禁侧不**明文**写下"删除配额不属于门禁口径"，
 后来的读者会把"门禁里从没见它红过"读成"该约束不成立" —— 即 **`G-62` 加在安全机制自身**上：
 **"没报"与"没被检"在读数上长得一样**。
+★★ **真源 = 两处，均已落纸（提交 `e17d743`）**：
+① `system/CONVENTIONS.md` → `V-10` 元规矩 **推论三**（"`E` 口径下「删除配额」这一整类失败
+结构性不可达 —— 必须显式写下适用范围"）；
+② **代码侧**：`system/scripts/ops/verify.py::_child_env()` **返回处注释**（`V-08` 适用范围）。
+⇒ 本流原"**供主理人处置**"一项**已闭环**；本行自此**不再是对主理人的待办请求**。
 ★ **但"要不要现在跑"本流不擅自决定**（主理人已下"不要自起会话"，且窗口序由他定）。
 
 ---
+
+### `V-1n` 引用复核：本报告自己的**绝对行号引用**全量重证 —— 6 处失效，**两种机理不可混谈**
+
+**触发**：并入 `main`（`1245080`）后，按 `V-11` 规则 9（"引用位置/数字须**指真源**或**明写当时读数**"）
+把本报告里所有 `<文件>:<行号>` 形式的引用**逐条重核**（不抽样）。
+
+**仪器与命令**（`口径 16`：命令 + 退出码 + 工具名）：
+
+```sh
+# ① 列出全部绝对行号引用（★ 用 -E，不用 BSD BRE 的 \|，见 CONVENTIONS.md 元规矩）
+/usr/bin/grep -nE "[A-Za-z0-9_./-]+\.(py|sh|yaml|md|json):[0-9]+" \
+    system/reports/ws_ch5_pricelayer_report.md
+#   rc=0，命中 6 行 / 共 7 处引用
+
+# ② 逐条取"当前对象"上该行的真实内容（脚本见 /tmp/ch5_lines_audit.py）
+python3 /tmp/ch5_lines_audit.py                                       # rc=0
+
+# ③ 逐条考古"写下它的那次提交"，并取"当时对象"上该行的真实内容
+git log --oneline -S "<引文片段>" -- system/reports/ws_ch5_pricelayer_report.md   # rc=0
+git show <写它的提交>:<被引文件> | /usr/bin/awk 'NR==<行号>{...}'                  # rc=0
+```
+
+**结果（逐条，无遗漏）**：
+
+| 引用 | 写下它的提交 | 在**那个对象**上成立？ | 本对象（`132cfc7`）真位置 | 机理 |
+|---|---|---|---|---|
+| `run_pytest.sh:35` | — | ✅ | **`35`（未漂）** | — |
+| `batch13_taskbook.md:412` | `89cc2d8` | ✅ | **`412`（未漂）** | 该文件此后无人改 |
+| `valuation.py:201/577` | `f648a3d` | ✅（`201` = `fallback = load_unregistered_fallback(root)`；`577` = `fallback_spec = …`） | **`211` / `600`**（+10 / +23） | **漂**：后续提交在其**上方**插入 |
+| `models.py:1706` | `9834f4f` | ✅（`1706` = `coverage_profile: dict[str, Any] = …`） | **`1753`**（+47） | **漂** |
+| `models.py:1077-1081` | `9834f4f` | ✅（`cost_structure` / `capital_requirements` 开放 dict 说明） | **`1075-1082`**（−2） | **漂**（其上方被删 2 行） |
+| `verify.py:620-625` | `98af920` | **❌ 在写下它的那次提交上**即不成立 | 论证 = `637-643`；**载荷 = `649`** | **引错**（该区间是 `_child_env()` docstring 里 **broker 卡死**那段，不含 `SAFE_DELETE_ENABLED`） |
+| `scenario_guard.py:195`（"首轮"） | `9834f4f` | **❌ 即不成立** | 首轮载荷 = **`91`**（`SCENARIO_METHOD_STATUSES`）；`195` 是该函数 **docstring** | **引错** |
+
+⇒ **合计：4 处"漂" + 2 处"引错"**（另有本流 `#102` 已修过的同族 2 处）。
+★★ **两类必须分开报，因为举证方向相反**：
+- **"漂"** ⇒ 该引用**当时是对的**，被**其上方**的增删行挤走 ⇒ 可下结论"**当时的报告没写错**"，
+  但**举证半径限于那个对象**（`V-11`）；
+- **"引错"** ⇒ 该引用**从未成立** ⇒ 是**写下它时的缺陷**，**不能**用"后来又改了"解释掉。
+★ 把两类混成一句"行号都过期了"，等于把 **2 处真写错**洗成"正常的时效问题" —— **`G-62` 的又一落点**。
+
+**可判伪命题（须连前提一起引，形态遵 `V-10` 元规矩 推论二）**：
+
+> 在本报告里写下**绝对行号**，且该文件此后有提交在其**上方**增删行 ⇒ 该引用**必然**失效。
+> **前提**：该文件仍在演进。已冻结的文件（如 `batch13_taskbook.md` 在本批次期间）不适用。
+
+**本流采取的对策（只改写法，不改口径）**：
+① 载荷改为**按符号/内容锚定**（函数名 + 字面量 + 说明文字），行号降级为"**当时读数**"，且只在与对象同现时才写；
+② 若确要写行号，**必须同现对象 SHA**（`口径 10`）；
+③ 上述 6 处已按 ①② 就地改掉；`run_pytest.sh:35`、`batch13_taskbook.md:412` 两处**未漂**，原样保留。
+★ **本流不改 `CONVENTIONS.md`**（非本流落点）："行号须带对象 / 引用应锚定符号"是否要写进 `V-11` 规则 9，
+**交主理人裁定**。
+
 
 ### V-2 六门禁在**真仓库真源**上运行（`code_root = system`）
 
@@ -1102,7 +1172,7 @@ RESULT: PASS（0 violations）        EXIT=0
 | `unmodeled_parts` | **无** | 同上 |
 | `claims_complete_forecast` | **无** | 同上 |
 
-`coverage_profile: dict[str, Any]`（`models.py:1706`）是本项目对"设计给了键名、模型未封闭建模"的**既有开放 dict 约定**（同一约定见 `models.py:1077-1081` 对 `BusinessMechanism.cost_structure` 的说明）。只认行内会把**合规的** `coverage_profile` 写法误判成"整片缺字段"，只认内层会偏离设计字面 ⇒ `_coverage_value` **行内优先 + 内层回落**，3 条用例正反锁住（§② V-1b）。
+`coverage_profile: dict[str, Any] = Field(default_factory=dict)`（★ **按符号引用**；行号在 `9834f4f` 上是 **1706**、在本对象 `132cfc7` 上是 **1753** —— 本报告旧版写死 `models.py:1706`，**已漂**，见 §② `V-1n`）是本项目对"设计给了键名、模型未封闭建模"的**既有开放 dict 约定**（同一约定见 `models.py` 中 `★ cost_structure / capital_requirements 用 dict[str, Any]` 那段说明：`9834f4f` 时 = 第 `1077-1081` 行，本对象 = 第 `1075-1082` 行 ⇒ **漂 2 行**）。只认行内会把**合规的** `coverage_profile` 写法误判成"整片缺字段"，只认内层会偏离设计字面 ⇒ `_coverage_value` **行内优先 + 内层回落**，3 条用例正反锁住（§② V-1b）。
 **★ 主理人已明确：这 5 个 `Benchmark` 字段不属本卡** —— `schema` 的唯一写入者是 `ws-schema-expand`，**已由其单列成卡**。本流**不新增 schema 字段**（`schema/**` 禁改），**不臆造默认通过**（缺键 → 缺省值 + `NO_MODELED_COVERAGE` / `NO_NON_LISTED_ASSETS` note）；待 `ws-schema-expand` 落字段后，本流删掉另一路即可（映射集中在一处，改动面 = 1 个函数）。
 
 ### ④-5 模型侧未交付（本批次边界，非缺陷）
