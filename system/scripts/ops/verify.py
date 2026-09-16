@@ -25,7 +25,7 @@ python system/scripts/ops/verify.py --batch all            # 逐批跑，每批�
 |---|---|---|
 | `unit`       | `tests/unit/`（契约 + 作用域匹配器） | 60s |
 | `conflict`   | `tests/conflict/`（P-03/P-05/P-07 schema 断言） | 30s |
-| `guards`     | `tests/guards/`（门禁退出码契约 + 验证规范） | 60s |
+| `guards`     | `tests/guards/`（门禁退出码契约 + 验证规范） | 300s |
 | `injection-a`…`injection-f` | `tests/injection/` 的 **6 个分片**（每片一组显式文件路径） | 60~210s |
 | `root`       | `tests/test_ch11_invariants.py` | 30s |
 | `gates`      | `run_all_gates.py`（全部门禁逐项退出码） | 60s |
@@ -248,7 +248,13 @@ BATCHES: Mapping[str, Batch] = {
         #   四种值 —— 同一事实四个数字，且"由对改错"过一次（把 20 改成 23，而 23 是另一批的数）。
         #   **根治办法 = 不在描述里重复真源**：数字只留在各自的真源里。
         "guards", "tests/guards/（门禁退出码契约 + 验证规范）",
-        _pytest("tests/guards"), 60.0, _exit_zero,
+        # ★ 超时 60s → 300s（`G-54` 同族，主理人实测后上调）。
+        #   实测：同一套件在**6 条并发流**下 **101.96s**（exit=124 超时）、安静时 **30.73s** ⇒ **高方差**。
+        #   ⇒ 60s 会让本批**随机被判 TIMEOUT**（`V-03`）⇒ **"会随机变红"的门禁 = 会被关掉的门禁**。
+        #   取值依据 `V-02`（以较慢一次 101.96s 为基准；4× = 408s 越 300s 上限）⇒ **取上限 300s**。
+        #   ★ 与 `valuelayer`（88.5s / 300s）同属「**上限 300s 但 4× 已越限**」形态 ⇒ 根治要降实测（卡 13-F），
+        #     本行只是**先让门禁可信**。
+        _pytest("tests/guards"), 300.0, _exit_zero,
     ),
     # ── `tests/injection/` 的 6 个分片（**原 `injection` 目录全量批次已删除**）──────────
     # ★ 目标一律**显式文件路径**，**不用目录**（目录 = 一次拉起整个目录的用例 = 配额问题复发），

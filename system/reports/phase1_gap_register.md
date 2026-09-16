@@ -521,7 +521,12 @@ blocked = True
 |---|---|---|---|
 | **`G-53`** | `git merge` / 检出会把 `rules/*.yaml` 的 **0444 还原成 644**（权限位不在 git 管理范围内）⇒ 每次合并后必然红一次 | 低 | `OPEN`（有检测，见下） |
 | **`G-54`** | `unit` 测试批 **高方差且逼近/越过超时**：同一套件（76 例）两次实测 **48.73s** 与 **66.72s**，而原超时 **60s** ⇒ **会随机被判 TIMEOUT** | **高** | 超时已上调（安全网）；**根因待修** → 卡 13-F |
-| **`G-55`** | **同一语义、两种载体形态、零机器绑定**：`rules/scenario.yaml::scenario_tags`（YAML 列表）↔ `schema/models.py::ScenarioTag`（Python 枚举）—— 值相同、**无任何绑定断言**，改一侧另一侧不会红 | 中 | `OPEN` · 已派 `ws-schema-expand`（与其双向键对齐守卫合卡） |
+| **`G-55`** | **同一语义、两种载体形态、零机器绑定**：`rules/scenario.yaml::scenario_tags`（YAML 列表）↔ **`scripts/pricelayer/scenario_guard.py:82` 的 `ScenarioTag` 枚举** —— 值相同、**无任何绑定断言**，改一侧另一侧不会红。★ **同形态第二处**（`ws-schema-expand` 实现时扫出，已一并绑定）：`rules/scenario.yaml:41 scenario_method_status_domain` ↔ `scenario_guard.py:91 SCENARIO_METHOD_STATUSES`（同 3 个 token、同样零绑定） | 中 | `IN PROGRESS` · `ws-schema-expand` 已交付 `7835c0b`（`scenario_tag_binding_guard.py` + 5 例；`GATES` 24→25、`pre-commit` 11→12） |
+
+★ **本条的登记被我写错过一次（主理人缺陷，已更正）**：原文写 B 侧是 **`schema/models.py::ScenarioTag`** ——
+`ws-schema-expand` 实测**该文件里没有这个类**（全仓只有 `scripts/pricelayer/scenario_guard.py` 一处定义）。
+⇒ 这正是**我自己**要求别人做的自查（"键路径/落点**不许按记忆写**"），我又犯了一次（与口径 10 同族）。
+**正确落点 = `scripts/pricelayer/scenario_guard.py:82`。**
 | **`G-56`** | `Valuation.scenario_tag` **零生产消费者**（`T-18` / `G-50` 同族） | 低 | `OPEN` · **暂不修**（等 13-B 的 `scenario_guard` 修完自然产生消费点），作方向 2 的**显式白名单条目**登记 |
 | **`G-57`** | ★ **分组级零消费者**：`rules/metric-sets.yaml` **11 个顶层键里 9 个全仓零消费者**（`binding_guard` / `metric_item_fields` / `segment_evidence` / `conversion_chain_per_model_class` / `conversion_chain_generic_stages` / `extension_policy` / `routing.key` / `routing.binding_field` / `routing.metric_owner_field`） | 中 | `OPEN` · **已立卡 13-G**（逐键三分类定性） |
 
