@@ -63,6 +63,27 @@ FAILED=0
 #   两者此前**被同款报成"阻断"** —— 见 `run_gate` 的注释。
 INPUT_ERROR=0
 
+# ★★ 卡 13-O §11 / 主理人裁定「要」：把**本次用的是哪份清单**留在现场（`口径 10`）。
+#   方向②（判据**旧**于对象 ⇒ 静默少跑门禁）**完全不可观测** ⇒ 用**一行输出**换它一个可见性。
+#   本树实测（2026-09-16）：32 棵工作树里 **20 棵**的清单比 `main` 短（最多短 6 道）
+#   ⇒ 没有这一行，"本次只跑了 8 道"**谁都不会知道**；有它，拿 `main` 一比即知。
+#   ★ 门禁数**由本文件自身派生**（不写死 —— 13-J 的纪律：写死计数会漂）。
+#   ★ 用 `case` 扫行、**不用 grep**：本机 `grep` 是被 broker 影子化的 toybox 方言
+#     （`CONVENTIONS.md V-10`）⇒ 取数脚手架**不得依赖方言**。
+_gate_count=0
+while IFS= read -r _line; do
+  case "${_line}" in
+    run_gate\ \"*) _gate_count=$((_gate_count + 1)) ;;
+  esac
+done < "$0"
+#   ★ 问 HEAD 之前**同样**要摘 `GIT_DIR`（与第 15–23 行同一根因）：钩子里它是已导出的，
+#     不摘会让 git 读**钩子注入的那个**仓库，而我们要的是 `$REPO_ROOT` 这棵树自己的 HEAD。
+_tree_head="$(
+  unset GIT_DIR GIT_WORK_TREE GIT_PREFIX
+  git rev-parse --short HEAD 2>/dev/null
+)" || _tree_head=""
+echo "pre-commit: 判据树 HEAD=${_tree_head:-（无提交）} · 本树门禁 ${_gate_count} 道 · 判据=${0}"
+
 run_gate() {
   # ★★★ 载荷约定（**改动这里必看**）：调用点是 `run_gate <label> <script> <args…>`，
   #   而真正要执行的是 `"$PY" "$@"` —— 即 **`$@` 的首位必须是脚本路径**。
