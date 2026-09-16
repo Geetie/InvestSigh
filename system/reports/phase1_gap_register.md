@@ -488,5 +488,183 @@ blocked = True
 ⇒ 已按此重写：卡 13-C 单独立卡（`batch13_taskbook.md` · commit `29933fa`），
 并规定其余阶段的未绑判据（`core_chain` 2 条 / `expansion` 2 条）**在对应阶段开工时逐条配 owner**。
 
+### 13.4 批次 13 执行期新增（`G-51` / `G-52`）
+
+| # | 缺口 | 严重度 | 状态 |
+|---|---|---|---|
+| **`G-51`** | `施工图 §2 阶段⑤` 的**退出物**与**通过判据**不对齐：退出物含「三层复盘记录」，通过判据不含齐备性 | 中 | `OPEN` · 归 **`T-15`**（待需求方） |
+| **`G-52`** | 排他会话锁 `_acquire_session_lock()` 是 **`O_EXCL` 检查 + 写入**两步，**非原子** ⇒ 两个进程理论上可同时"检查通过再各自写入" | 低 | `OPEN`（**记下不改**） |
+
+**`G-51` 的一手事实**（主理人实测，取代原先"全设计区检索不到"的穷举式否定）：
+
+| 来源 | 实测内容 |
+|---|---|
+| `registry/delivery.yaml` → `delivery_stages` → `key: expansion` → `pass_criteria_testable` | **正好 3 条**：`research_standard_consistent` / `investment_result_verifiable` / `review_append_only` |
+| 同条目 `exit_artifacts` | `['三层复盘记录']` |
+
+⇒ 「三层齐备」**只在退出物里，没有通过判据身份**。
+★ **不能自行补一个 id**：`stage_gate` 的判据绑定是双向机器绑定（`assert_criteria_implemented` +
+`criterion_effectiveness_guard` 的"登记 ⊆ 已绑定 ⊆ 已声明"），绑一个 `delivery.yaml` 未声明的 id
+**当场就红**；而 `delivery.yaml` 的 `pass_criteria_testable` 是 **`施工图 §2` 通过判据列表的转写**
+⇒ 给它加一条 = **改需求面**（`施工图 §0` 第 1 条）。
+⇒ 故本时点的正确处置 = **检查保留、仍挂 `review_append_only` 名下、登记里显式标「★ 待裁定」**
+（不静默、不新增 id、判别力不丢），并归 `T-15` 交需求方。
+
+**`G-52` 的处置理由**：`ws-degrade-contract` 本单发现，主理人裁定 **记下不改** ——
+① 它超出该卡授权；② 当前使用是**单机串行**，`pid + 存活` 检查已能"响亮失败"（不是静默）；
+③ **顺手改共享的会话锁，恰恰会引入同类静默风险**（该锁本身刚因 `G-RC-10` 被修过）。
+⇒ 登记为低优先 `OPEN`，**不顺手改**。
+
+### 13.5 `G-53` / `G-54`（批次 13 集成期，主理人实测发现）
+
+| # | 缺口 | 严重度 | 状态 |
+|---|---|---|---|
+| **`G-53`** | `git merge` / 检出会把 `rules/*.yaml` 的 **0444 还原成 644**（权限位不在 git 管理范围内）⇒ 每次合并后必然红一次 | 低 | `OPEN`（有检测，见下） |
+| **`G-54`** | `unit` 测试批 **高方差且逼近/越过超时**：同一套件（76 例）两次实测 **48.73s** 与 **66.72s**，而原超时 **60s** ⇒ **会随机被判 TIMEOUT** | **高** | 超时已上调（安全网）；**根因待修** → 卡 13-F |
+| **`G-55`** | **同一语义、两种载体形态、零机器绑定**：`rules/scenario.yaml::scenario_tags`（YAML 列表）↔ **`scripts/pricelayer/scenario_guard.py:82` 的 `ScenarioTag` 枚举** —— 值相同、**无任何绑定断言**，改一侧另一侧不会红。★ **同形态第二处**（`ws-schema-expand` 实现时扫出，已一并绑定）：`rules/scenario.yaml:41 scenario_method_status_domain` ↔ `scenario_guard.py:91 SCENARIO_METHOD_STATUSES`（同 3 个 token、同样零绑定） | 中 | `IN PROGRESS` · `ws-schema-expand` 已交付 `7835c0b`（`scenario_tag_binding_guard.py` + 5 例；`GATES` 24→25、`pre-commit` 11→12） |
+
+★ **本条的登记被我写错过一次（主理人缺陷，已更正）**：原文写 B 侧是 **`schema/models.py::ScenarioTag`** ——
+`ws-schema-expand` 实测**该文件里没有这个类**（全仓只有 `scripts/pricelayer/scenario_guard.py` 一处定义）。
+⇒ 这正是**我自己**要求别人做的自查（"键路径/落点**不许按记忆写**"），我又犯了一次（与口径 10 同族）。
+**正确落点 = `scripts/pricelayer/scenario_guard.py:82`。**
+| **`G-56`** | `Valuation.scenario_tag` **零生产消费者**（`T-18` / `G-50` 同族） | 低 | `OPEN` · **暂不修**（等 13-B 的 `scenario_guard` 修完自然产生消费点），作方向 2 的**显式白名单条目**登记 |
+| **`G-57`** | ★ **分组级零消费者**：`rules/metric-sets.yaml` **11 个顶层键里 9 个全仓零消费者**（`binding_guard` / `metric_item_fields` / `segment_evidence` / `conversion_chain_per_model_class` / `conversion_chain_generic_stages` / `extension_policy` / `routing.key` / `routing.binding_field` / `routing.metric_owner_field`） | 中 | `OPEN` · **已立卡 13-G**（逐键三分类定性） |
+
+**`G-57` 是 `G-50` / `T-18` / `G-55` 之后「声明 ≠ 有效力」的第四次，也是规模最大的一次**（前三次是单点，这次一个文件的分组面）。
+★ **不直接判缺陷**（`ws-ch2-rules` 的处置，主理人确认）：这些键名**转写自设计节号、非代码自造**；
+且 `binding_guard` 的两条 `rule_*` **恰好就是 `rollup.py` 真正实现的规则** ⇒ 更像「**声明面，由门禁核**」。
+⇒ 但**必须定性**（`G-03`：不许静默留着）⇒ 卡 13-G 逐键落三分类：**(a) 运行时消费者** / **(b) 门禁·schema·测试消费者** / **(c) 三者皆无（补消费者 或 显式登记"首版不消费"）**。
+
+★ **本条的副产品是一条门禁设计要求**（已发给 `ws-schema-expand` 的 13-pre 方向 2）：
+「零消费者 ⇒ 红」**必须把 (b) 类（门禁/测试）算进消费者**，否则会把合法的声明面全判红 ⇒ **噪音 ⇒ 门禁被关掉**。
+正确形态是**三态输出 + 三类各自计数**。
+
+**`G-55` 的形态说明（第三种"声明≠有效力"，与 `G-50` / `T-18` 并列）**：
+
+| 形态 | 具体 |
+|---|---|
+| `G-50` | 有实现、有生产调用方，但**判据没绑**（接线接在错的层） |
+| `T-18` | 声明在 `rules/` 里，但**代码零消费者**（死列） |
+| **`G-55`** | **两侧都是"活"的，但彼此没有绑定** —— YAML 改了 Enum 不知道，Enum 改了 YAML 不知道 |
+
+★ **`G-55` 是"合并的产物"，不是任何一条流的错**：13-B 自注册了 YAML 侧、原代码已有枚举侧，**各自都自洽**，
+是**集成**才让它们变成两份可漂移的存储。⇒ 归 `ws-schema-expand` 收口（schema/枚举是其唯一写入面），
+要求：两侧**均从真源实读**（不许手写清单）、**双向相等**、**配可执行反例 + 反向对照**、
+并按 `G-07` 同时进 `run_all_gates.py` 与 `pre-commit.sh`（矩阵已从 `GATES` 派生，`G-28` 已修）。
+
+**`G-53` —— 不是"静默失效"，是"必然红一次 + 一个可写窗口"**（`ws-ch2-rules` 提出"纪律 9 被静默破坏"，主理人**更正措辞**）：
+
+| 事实 | 证据 |
+|---|---|
+| 合并后 `rules/` 权限变 644 | `ws-ch2-rules` 在 `git merge main` 后实测 `ls -l` = `-rw-r--r--` |
+| **但守卫会红** —— 不是静默 | `scripts/checks/rules_lock_guard.py:78-82` 实测**检查 `st_mode & 0o777 == 0o444`**，不符即报 `权限为 0o644，应为 0o444` |
+| 且内容改动也会被抓 | 锁清单是 SHA256 逐件比对 |
+| 真正的残余风险 | 合并与下次门禁之间的**可写窗口**——但窗口内的写入**仍会被 SHA256 抓到** ⇒ 是"**检测得到**"，不是"静默" |
+
+⇒ **处置**：把"**每次 `git merge` 之后必须重跑 `bootstrap_worktree.sh`**"写进 `CONVENTIONS.md::V-07`（该脚本只 chmod + 自检，不碰内容）。
+★ **为什么值得修**：它的症状是"**每次合并都红一次**"，而本项目铁律是「**天天误报的门禁一定会被关掉**」——
+一个必然产生噪音的门禁，最终会被人用 `--no-verify` 绕过去（我本人刚在这条纪律上栽过一次，见 `PROGRESS.md §7.5` 第 4 条）。
+
+**`G-54` —— 这条比"慢"严重：它让 `unit` 批的门禁**不可信**。**
+
+实测（同一套件、同一命令、间隔数分钟，宿主有 6 条流并发）：
+
+| 次序 | 命令 | 结果 |
+|---|---|---|
+| 1 | `verify.py --batch unit` | `76 passed in 48.73s`（批墙钟 49.35s / 超时 60.0s） |
+| 2 | `pytest tests/unit -q --durations=8` | `76 passed in **66.72s**` ← **已越过 60s 上限** |
+
+`--durations=8` 的前 8 名**全部是 `setup`**，单个 **4.46s ~ 5.20s**：
+
+```
+5.20s setup  tests/unit/test_schema_expand.py::test_project_driver_model_fails_loudly_on_dangling_ref
+5.16s setup  tests/unit/test_contracts.py::test_get_param_without_any_value_fails_instead_of_returning_none
+5.11s setup  tests/unit/test_contracts.py::test_freeze_has_exactly_11_params_all_tbd
+5.00s setup  tests/unit/test_contracts.py::test_get_param_unknown_id_fails_loudly
+4.88s setup  tests/unit/test_schema_expand.py::test_new_table_row_roundtrips_through_the_real_store[...]
+```
+
+★ **疑似根因（待 13-F 证实）**：共享 fixture（`tests/conftest.py::code_root` 一族）**每例做整树拷贝**，
+而树体已显著变大（`schema/jsonschema/facts.schema.json` 数千行 + 174 个 py 文件 + 22 张真源 + 14 件规则）
+⇒ **代价随仓库体积线性增长**，且**每新增一个测试目录都会拖慢所有人**。
+若成立，则这不是"unit 慢"，而是**整个验证体系的成本模型有问题**——阶段③④⑤ 还要继续加测试。
+
+⇒ **处置**：
+① **立即**：`unit` 超时 60s → **270s**（`V-02`：以较慢一次 66.72s 为基准 ≈ 4.0×，≤300s）。**先让门禁可信。**
+② **根因**：立卡 **13-F**（共享 fixture 成本）交 `ws-verify-shard`（它建的验证分片与 `V-02` 口径）。
+③ ★ **本项目的教训要复用**：`P-01` 已明令"跨行/全树 AST 扫描单遍"，但**夹具成本**这条一直没有量化口径。
+⇒ 13-F 必须同时产出**"每个批次的实测耗时 vs 超时"对照表**（含方差），把"超时余量"变成**可核数据**而不是"当初估的"。
 
 
+
+
+### 13.6 `G-58` · `sensitivity` **三载体形态、零机器绑定**（「声明 ≠ 有效力」第五次）
+
+| # | 缺口 | 严重度 | 状态 |
+|---|---|---|---|
+| **`G-58`** | `sensitivity` 同一语义在**三处**形态各异且**零绑定**：设计给**列表** `sensitivity[]`（`05/02:224`）；`schema.models.Benchmark` 给**行内平铺 `dict[str, Any]`**；`rules/benchmark.yaml:23-26` **嵌套在内层**且语义是 **`disclosure_state` 容器** | 中 | `OPEN` · 立卡 **13-H**（**阻塞于 13-B 提交**）· 语义归属归 **`T-20`** |
+
+★ 与 `G-55`（`scenario_tags` YAML ↔ Enum）**同族**，但更重：`G-55` 是**两处**、值相同；本条是**三处**、且**位置与类型都不同**，
+甚至**可能是同名不同义**（见 `T-20`）。
+★ **为什么不当场修**（`ws-schema-expand` 的处置，主理人确认）：① `rules/**` 是 0444 锁件、安装面在主理人；
+② `dict → list` 是**破坏性契约变更**，会动既有写入路径；③ `system/facts/benchmarks.jsonl` 当前 **0 行** ⇒
+任何"改对了"的断言在真源上都是**真空成立**（`G-03`），必须构造行取证 ⇒ 是**独立一张卡的体量**。
+★ **窗口提示**：正因真源 **0 行**，**此刻**是改契约成本最低的时点（越晚越贵）。
+
+### 13.7 `G-59` · ★ 删除预算（宿主级共享）与 `V-05` 会话锁（per-worktree）**机制错配**
+
+| # | 缺口 | 严重度 | 状态 |
+|---|---|---|---|
+| **`G-59`** | 宿主的 safe-delete **单轮删除配额是「宿主回合级 + 全流共享」**，而项目的 `V-05` 会话锁是 **per-worktree** ⇒ 「各工作树串行」**防不住"多条流合起来打穿同一份共享预算"** | **高**（阻塞全量验证） | `OPEN` · 需**用户侧**处置 |
+
+**实测（`ws-degrade-contract`，主理人复核）**：
+```
+[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":100113,"threshold":99999,"scope":"turn", …}
+INTERNALERROR> … in _exit_bulk_guard_control → SystemExit: 1
+```
+其后**连单文件跑都立刻 INTERNALERROR**（夹具 `copytree` 每例复制一份 `system/`，累积删除计数越限）；
+同一时刻**不建夹具**的探针照常跑通、`run_all_gates.py` 24 项也照常跑完 ⇒ **是宿主删除代理的事，不是代码缺陷**。
+
+★ **两条被实测证伪的既有认知（必须更正，含主理人自己的话）**：
+1. ❌「**配额按轮计，下一轮补跑**」—— 我（主理人）说过这句。**错的**：`scope:"turn"` 指**宿主回合**，
+   **不随 agent 对话轮次重置** ⇒ **"等下一轮"解决不了**，实测 ≥3 条并发流（pid 94700–95300）也没让配额恢复。
+2. ❌「跑 pytest 一律用 `run_pytest.sh` 就不会有问题」—— `run_pytest.sh` 治的是 **broker 在解释器层卡死**，
+   **治不了删除预算**。两者是**两个不同的**环境闸门。
+
+**⇒ 恢复条件三选一（`ws-degrade-contract` 提出、主理人采纳）**：
+① **同一宿主回合内其他流停跑 pytest**（真正的"串行窗口"）；
+② **换宿主回合**（等待，但**不保证**——因为配额是共享的，别人也会用）；
+③ **用户对批量删除授权**（守卫本名就叫 `BULK_CONFIRM_REQUIRED`，**这是设计好的通道，不算绕过**）。
+
+★ **对本项目的影响（必须让需求方知道）**：**全量验证（如批次 14 独立审计的"逐批实跑"）在当前并发强度下做不了** ——
+要么需求方提供一个**串行窗口**，要么**授权批量删除**。这不是工程问题，是**执行环境约束**。
+
+★ **纪律（不许绕）**：`ws-degrade-contract` **没有**用 `--no-report` / 环境变量 / 任何方式去关掉那把闸门 —— **正确**。
+**绕过安全机制得到的"绿"不算证据。**
+
+### 13.8 `G-60` · ★★ 夹具清理的**自锁**形态：残留清不掉 ⇒ 会话启动即被拒 ⇒ 永久锁死
+
+| # | 缺口 | 严重度 | 状态 |
+|---|---|---|---|
+| **`G-60`** | `tests/conftest.py::_clear_work_dir()` **逐的是「目录」而非「文件」** ⇒ 单次删除体量 = 一个 `test_*` 目录（约 **250 项**）；而宿主删除闸门判据是 `本回合已累计 + 本次目标体量 > 99999 ⇒ 拒` ⇒ **基数推到天花板后，连"删 1 项"都被拒** ⇒ `.work/` 残留**永远清不掉**，且 `pytest_sessionstart` 的清理**必然失败** ⇒ **每个会话启动即 `INTERNALERROR`** | **高**（**自锁**，恢复需外部介入） | `OPEN` · 改进并入 **卡 13-F**；恢复需**用户授权**（见下） |
+
+**实测（`ws-degrade-contract`，主理人复核）**：
+```
+[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":100113,"threshold":99999,"scope":"turn", …}
+$ python3 <连"零夹具"用例>   → 仍 INTERNALERROR      ← ★ 决定性：与用例体量无关
+```
+★ **真正根因**：卡点在 **`pytest_sessionstart` 的 `_clear_work_dir()`** —— **只要 `.work/` 还有残留子项，会话启动就被拒**，
+与"这个用例建不建夹具"**无关**。⇒ 这解释了"连"零夹具"用例也 `INTERNALERROR`"。
+★ **`ws-degrade-contract` 把闸门行为逆向成一个可核模型**：`count = 本回合已累计 + 本次目标体量`，拒绝 ⟺ `count > 99999`。
+⇒ 本回合已累计 ≈ **天花板级**（删 1 项也被拒）。
+⇒ ★★ **因此"把批次拆小/分片跑"原理上救不了** —— 它只在**基数低于天花板**时才有窗口。
+  （`ws-ch4-valuelayer` 之前"≤10 例/批 ⇒ 6 批全过"**只是当时基数低**，**不能**读成"分片可行"；
+  **主理人先前据此给出的"≤10 例/批"建议在一般情况下是错的，已更正。**）
+
+**改进（并入卡 13-F，不另开卡）**：`_clear_work_dir()` **改为逐文件删除**（单次体量由 ~250 降到 1）。
+★ **为什么并入 13-F 而不单独立卡**：`tests/conftest.py` 是**共享文件**，13-F 为"夹具成本"已在改它；
+**同一文件两个写入方**正是本批次反复出现的冲突模式 ⇒ 合并到同一张卡。
+
+**残留现状**（走授权时一并清）：`system/tests/.work/` **34 项 / 4041 文件**（其中 24 项属本流）；`.work/` 已被 gitignore ⇒ **不进仓库**。
+**恢复路径**：只剩 **③ 用户授权批量删除**（守卫本名即 `BULK_CONFIRM_REQUIRED`，**是设计好的通道**）。
+★ `.work/` 是**测试草稿目录、非真源、且不进仓库** ⇒ 删除**风险极低**（这是请需求方授权时可以明确的前提）。

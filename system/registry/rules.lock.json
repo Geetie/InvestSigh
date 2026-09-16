@@ -66,12 +66,12 @@
       "sha256": "7d14de8e3fcd3ae29ada7c867bc557c9a24fbd4af8b84e02f5439ae395ac2934"
     },
     "rules/valuation-methods.yaml": {
-      "bytes": 5458,
+      "bytes": 8798,
       "locked_mode": "0o444",
-      "sha256": "865175aad32bfdb35c6a295f364da4faa7a47adc21c3fc3cd214845c546f0f84"
+      "sha256": "8af5f31a4009918b6dc4c113106616654d3ebc996523dd523faabce472d556ba"
     }
   },
-  "locked_at": "2026-09-16T13:27:21+00:00",
+  "locked_at": "2026-09-16T13:50:05+00:00",
   "locked_by": "system/scripts/ops/lock_rules.py",
   "note": "本清单是 rules/ 的 SHA256 快照。校验方 scripts/checks/rules_lock_guard.py；改动流程见 lock_rules.py 文档头。",
   "owner_writable": false,

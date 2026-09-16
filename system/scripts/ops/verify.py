@@ -25,7 +25,7 @@ python system/scripts/ops/verify.py --batch all            # 逐批跑，每批�
 |---|---|---|
 | `unit`       | `tests/unit/`（契约 + 作用域匹配器） | 60s |
 | `conflict`   | `tests/conflict/`（P-03/P-05/P-07 schema 断言） | 30s |
-| `guards`     | `tests/guards/`（门禁退出码契约 + 验证规范） | 60s |
+| `guards`     | `tests/guards/`（门禁退出码契约 + 验证规范） | 300s |
 | `injection-a`…`injection-f` | `tests/injection/` 的 **6 个分片**（每片一组显式文件路径） | 60~210s |
 | `root`       | `tests/test_ch11_invariants.py` | 30s |
 | `gates`      | `run_all_gates.py`（全部门禁逐项退出码） | 60s |
@@ -227,8 +227,15 @@ INJECTION_SHARDS: tuple[str, ...] = (
 
 BATCHES: Mapping[str, Batch] = {
     "unit": Batch(
+        # ★ 超时 60s → 270s（主理人实测后上调，批次 13 集成期）。
+        #   实测两次**同一套件**（76 例）耗时：**48.73s** 与 **66.72s** —— **高方差**，第二次**已越过 60s 上限**。
+        #   ⇒ 60s 会让 `unit` 批**随机被判 TIMEOUT**（`V-03`：超时一律不合格）⇒
+        #     **"会随机变红"的门禁 = 会被关掉的门禁**（本项目铁律）。方差来自宿主并发（集成期 6 条流同时跑）。
+        #   取值依据 `V-02`（实测 ×4~8、不越 300s）：以**较慢的一次** 66.72s 为基准，270s ≈ **4.0×**，且 ≤300s。
+        #   ★ 注意**不要**把超时当性能问题的解药：根因（每例 `setup` 4.5~5.2s，疑似共享 fixture 每例整树拷贝，
+        #     代价随仓库体积增长而增长）已单列卡 13-F 处理 —— 上调超时只是**先让门禁可信**。
         "unit", "tests/unit/（契约 + 作用域匹配器）",
-        _pytest("tests/unit"), 60.0, _exit_zero,
+        _pytest("tests/unit"), 270.0, _exit_zero,
     ),
     "conflict": Batch(
         "conflict", "tests/conflict/（P-03/P-05/P-07 schema）",
@@ -241,7 +248,13 @@ BATCHES: Mapping[str, Batch] = {
         #   四种值 —— 同一事实四个数字，且"由对改错"过一次（把 20 改成 23，而 23 是另一批的数）。
         #   **根治办法 = 不在描述里重复真源**：数字只留在各自的真源里。
         "guards", "tests/guards/（门禁退出码契约 + 验证规范）",
-        _pytest("tests/guards"), 60.0, _exit_zero,
+        # ★ 超时 60s → 300s（`G-54` 同族，主理人实测后上调）。
+        #   实测：同一套件在**6 条并发流**下 **101.96s**（exit=124 超时）、安静时 **30.73s** ⇒ **高方差**。
+        #   ⇒ 60s 会让本批**随机被判 TIMEOUT**（`V-03`）⇒ **"会随机变红"的门禁 = 会被关掉的门禁**。
+        #   取值依据 `V-02`（以较慢一次 101.96s 为基准；4× = 408s 越 300s 上限）⇒ **取上限 300s**。
+        #   ★ 与 `valuelayer`（88.5s / 300s）同属「**上限 300s 但 4× 已越限**」形态 ⇒ 根治要降实测（卡 13-F），
+        #     本行只是**先让门禁可信**。
+        _pytest("tests/guards"), 300.0, _exit_zero,
     ),
     # ── `tests/injection/` 的 6 个分片（**原 `injection` 目录全量批次已删除**）──────────
     # ★ 目标一律**显式文件路径**，**不用目录**（目录 = 一次拉起整个目录的用例 = 配额问题复发），
@@ -345,6 +358,14 @@ BATCHES: Mapping[str, Batch] = {
         "compute", "tests/compute/（确定性计算层）",
         _pytest("tests/compute"), 60.0, _exit_zero,
     ),
+    "pricelayer": Batch(
+        # 新增测试目录必须同时加批次，否则 `V-06` 会把新目录判成"未覆盖"（`CONVENTIONS.md::V-06`）。
+        # 由**批次 13-B**（Ch5 价格层）随 `tests/pricelayer/` 一并加入（任务卡 13-B 明令）。
+        # 超时：工作树内实测 39.18s（127 例）→ **180s（≈4.6×）**：
+        # `V-02` 允许 4~8×，且不越 300s 上限；余量足以区分"慢"与"卡死"。
+        "pricelayer", "tests/pricelayer/（Ch5 价格层：反解多解/估值路由/倒填/情景/历史外推/每日解释）",
+        _pytest("tests/pricelayer"), 180.0, _exit_zero,
+    ),
     "graph": Batch(
         "graph", "tests/graph/（依赖图与 T12 传播）",
         _pytest("tests/graph"), 60.0, _exit_zero,
@@ -384,6 +405,22 @@ BATCHES: Mapping[str, Batch] = {
         "daily", "tests/daily/（阶段④每日运行：覆盖可核/降级/幂等/调度）",
         _pytest("tests/daily"), 180.0, _exit_zero,
     ),
+    "valuelayer": Batch(
+        # 新增测试目录必须同时加批次，否则 `V-06` 会把新目录判成"未覆盖"（`CONVENTIONS.md::V-06`）。
+        # 由**批次 13-A（Ch4 价值层）**加入（`system/reports/batch13_taskbook.md` 卡 13-A 的
+        # 显式要求："`tests/valuelayer/` 新目录 ⇒ 必须同步在 `verify.py::BATCHES` 加一批"）。
+        # 目标 `tests/valuelayer/` 是**本批次新建**的目录（rollup / route_guard / growth_quality /
+        #   moat_guard / state_machine / completeness 六模块的用例）。
+        # 超时：工作树内**实测 170.15s**（191 passed）→ 按 `V-02` 取**不超过上限的最大值 300s**
+        #   （170 × 4 = 680s 越过 `V-02` 的 300s 上限，与 `daily` / `injection-*` 同一处境）。
+        #   ★ 遗留风险（如实登记）：本批余量仅 **1.76×**，比 `injection-f` 的 2.7× 更薄 ——
+        #     若同一工作树里有第二个 pytest 会话（`V-05` 禁止的情形）并发，本批可能被拖过 300s 而**假红**。
+        #     见到本批超时的**第一步不是改断言**，而是先确认有没有第二个会话在同一工作树里跑。
+        #   ★ 夹具配额：本目录 **28 个用例**用 `code_root` 夹具（实测 `def test_*(… code_root …)`
+        #     计数；其余为纯内存用例，`P-05`），与 `injection-b`（28）/ `injection-d`（29）同一量级。
+        "valuelayer", "tests/valuelayer/（Ch4 价值层：指标集/加总/增长质量/护城河/状态机/完备性）",
+        _pytest("tests/valuelayer"), 300.0, _exit_zero,
+    ),
     "gates": Batch(
         # ★ 不写"多少项"（批次 7 审计）：数字的真源在 `run_all_gates.GATES`，
         #   描述里重复它必然漂移（同一事实曾出现 18/19/20/23 四个值）。
@@ -409,6 +446,8 @@ ORDER = (
     "injection-d", "injection-e", "injection-f",
     "root",
     "compute", "graph", "validators", "claim", "decision", "transmit", "evidence", "daily",
+    "pricelayer",
+    "valuelayer",
     "gates", "stage",
 )
 

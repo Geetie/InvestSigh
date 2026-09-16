@@ -59,3 +59,122 @@
 | **`T-15`** | **`施工图:215/:234` 的退出物「三层复盘记录」是否应升格为阶段⑤ 的通过判据** | ① `施工图 §2 阶段⑤`：**退出物** = 三层复盘记录（`:215`）<br>② `10/02 §C.1/§C.4`：只约束 `eval_layer` 的**取值域**（`research_quality`/`forecast_quality`/`investment_result`；**不得新增、不得合并**）—— **没有**"三个都必须出现"<br>③ 而 `registry/delivery.yaml` 的 `expansion::review_append_only` 的**被绑检查**是"三层齐备"（缺层即违例） | **实现口径**（`ws-criterion-effectiveness`，主理人裁定）：<br>· 新 id **`eval_layer_domain`**（statement **逐字引** `Ch10 §C.4`「三层不得新增/合并」），检查 = **取值域** + **不合并** —— 属**纯对齐**，无新增门槛；<br>· "**三层齐备**" **不**升格为判据、**不计违例**（把**退出物**升格成通过判据属**新增门槛**，`施工图 §0` 第 1 条，不由实现方定）；<br>· 但**观测必须保留**：`stage_gate` 输出 `expansion.layers_seen: k/3` 显式 note + 计数（`G-03`：不允许静默消失）；<br>· `review_append_only` 重新绑定到**真正的 append-only 检查**（按 `Ch10 §D.5` **原文**，不按主理人转述） | **待裁定（需求方）**：是否把"三层齐备"升格为阶段⑤ 通过判据 |
 | **`T-16`** | **字段名设计↔实现分歧**：`task_status` vs `status` | ① `08_产品入口与每日运行/02_实现方案.md §N8.2-04`：`task_status`<br>② 而 18 表的真源字段/`schema/models.py::Task` 用 `status` | 实现按**磁盘真名** `status`（真源已如此），**不擅自改名**（改真源字段名属设计级变更）；`ws-criterion-effectiveness` 实现 `G9-1` 的 `all_tasks_have_status` 时按 `status` 读，并在报告里**显式标注**这处分歧 | **待裁定（需求方）**：以 `task_status` 为准改名（需迁移已落库行），还是把设计侧改回 `status` |
 | **`T-17`** | **`Ch10 §D.5` 第一条"三类记录齐全"`(success, failure, pending)` 无载体** | `Ch10 §D.5` 要求复盘记录"三类记录齐全"；而全仓 `grep` 只在 `registry/delivery.yaml:132` 的**声明**里出现这三个词，**代码区无任何承载**（无字段/表/enum） | 按 `G-03` **显式记账为缺口**（**不算通过、也不算违例**）；**不**为此新建表/字段/enum（载体属设计决定 —— `T-11`/`T-12` 的先例是**折叠进既有表**或**上报**，不是自造）；临时 `ineffective` 登记须写明"临时 + 载体待定" | **待裁定（需求方）**：载体落哪 |
+
+
+---
+
+## 批次 13 执行期的**后续复核补充**（主理人 2026-09-16）
+
+### `T-15` 补充 —— 原计划「新 id `eval_layer_domain`」**机械上不可行**，且拿到一条更硬的证据
+
+**（1）为什么它在本项目里做不到（不是判断问题，是绑定机制问题）**
+
+原口径要求新增判据 id `eval_layer_domain`。但 `stage_gate` 的判据绑定是**双向机器绑定**：
+`assert_criteria_implemented()` 把 `registry/delivery.yaml` 声明为 `automated` 的条目 与
+函数体内的 `criterion()` 字面量**做双向比对**，且 `criterion_effectiveness_guard` 另加
+"**登记 ⊆ 已绑定**、**已绑定 ⊆ 已声明**"两条义务。
+⇒ 在函数体内绑一个 `delivery.yaml` **未声明**的 id ⇒ **当场红**（"绑定了未声明的判据"）。
+⇒ 要新增 id，**必须同时改 `registry/delivery.yaml` 的 `pass_criteria_testable`**；
+而该字段是 **`施工图 §2 阶段⑤` 通过判据列表的转写** ⇒ **给它加一条 = 改需求面**（`施工图 §0` 第 1 条）。
+
+**（2）更硬的一手证据（取代原来"全设计区没有逐字出处"的穷举式否定）**
+
+`ws-criterion-effectiveness` 原先的论据是"全设计区检索不到通过判据级的逐字出处"——
+这属**穷举式否定**，容易被"你搜漏了"反驳。主理人实测出一条**可核的肯定事实**：
+
+| 来源 | 实测内容 |
+|---|---|
+| `registry/delivery.yaml` → `delivery_stages` → `key: expansion` → `pass_criteria_testable` | **正好 3 条**：`research_standard_consistent` · `investment_result_verifiable` · `review_append_only` |
+| 同条目 `exit_artifacts` | `['三层复盘记录']` |
+
+⇒ **「三层齐备」确实只在退出物里、没有通过判据身份。** 这条是**实现区可核**的声明面事实，
+比"设计区检索不到"强。★ 一般化口径：**用可核的肯定事实，代替不可穷举的否定。**
+
+**（3）当前落点（主理人批准保持）**
+
+· `review_append_only` **只**绑它的真语义（按 `Ch10 §D.5` 原文）：① `append_only_guard` 覆盖载体 ② **已声明过的 `eval_layer` 层不得从记录集里消失**（= "禁只留赢的"的可判定快照形态）。
+· 「三层齐备」**检查保留、仍挂在该 id 名下**，并在 `registry/criterion_counterexamples.yaml` 里**显式标注「★ 待裁定」**（不静默、不新增 id、判别力不丢）。**这是本时点的正确中间态。**
+· **待需求方**：① 是否把「三层齐备」升格为阶段⑤ 通过判据（需同时改 `delivery.yaml` 声明面）；② 若不升格，是否接受"退出物缺失只在 `expansion.layers_seen: k/3` 的 note 里可见、不阻断阶段"。
+
+### `T-18` · ★ **`rules/pipeline.yaml` 把 step 7/8 声明为「既 blocking、又不首版实现」** ⇒ 首版**结构上不可能不 blocked**
+
+| 双方（节号 + 原文） | 本实现的取舍 | 状态 |
+|---|---|---|
+| ① `rules/pipeline.yaml::steps` 实测（主理人逐条列出）：<br>　step **1–6**：`blocking: True` **+** `implemented_in_first_version: True`<br>　step **7** `publish_recommendations`：`blocking: True` **+** `implemented_in_first_version: **False**`<br>　step **8** `continuous_verification_and_history`：同上 `True` / `False`<br>② `T-08` 已裁：**注册 1–6**，模型侧缺口显式标 `degraded` + 记 gap | **实测后果**（`ws-degrade-contract` 本单钉出，主理人复核）：7/8 永不注册 ⇒ `run_daily()` 记 gap 并令 `blocked=True` ⇒ **`status` 恒 `failed`** ⇒ 阶段④ 在首版**没有任何"成功运行"**。<br>⇒ 直接后果：`degrade_keeps_last_valid` 的**「此前已有行持有有效结果、后失败却丢引用」这一半，在真仓库上永远不可自然发生**（只能在受控输入上验证）。<br>⇒ 更根本的：**`implemented_in_first_version` 这一列在首版没有任何作用**（写 `True` 还是 `False`，都照样 blocking）—— 与 **D1 同族：声明与现实矛盾**。<br>本单**只如实登记**，**不自行改 `rules/pipeline.yaml`**（0444 + 属设计裁定）。 | **待裁定（需求方）**。**主理人推荐**：首版**不把** `implemented_in_first_version: False` 的步计入 blocking 判定，**但必须**记 `gaps` 并显式标 `deferred_by_design`。<br>**理由**：① 否则 `implemented_in_first_version` 是**死列**；② `blocked` 恒真 ⇒ **失去判别力**，且让整条降级/幂等链**恒处于告警态**，正是本项目铁律「**卡死的信号 = 被关掉的信号**」最危险的形态（对比 `T-08` 的处置：那次是"注册 1–6 + 缺显式标 `degraded`"，同样以"恢复判别力"为目标）。<br>**备选**：维持现状 ⇒ 阶段④ 在 7/8 实现前**永久不可判 PASS**，且降级契约另一半**只能受控验证**（如实但代价大）。
+
+#### ★ `T-18` 的**决定性证据**：`implemented_in_first_version` 的**代码消费者数 = 0**（主理人独立复核）
+
+`ws-degrade-contract` 在异常性复核（④-1）中提出这条，**我逐条查证属实**，且它比上表的"blocking 表"更硬 ——
+因为它把问题从"**语义上不该这样**"提升为"**机器上确实谁也没读它**"：
+
+| 检索式 | 实测结果 |
+|---|---|
+| 全仓检索 `implemented_in_first_version` | **8 处**都在 `rules/pipeline.yaml`（**声明本身**）；其余全在 **注释 / docstring / 报告 / SKILL.md**（`scripts/orchestrate/ingest_step.py:4` · `pipeline.py:152` · `chain_steps.py:6` · `PROGRESS.md:258` · `tests/injection/test_chain_steps_wiring.py:5` · `skills/aichain-daily/SKILL.md:35`）；**没有任何 `cfg.get(...)` 读取点** |
+| 对照检索同表的另一列 `blocking` | `scripts/orchestrate/pipeline.py` 里 `cfg.get("blocking")` **6 处**（:215 / :225 / :249 / :302 / :324 + :548）—— **有真实消费者** |
+
+⇒ **同一张表的两列，一列有人读、一列零人读。** 后果必然是「`blocking` 说了算、`implemented_in_first_version` 说了不算」⇒ 7/8 恒 blocked。
+
+★ **这是本项目第三次出现同一形态**，三条并列看：
+
+| # | 形态 | 具体 |
+|---|---|---|
+| `G-50` | **有实现、有生产调用方，但判据没绑** | `evidence_locatable` —— 接线接在了**错的层** |
+| `G-RC-12` | **机制存在，但在真源上不生效** | `append_only_guard` 的 pathspec 恒空 |
+| `T-18` | **声明在 `rules/` 里，但代码零消费者** | `implemented_in_first_version` —— 死列 |
+
+⇒ 共同形态一句话：**「写在声明里」≠「在机器上有效力」。** 三者的检查方向也是同一个：
+**「声明」与「实现」必须有**可机的**消费者/绑定关系**（本项目铁律 5）。
+
+★ **由此得出一条新的、可判定的机器检查（已派给 `ws-schema-expand` 的 13-pre，方向 2）**：
+现有的"键对齐守卫"只顾**单向**（代码读的键 **必须存在** 于 `rules/`，否则静默 fallback）；
+**必须再加反向**：**`rules/` 里声明了语义、但代码区从不读的键 ⇒ 报警**。
+反向这一侧正是 `T-18`（`implemented_in_first_version`）、`scenario_method_status_domain` / `scenario_method_status_blocking`（`ws-ch5-pricelayer` 实测：真文件有这两个键，代码却把"`pending` ⇒ 阻塞"**硬编码**）的暴露面 —— **不查这一侧，就永远发现不了"死列"。**
+
+★ **第三条并行发现（同族）**：`ws-ch5-pricelayer` 实测 `load_scenario_policy('.')` 在**真 `rules/scenario.yaml`** 上返回
+`status='pending'` / `value_source='rules'` / **`method_version=''`** —— 因为真文件**没有 `method_version` 这个键**，
+而它的**测试夹具**给了。⇒ **夹具造了一个真文件里不存在的形状**，与 `G-43`/`G-45`（夹具与真写路径不同源）**完全同族**。
+⇒ 已派该流修（要么找到真实载体，要么改**响亮失败**，**不许静默取空串**）。
+
+---
+
+## 批次 13 后续新增张力（`T-19` ~ `T-21`，主理人 2026-09-16 登记）
+
+### `T-19` · `method_version` 的**值**无 `rules/` 归属，且设计**自身两处示例不一致**
+
+| 双方 | 内容 |
+|---|---|
+| ① `05_价格与市场预期研究/02_实现方案.md:81` | 示例值 `"method_version":"v1"` |
+| ② 同文件 `:166` | 示例值 `method_version="val-v1"` |
+| ③ `§D.2` / `N5.3-02` | 要求"每个 price range → `formula` + `operands` + **`method_version`** + `share_count` + `compute_date`" ⇒ 它是**输出字段** |
+| ④ `rules/valuation-methods.yaml::valuation_compute.method_version_field` | **只登记了字段名**（`method_version`），**未登记取值** |
+
+**性质**：**设计未钉规范串**，两处示例互相不一致；且**值的归属未指派**（不像 `§J.2` 明写"参数化 `rules/…`"）。
+**现状**：13-B 代码里落为 `pricelayer-solver-v1` / `pricelayer-valuation-v1`（**自定**）；13-B 的 `scenario_guard` 还**误从 `rules/scenario.yaml` 读** `method_version`（该件无此键 ⇒ 静默取空串，已派修）。
+**状态**：**待裁定（需求方）** —— ① 规范串定为哪一个（或都不作准、另定）；② 是否进 `rules/`（若进，落点应为 `valuation-methods.yaml::valuation_compute.method_version`）。
+**主理人推荐**：**进 `rules/`**（它"影响产出标注"且被写进产物 ⇒ 按 `R8-3` 属**参数**）；**规范串交需求方**，代码不自行定值。
+
+### `T-20` · ★ `sensitivity` **同名不同域**（设计 vs `rules/` 指的不是一个东西）
+
+| 载体 | 形态 | 出处 |
+|---|---|---|
+| **设计** | **列表** `sensitivity[]`（一组敏感性项） | `05_价格与市场预期研究/02_实现方案.md:224` · `05/01:162` |
+| **`schema.models.Benchmark`** | **行内平铺**，类型 `dict[str, Any]`（**不是列表**） | 既有实现 |
+| **`rules/benchmark.yaml:23-26`** | **嵌套在内层**，且语义是**披露状态**：`non_listed_assets: {disclosure_state: undisclosed, sensitivity: {disclosure_state: undisclosed}}` | 实装件 |
+
+⇒ **三处的"位置 + 类型 + 语义"两两不同、零机器绑定**。
+★ **最要紧的一点**：`rules/benchmark.yaml` 里的 `sensitivity` 是一个 **`disclosure_state` 容器**，而设计的 `sensitivity[]` 是一组**敏感性项** ——
+**这两个很可能是同名不同义的东西**（同类风险本项目已有先例 `T-03`：`freeze_status` 在参数域与基准对象域是**两个枚举**）。
+**状态**：**待裁定（需求方）** —— ① 二者是否同一物？若是 ⇒ 定唯一的形态（列表 or 字典）与位置；若否 ⇒ **改名**（其中一个必须改）。
+**主理人推荐**：**先判"是否同一物"**。若同一物 ⇒ **按设计取列表**（`dict → list` 是破坏性契约变更，但 `facts/benchmarks.jsonl` **当前 0 行** ⇒ **此刻改成本最低**）；若不同物 ⇒ **`rules/` 侧改名**（避免与设计的 `sensitivity` 撞名）。
+
+### `T-21` · `claims_complete_forecast` 是**载体命名**（设计只给禁令、未给字段名）
+
+| 双方 | 内容 |
+|---|---|
+| ① `§E.5:264` | 「`modeled_coverage < 1` 时**不得声称**"完成整个基金预测"」—— **只有禁令，没有字段名** |
+| ② `N5.4-05`（`05/01:52`）+ `B4`（`00_待拍板项清单.md:46`） | 同样**只有禁令/阈值，无字段名** |
+| ③ 实装 | `schema/models.py::Benchmark.claims_complete_forecast: bool`（**沿用 13-B 的既有命名**） |
+
+**性质**：判据要知道"有没有声称"就必须有载体 ⇒ 载体**必须存在**，但**名字是转写方定的**。
+⇒ 主理人**批准**当前落法（`bool`），**但要求**：① docstring 必须逐字标注"**载体命名**"（已做）；② 测试**不得**把"载体命名"洗成"设计逐字"（已做：4 个设计逐字字段一条断言、此字段**单列**一条断言）。
+**状态**：**已批准 · 待需求方确认命名**。若需求方另有口径 ⇒ 改名成本 = 一行 + 一处测试（该字段名**不进 `rules/`**，不牵动任何锁）。

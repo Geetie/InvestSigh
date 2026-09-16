@@ -95,6 +95,13 @@ counterexamples:
     blocked_hint: "四要素"
     note: "写一条四要素（适用项）不全的建议（缺 derived/ 计算底稿）→ traceback 覆盖率 < 1.0 → 阶段② exit 1"
 
+  - stage: nvidia_sample
+    criterion_id: chapter4_g_depth
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_nvidia_sample_chapter4_g_depth_blocks_on_incomplete_form
+    blocked_hint: "Ch4 §G 形式完备性未过"
+    note: "批次 13-A 绑定（`Ch4 §G.2` 的校验器 = `scripts/valuelayer/completeness.py`）。反例：把 baseline 的 moat[]（④）与 valuation_inputs（⑤）两个 section 的载体清空 —— 字段在、值是合法空数组，但**实质没有内容** → `form_complete` 五项中 sections_nonempty/nonnull_rate 红 → 阶段② exit 1；合规输入（§G.2 五项 + §G.4 盈利分支全过）下该标记不出现。★ 该用例在**夹具副本**内自备 `rules/baseline.yaml`（§G.2 的阈值只从它读，G-06；真仓库那份尚不存在，故不写它就只能测到'规则缺失 ⇒ 无法判定'这一条）。"
+
   # ──────────────────────────── 阶段③ core_chain ────────────────────────────
   - stage: core_chain
     criterion_id: multi_company_transmission
@@ -142,7 +149,18 @@ counterexamples:
     blocked_hint: "三层复盘缺层"
     note: "只给 research_quality + forecast_quality 两层复盘记录 → 缺 investment_result 层 → 阶段⑤ exit 1。
       本条证明的是「三层复盘齐备**这个检查**有判别力」。
-      ★ **待裁定**：「三层齐备」在全设计区**没有'通过判据'级的逐字出处**（`Ch10 §C.1` 只定义 `eval_layer` 的**取值域**；`§C.4:250` 的 `assert layer in VALID_LAYERS` 亦为取值域断言；`施工图:215/234` 只在**退出物**里写'三层复盘记录'）⇒ `registry/delivery.yaml` 里**没有**它自己的 id，故暂时仍挂在本 id 上。team-lead 裁定前不改措辞、不新增 id（`R-04`）。"
+      ★★ **可核的肯定事实**（`delivery.yaml` 是**实现区可核**的声明面；已实测复核）：
+      阶段⑤（`delivery_stages[key=expansion]`）的 `pass_criteria_testable` **恰好 3 条** ——
+      `research_standard_consistent` / `investment_result_verifiable` / `review_append_only`；
+      而 `exit_artifacts: ['三层复盘记录']`。
+      ⇒ 「三层齐备」**只在退出物里，没有通过判据身份**；本 id 名下**没有**它自己的判据 id。
+      （★ 用「可核的肯定事实」而不是「全设计区没有逐字出处」：后者是**穷举式否定**，易被『你搜漏了』反驳。）
+      设计侧佐证：`Ch10 §C.1` 只定义 `eval_layer` 的**取值域**；`§C.4:250` 的
+      `assert layer in VALID_LAYERS` 亦为取值域断言。
+      ★ **待需求方裁定**：见张力 **`T-15`**（「退出物『三层复盘记录』是否升格为阶段⑤ 通过判据」）。
+      ★ team-lead 已裁定**保持本中间态**（不批新增 id —— 那会改动通过判据列表=改需求面，超实现方权限；
+      也不批删除 —— 那会让退出物无人守且已实现的真 append-only 语义白做）。
+      ⇒ 故本条**留在本 id 名下**、未改措辞、未新增 id（`R-04`），并在此**白纸黑字标出待裁定**（不静默）。"
 
   - stage: expansion
     criterion_id: review_append_only
@@ -168,4 +186,5 @@ counterexamples:
     kind: ineffective
     test: tests/injection/test_criterion_effectiveness.py::test_expansion_review_append_only_outcome_categories_have_no_check
     reason: "`Ch10 §D.5` 第 1 行「三类记录齐全：成功 / 失败 / pending（待判断）各有结构性记录，不可选择性删除」**无可检对象**：`success`/`failure`/`pending` 三元组在**整个代码区只出现 1 次**（`registry/delivery.yaml:132` 的声明本身），`schema/models.py` 无对应枚举、`facts/*.jsonl` 无对应字段。故探针实测：把 outcome 由 success/failure/pending 混搭改成**全 success**（字面语义上的『只留赢的』）→ 阶段⑤ 违例集合**完全相同**"
-    note: "★ **临时登记，不是『这条路没问题』**：原因是**载体未定**（等 team-lead 指定 `(success, failure, pending)` 的载体，或确认它属后续阶段待交付）；补实现的提交号见 `reports/ws_criterion_effectiveness_report.md §3 G9-2`。实现后本探针**当场变红**，强制更新本登记（铁律 5）。按 `G-03` 显式记账为『无被检对象』，**不计为已验证**。"
+    note: "★ **临时登记，不是『这条路没问题』**：原因是**载体未定**（等需求方定，见张力 **`T-17`**；team-lead 已裁定**载体属设计范围、不单方面指定**）；补实现的提交号见 `reports/ws_criterion_effectiveness_report.md §3 G9-2`。实现后本探针**当场变红**，强制更新本登记（铁律 5）。按 `G-03` 显式记账为『无被检对象』，**不计为已验证**。
+      ★ 推荐方案（**只写，未实现**，供需求方拍板）：在**现有**复盘记录真源（`facts/tasks.jsonl` 的 `eval_result` / `eval_result_history`）上加 `result_kind ∈ {success, failure, pending}`（**复用单一真源、不新建表** —— `facts/` 表集合不得增删改名），并配 `(success, failure, pending) ⊆ 记录集` 的可执行反例。详见报告 §6.5 ②。"

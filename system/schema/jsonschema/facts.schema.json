@@ -431,6 +431,11 @@
           "title": "Change Records",
           "type": "array"
         },
+        "claims_complete_forecast": {
+          "default": false,
+          "title": "Claims Complete Forecast",
+          "type": "boolean"
+        },
         "coverage_profile": {
           "additionalProperties": true,
           "title": "Coverage Profile",
@@ -466,10 +471,38 @@
           "$ref": "#/$defs/BenchmarkFreezeStatus",
           "default": "unfrozen"
         },
+        "holdings_disclosure_lag": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Holdings Disclosure Lag"
+        },
         "includes_non_listed_assets": {
           "default": false,
           "title": "Includes Non Listed Assets",
           "type": "boolean"
+        },
+        "modeled_coverage": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modeled Coverage"
         },
         "non_listed_assets": {
           "additionalProperties": true,
@@ -540,6 +573,28 @@
           "additionalProperties": true,
           "title": "Sensitivity",
           "type": "object"
+        },
+        "unmodeled_parts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unmodeled Parts",
+          "type": "array"
+        },
+        "unverifiable_forecasts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unverifiable Forecasts"
         }
       },
       "required": [
@@ -4783,7 +4838,7 @@
     },
     "Valuation": {
       "additionalProperties": false,
-      "description": "估值对象（`Ch4 §A.1/§A.3/§G.1⑤` + `Ch5 §D.1/§D.2/§D.6`）。\n\n`Ch4 §A.1` 逐字：`baseline.valuation` 用于\"与反向估值对照，形成独立判断\"，\n并在建议里承载\"收益比较\"；`§G.1⑤` 把它与 `valuation_inputs` / `historicals` /\n`DerivedValue` 引用并列为\"⑤ 财务与估值\"。\n\n★ **不重复 DerivedValue 的字段**（避免双真源）：`§D.2` 要求\"每个 price range →\n  `formula` + `operands` + `method_version` + `share_count` + `compute_date`（N5.3-02 / N9.2-02）\"，\n  而这些正是 `DerivedValue` 自身的字段 ⇒ 本对象只持 `formula_ref` 指向 `derived/` 的那条记录\n  （沿用 `Ch4 §C.4` 对\"DerivedValue 引用\"的既有命名 `formula_ref: <DerivedValue ref>`），\n  **不再落一份副本**。\n★ `probability` 默认 `None`（`§D.6` + `N5.3-07` + `C45-2`）：**不默认 50/50**，\n  \"仅当有依据才填\"；且 `§J` 的 `J9` 明写依据\"须为 `DerivedValue` 且标注来源\"。",
+      "description": "估值对象（`Ch4 §A.1/§A.3/§G.1⑤` + `Ch5 §D.1/§D.2/§D.6`）。\n\n`Ch4 §A.1` 逐字：`baseline.valuation` 用于\"与反向估值对照，形成独立判断\"，\n并在建议里承载\"收益比较\"；`§G.1⑤` 把它与 `valuation_inputs` / `historicals` /\n`DerivedValue` 引用并列为\"⑤ 财务与估值\"。\n\n★ **不重复 DerivedValue 的字段**（避免双真源）：`§D.2` 要求\"每个 price range →\n  `formula` + `operands` + `method_version` + `share_count` + `compute_date`（N5.3-02 / N9.2-02）\"，\n  而这些正是 `DerivedValue` 自身的字段 ⇒ 本对象只持 `formula_ref` 指向 `derived/` 的那条记录\n  （沿用 `Ch4 §C.4` 对\"DerivedValue 引用\"的既有命名 `formula_ref: <DerivedValue ref>`），\n  **不再落一份副本**。\n★ `probability` 默认 `None`（`§D.6` + `N5.3-07` + `C45-2`）：**不默认 50/50**，\n  \"仅当有依据才填\"；且 `§J` 的 `J9` 明写依据\"须为 `DerivedValue` 且标注来源\"。\n★ **`Ch5 §A.1`「新字段」清单的处置**（`05_价格与市场预期研究/02_实现方案.md` 第 21 行逐字：\n  「`baselines.valuation` 上（`independent_judgment`、`implied_ref`、`input_source`、\n  `probability`、`scenario_tag`）」）—— 五项中：\n  · **本对象新增三项**（下三个字段）；\n  · `probability` **已在**（见上一条）；\n  · `input_source` **不在本对象**：它按 `§D.5`「事实输入 / 模型估计 / 人工设定三类分开存」\n    落在**估值输入层** `AssumptionInput.input_source`（**必填** + `manual` 须留痕的校验器），\n    且 `§D.5` / `N5.3-04` 的验收面就在那一层 ⇒ 若在此处再落一份即**双真源**（`G-06`）。\n  该裁定有可执行断言钉住（`tests/unit/test_schema_expand.py`），非本注释独有。",
       "properties": {
         "forecast_assumptions": {
           "items": {
@@ -4795,6 +4850,16 @@
         "formula_ref": {
           "default": "tbd",
           "title": "Formula Ref",
+          "type": "string"
+        },
+        "implied_ref": {
+          "default": "tbd",
+          "title": "Implied Ref",
+          "type": "string"
+        },
+        "independent_judgment": {
+          "default": "tbd",
+          "title": "Independent Judgment",
           "type": "string"
         },
         "method_class": {
@@ -4820,6 +4885,11 @@
         },
         "range": {
           "$ref": "#/$defs/ValuationRange"
+        },
+        "scenario_tag": {
+          "default": "tbd",
+          "title": "Scenario Tag",
+          "type": "string"
         },
         "valuation_params": {
           "items": {
@@ -5404,6 +5474,11 @@
           "title": "Change Records",
           "type": "array"
         },
+        "claims_complete_forecast": {
+          "default": false,
+          "title": "Claims Complete Forecast",
+          "type": "boolean"
+        },
         "coverage_profile": {
           "additionalProperties": true,
           "title": "Coverage Profile",
@@ -5439,10 +5514,38 @@
           "$ref": "#/$defs/BenchmarkFreezeStatus",
           "default": "unfrozen"
         },
+        "holdings_disclosure_lag": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Holdings Disclosure Lag"
+        },
         "includes_non_listed_assets": {
           "default": false,
           "title": "Includes Non Listed Assets",
           "type": "boolean"
+        },
+        "modeled_coverage": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modeled Coverage"
         },
         "non_listed_assets": {
           "additionalProperties": true,
@@ -5513,6 +5616,28 @@
           "additionalProperties": true,
           "title": "Sensitivity",
           "type": "object"
+        },
+        "unmodeled_parts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unmodeled Parts",
+          "type": "array"
+        },
+        "unverifiable_forecasts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unverifiable Forecasts"
         }
       },
       "required": [
@@ -9756,7 +9881,7 @@
     },
     "Valuation": {
       "additionalProperties": false,
-      "description": "估值对象（`Ch4 §A.1/§A.3/§G.1⑤` + `Ch5 §D.1/§D.2/§D.6`）。\n\n`Ch4 §A.1` 逐字：`baseline.valuation` 用于\"与反向估值对照，形成独立判断\"，\n并在建议里承载\"收益比较\"；`§G.1⑤` 把它与 `valuation_inputs` / `historicals` /\n`DerivedValue` 引用并列为\"⑤ 财务与估值\"。\n\n★ **不重复 DerivedValue 的字段**（避免双真源）：`§D.2` 要求\"每个 price range →\n  `formula` + `operands` + `method_version` + `share_count` + `compute_date`（N5.3-02 / N9.2-02）\"，\n  而这些正是 `DerivedValue` 自身的字段 ⇒ 本对象只持 `formula_ref` 指向 `derived/` 的那条记录\n  （沿用 `Ch4 §C.4` 对\"DerivedValue 引用\"的既有命名 `formula_ref: <DerivedValue ref>`），\n  **不再落一份副本**。\n★ `probability` 默认 `None`（`§D.6` + `N5.3-07` + `C45-2`）：**不默认 50/50**，\n  \"仅当有依据才填\"；且 `§J` 的 `J9` 明写依据\"须为 `DerivedValue` 且标注来源\"。",
+      "description": "估值对象（`Ch4 §A.1/§A.3/§G.1⑤` + `Ch5 §D.1/§D.2/§D.6`）。\n\n`Ch4 §A.1` 逐字：`baseline.valuation` 用于\"与反向估值对照，形成独立判断\"，\n并在建议里承载\"收益比较\"；`§G.1⑤` 把它与 `valuation_inputs` / `historicals` /\n`DerivedValue` 引用并列为\"⑤ 财务与估值\"。\n\n★ **不重复 DerivedValue 的字段**（避免双真源）：`§D.2` 要求\"每个 price range →\n  `formula` + `operands` + `method_version` + `share_count` + `compute_date`（N5.3-02 / N9.2-02）\"，\n  而这些正是 `DerivedValue` 自身的字段 ⇒ 本对象只持 `formula_ref` 指向 `derived/` 的那条记录\n  （沿用 `Ch4 §C.4` 对\"DerivedValue 引用\"的既有命名 `formula_ref: <DerivedValue ref>`），\n  **不再落一份副本**。\n★ `probability` 默认 `None`（`§D.6` + `N5.3-07` + `C45-2`）：**不默认 50/50**，\n  \"仅当有依据才填\"；且 `§J` 的 `J9` 明写依据\"须为 `DerivedValue` 且标注来源\"。\n★ **`Ch5 §A.1`「新字段」清单的处置**（`05_价格与市场预期研究/02_实现方案.md` 第 21 行逐字：\n  「`baselines.valuation` 上（`independent_judgment`、`implied_ref`、`input_source`、\n  `probability`、`scenario_tag`）」）—— 五项中：\n  · **本对象新增三项**（下三个字段）；\n  · `probability` **已在**（见上一条）；\n  · `input_source` **不在本对象**：它按 `§D.5`「事实输入 / 模型估计 / 人工设定三类分开存」\n    落在**估值输入层** `AssumptionInput.input_source`（**必填** + `manual` 须留痕的校验器），\n    且 `§D.5` / `N5.3-04` 的验收面就在那一层 ⇒ 若在此处再落一份即**双真源**（`G-06`）。\n  该裁定有可执行断言钉住（`tests/unit/test_schema_expand.py`），非本注释独有。",
       "properties": {
         "forecast_assumptions": {
           "items": {
@@ -9768,6 +9893,16 @@
         "formula_ref": {
           "default": "tbd",
           "title": "Formula Ref",
+          "type": "string"
+        },
+        "implied_ref": {
+          "default": "tbd",
+          "title": "Implied Ref",
+          "type": "string"
+        },
+        "independent_judgment": {
+          "default": "tbd",
+          "title": "Independent Judgment",
           "type": "string"
         },
         "method_class": {
@@ -9793,6 +9928,11 @@
         },
         "range": {
           "$ref": "#/$defs/ValuationRange"
+        },
+        "scenario_tag": {
+          "default": "tbd",
+          "title": "Scenario Tag",
+          "type": "string"
         },
         "valuation_params": {
           "items": {

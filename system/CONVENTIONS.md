@@ -265,16 +265,23 @@ python system/scripts/ops/verify.py --batch <名>       # 已内置同一环境�
 
 ---
 
-### V-07 **新建工作树后，第一步必须跑 `bootstrap_worktree.sh`**
+### V-07 **新建工作树后、以及每次 `git merge` 之后，第一步必须跑 `bootstrap_worktree.sh`**
 
 ```sh
 sh system/scripts/ops/bootstrap_worktree.sh
 ```
 
 **为什么**（系统性伪影，不是谁的代码错）：纪律 9 要求 `rules/` 全 `0444`，但
-**git 只跟踪可执行位、不跟踪只读位** → 任何 `git worktree add` / 新 clone 出来的
-`rules/*.yaml` 都是 `0644` → `rules_lock_guard` **必红**（实测：`fix/claim-propagation`
+**git 只跟踪可执行位、不跟踪只读位** → 任何 `git worktree add` / 新 clone / **`git merge`**
+出来的 `rules/*.yaml` 都是 `0644` → `rules_lock_guard` **必红**（实测：`fix/claim-propagation`
 与 `fix/compute-silent-defects` 两个工作树首次提交各被拦下 10 条）。
+
+★ **`git merge` 也在触发面内**（批次 13 补，缺口 `G-53`）：`ws-ch2-rules` 在 `git merge main` 后
+实测 `ls -l rules/*.yaml` = `-rw-r--r--`（644）—— 合并会按索引重写这些文件，**只读位同样丢失**。
+`rules_lock_guard.py` 有 `st_mode & 0o777 == 0o444` 的显式检查 ⇒ 它**会红（不是静默失效）**，
+但症状是"**每次合并都白红一次**"，且合并与下一次门禁之间存在一个**可写窗口**（窗口内的写入仍会被
+SHA256 抓到，故仍是"检测得到"，非"静默"）。
+⇒ 一律在 `git merge` 之后立刻跑本脚本；**不要**在各人自己的 `chmod` 上打补丁，更**不是**用 `--no-verify` 绕过。
 
 **天天误报的门禁一定会被关掉**（`G-01`）→ 必须在流程层根治，而不是让每个工程师各自 `chmod`，
 更**不是**用 `--no-verify` 绕过。
@@ -331,3 +338,29 @@ sh system/scripts/ops/bootstrap_worktree.sh
 | V-05 | **人工（动测前 `ps`）+ 机器（`tests/.work/.session.lock` 排他会话锁，`returncode=4`，见 `G-RC-10`）**；留档由 `verify.py` 自动完成 |
 | G-01~G-07 / P-01~P-05 | `tests/guards/` 与 `tests/injection/` 的既有断言 + 各守卫自查 |
 | R-01 / R-02 | `tests/injection/test_guards_reject.py` + 各守卫 docstring 自检 |
+
+### V-09 **删除预算是「宿主回合级 + 全流共享」资源 —— 跑批前必须披露本轮用量**
+
+**为什么**（系统性约束，不是谁的代码错，见缺口 `G-59`）：宿主的 safe-delete 代理对**单轮删除次数**设上限
+（实测阈值 `99999`，`scope: "turn"`）。而本项目的夹具会 `copytree` 每一份 `system/`
+⇒ **单个测试文件的批量 `setup` 就能累积上万次删除**。一旦越限：
+
+```
+[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":100113,"threshold":99999,"scope":"turn", …}
+INTERNALERROR> … in _exit_bulk_guard_control → SystemExit: 1
+```
+其后**连单文件跑都立刻 `INTERNALERROR`**（此后每次夹具都继续累积）。
+
+★ **两条必须分清的事**（此前被混为一谈）：
+1. `V-05` 的会话锁是 **per-worktree**（防"同一工作树两个 pytest 会话互删夹具"）——
+   **它防不住"多条工作树合起来打穿同一份共享删除预算"**；
+2. `run_pytest.sh` 导出 `CODEBUDDY_*` 两个 env，治的是 **broker 在解释器层卡死** ——
+   **它治不了删除预算**。**两个环境闸门，两套机制。**
+3. ❌「配额按轮计，下一轮补跑就行」—— **错的**：`scope:"turn"` 是**宿主回合**，
+   **不随 agent 对话轮次重置**；共享资源，等待不保证恢复。
+
+**规矩**：
+- 跑批前**声明本轮已跑的批数/并发流数**（同"耗时数据必须标注并发流数"一并写进报告）；
+- **优先单文件、分片、多轮次**，把单次删除量压到阈值以下；
+- 恢复条件三选一：① 同一宿主回合内**其他流停跑 pytest**（真正的串行窗口）；② 换宿主回合（不保证）；③ **用户对批量删除授权**（守卫名即 `BULK_CONFIRM_REQUIRED`，**是设计好的通道，不算绕过**）；
+- ★ **不许**用 `--no-report`、关环境变量或任何方式绕开该闸门 —— **绕过安全机制得到的"绿"不算证据**。

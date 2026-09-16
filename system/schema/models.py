@@ -1374,6 +1374,15 @@ class Valuation(_Base):
       **不再落一份副本**。
     ★ `probability` 默认 `None`（`§D.6` + `N5.3-07` + `C45-2`）：**不默认 50/50**，
       "仅当有依据才填"；且 `§J` 的 `J9` 明写依据"须为 `DerivedValue` 且标注来源"。
+    ★ **`Ch5 §A.1`「新字段」清单的处置**（`05_价格与市场预期研究/02_实现方案.md` 第 21 行逐字：
+      「`baselines.valuation` 上（`independent_judgment`、`implied_ref`、`input_source`、
+      `probability`、`scenario_tag`）」）—— 五项中：
+      · **本对象新增三项**（下三个字段）；
+      · `probability` **已在**（见上一条）；
+      · `input_source` **不在本对象**：它按 `§D.5`「事实输入 / 模型估计 / 人工设定三类分开存」
+        落在**估值输入层** `AssumptionInput.input_source`（**必填** + `manual` 须留痕的校验器），
+        且 `§D.5` / `N5.3-04` 的验收面就在那一层 ⇒ 若在此处再落一份即**双真源**（`G-06`）。
+      该裁定有可执行断言钉住（`tests/unit/test_schema_expand.py`），非本注释独有。
     """
 
     method_class: str = TBD
@@ -1386,6 +1395,28 @@ class Valuation(_Base):
     """`Ch5 §D.2` 的 `inputs.forecast_assumptions` —— 来自第四章 `drivers`。"""
     valuation_params: list[str] = Field(default_factory=list)
     """`Ch5 §D.2` 的 `inputs.valuation_params` —— 方法参数（模型估计 / 人工设定）。"""
+    scenario_tag: str = TBD
+    """情景标签（`Ch5 §A.1` 新字段清单 + `§E.3`「`scenario_guard.assert_scenario_match()`：
+    情景/期间一致才生成相对判断」，其伪码逐字 `if stock.scenario_tag != benchmark.scenario_tag:
+    raise ScenarioMismatch(...)`）。
+    取值域由 `rules/scenario.yaml::scenario_tags`（`05/02` 未给键名；实装件顶层键为**复数**
+    `scenario_tags`，值 `[bear, neutral, bull, custom]`）**注册表驱动** ⇒
+    此处落**自由字符串、不枚举**（同 `method_class`；枚举即与 `rules/` 双真源）。
+    ★ 本行键路径**曾写作 `scenario_tag.values`（假路径）**，已改正 —— 记为纪律留痕：
+      同一语义两侧（YAML 列表 ↔ 代码取值）的**键名不一致**正是 `G-55` 要绑定的对象，
+      引用时**必须逐字对真文件核**，不能按记忆写（见 `system/reports/x13r_dual_transcription_diff_audit.md §7`）。"""
+
+    implied_ref: str = TBD
+    """指向"价格隐含"判断的引用（`Ch5 §A.1` 新字段清单 + `§C.1` 三份判断表：价格隐含 `implied`
+    的**存储**是 `facts/implied_requirements.jsonl`，由反向估值计算产出）。
+    ⇒ 本字段只持**引用**，不复制该表内容（沿用 `formula_ref` 的既有命名；单一真源）。"""
+    independent_judgment: str = TBD
+    """独立判断（`Ch5 §A.1` 新字段清单 + `§C.1` 三份判断表：独立判断 `independent` 的
+    **存储即本字段**，来源"第四章 baseline + 估值"，随 baseline 更新；与 `implied`（价格隐含）之差
+    归档 `price_gap_state`，见 `§E.6` R-06；`N5.1-03` 要求三份判断"各有来源与可信度"）。
+    ★ 设计（`§A.1`）只给了**字段名、未给结构** ⇒ 本字段按同族既有形态
+      （`formula_ref` / `method_class` 的 `str = TBD`）落为可 `tbd` 字符串，
+      **不臆造区间/数值结构**；下游若需结构化承载，应回设计与需求方确认后另行扩表。"""
 
     @field_serializer("probability")
     def _ser_probability(self, v: Decimal | None) -> str | None:
@@ -1697,7 +1728,25 @@ class BenchmarkReturnBasis(_Base):
 
 
 class Benchmark(TimeMixin):
-    """基准（`Ch9 §N9.1-22` / `Ch3 §C.3`）。**对象化，非硬编码代码**。"""
+    """基准（`Ch9 §N9.1-22` / `Ch3 §C.3`）。**对象化，非硬编码代码**。
+
+    ★ **AGIX（ETF）特殊处理的 5 个字段已落本对象**（批次 **13-E** 裁定）。
+      一手依据是 `Ch5 §E.1` 的表头，逐字为「字段（`benchmarks` **新增**）」
+      （`05_价格与市场预期研究/02_实现方案.md:219`）—— 即设计把这几项**点名成 `benchmarks` 的新字段**；
+      `§E.5`（同文件 `:264`）再补两项，逐字「`benchmarks.modeled_coverage` + `unmodeled_parts[]`」。
+
+    ★ **裁定前的状态与本次收口**（如实留痕，不是"本来就该这样"）：
+      13-B（`scripts/pricelayer/history_guard.py`）先于本批次实现判据时，本对象**只有**
+      `includes_non_listed_assets` / `non_listed_assets` / `sensitivity` 三个 ⇒ 它按
+      「**行内平铺键优先 → `coverage_profile` 内层回落**」**两边都认**，并在自己报告里请裁定
+      （`system/reports/ws_ch5_pricelayer_report.md` §④-4）。
+      **裁定 = 正式并入本对象**（而不是"明文指定用 `coverage_profile` 承载"）⇒
+      `coverage_profile` 那一路从此是**同一事实的第二份载体**，须由消费方删除（`G-06`）；
+      这条已通报 13-B，属其 `scripts/pricelayer/**` 写入面，**不在本卡改**。
+
+    ★ 五个字段的**出处强度不一样，逐字段标注**（见各字段 docstring）：4 个有设计**逐字字段名**，
+      第 5 个（`claims_complete_forecast`）设计只给了**禁令**、未给字段名 ⇒ 如实标为"载体命名"。
+    """
 
     benchmark_id: str
     benchmark_role: BenchmarkRole = BenchmarkRole.primary
@@ -1705,6 +1754,57 @@ class Benchmark(TimeMixin):
     includes_non_listed_assets: bool = False
     non_listed_assets: dict[str, Any] = Field(default_factory=dict)
     sensitivity: dict[str, Any] = Field(default_factory=dict)
+
+    # ── AGIX（ETF）特殊处理的 4 个锚点字段（`Ch5 §E.1` / `§E.5`，批次 13-E）──
+    holdings_disclosure_lag: str | None = None
+    """公开持仓披露延迟（`Ch5 §E.1` 逐字："公开持仓披露延迟 | `holdings_disclosure_lag`"，
+    `05/02:222`；同文件 `:22` 的「新字段 | `benchmarks` 上（…`holdings_disclosure_lag`…）」；
+    需求侧 `N5.4-03`，`05_价格与市场预期研究/01_需求拆解.md:50`）。
+
+    `None` = **该字段缺席**（不是"延迟为 0"）⇒ 消费方 `history_guard` 判据④据此报违例。
+    """
+
+    unverifiable_forecasts: list[str] | None = None
+    """无法独立核验的预测（`Ch5 §E.1` 逐字："无法独立核验的预测 | `unverifiable_forecasts[]`"，
+    `05/02:223`；`N5.4-03`）。
+
+    ★ **`None` 与 `[]` 语义不同，不得折叠**（这一点是判据能成立的前提）：
+    `None` = 该字段**缺席**（`§E.1` 要求"单列"，缺席即没单列 ⇒ 违例）；
+    `[]`   = **显式给出"没有此类预测"**（合规）。
+    `§E.1` 的 `[]` 记号即"列表"；消费方 `history_guard` 判据⑤ 明写
+    「未给出 `unverifiable_forecasts` 字段（`None`）」，正是靠这个区分。
+    """
+
+    modeled_coverage: Decimal | None = None
+    """未建模部分覆盖率（`Ch5 §E.5` 逐字："`benchmarks.modeled_coverage` + `unmodeled_parts[]`"，
+    `05/02:264`；需求侧 `N5.4-05`）。阈值出处 = `00_待拍板项清单.md:46` **B4 已确认**
+    「已建模业务覆盖 **≥ 80%**，否则不得称'完整预测'」（`05/02` J10）。
+
+    ★ **默认 `None`，不是 `1.0`**：`§E.5` 的规范动作是"未建模部分**显式标注**"，默认 `1.0`
+      等于**静默声称覆盖完整** —— 恰恰是 `B4`/`N5.4-05` 要禁的那件事。
+      `None` = 未给 ⇒ 覆盖率判据**不可判定**，消费方记 `NO_MODELED_COVERAGE` note（`G-03`：不得真空通过）。
+    """
+
+    unmodeled_parts: list[str] = Field(default_factory=list)
+    """未建模部分清单（`Ch5 §E.5` 逐字，见上；`§E.5`："未建模部分**显式标注**"）。
+
+    `modeled_coverage < 1` 时**必须非空**（消费方 `history_guard` 判据⑥）—— 该耦合是
+    `§E.5` 的规范内容，此处只落字段、不复述判据（判据的唯一实现面在消费方）。
+    """
+
+    claims_complete_forecast: bool = False
+    """★ **设计未给字段名**，本字段是那条**禁令的载体**（如实标注，供复核）：
+
+    - `Ch5 §E.5`（`05/02:264`）逐字：「`modeled_coverage < 1` 时**不得声称**"完成整个基金预测"」；
+    - `N5.4-05`（`05_价格与市场预期研究/01_需求拆解.md:52`）逐字：「不能忽略基金中没有建模的部分而**声称**完成了整个基金的预测」；
+    - `B4`（`00_待拍板项清单.md:46`）逐字：「…**否则不得称**"完整预测"」。
+
+    三处给的都是**禁令**（"不得声称"），**没有一处给出承载"声称与否"的字段名**。
+    而判据要成立就必须知道"有没有声称" ⇒ 需要载体。命名取消费方（13-B `history_guard`）的
+    既有用法，本对象与之一致。**若需求方另有命名口径，改名即可** ——
+    本字段名**不进 `rules/`**，故改名不产生第二真源（`G-06` 不受影响）。
+    """
+
     freeze_status: BenchmarkFreezeStatus = BenchmarkFreezeStatus.unfrozen   # 域 = 基准对象
     return_basis: BenchmarkReturnBasis = Field(default_factory=BenchmarkReturnBasis)
     return_basis_version: str = "v1"
@@ -1712,6 +1812,14 @@ class Benchmark(TimeMixin):
     return_source: Literal["fund_market_price", "proxy_index"] = "fund_market_price"
     proxy_index_used: bool = False     # 必须 False（禁用替代指数，N3.4-05）
     change_records: list[dict[str, Any]] = Field(default_factory=list)   # 变更追加版本 + effective_date + reason + version + 人工审批
+
+    @field_serializer("modeled_coverage")
+    def _ser_modeled_coverage(self, v: Decimal | None) -> str | None:
+        """`Decimal` 以**字符串**序列化落 JSONL（`Ch9 §3.4.5`：避免浮点误差；同 `ValuationRange`）。
+
+        判据阈值比较（`B4` 的 `≥ 0.80`）在消费方用 `Decimal` 做，不经 `float`。
+        """
+        return None if v is None else str(v)
 
 
 class OpportunityBasis(_Base):
