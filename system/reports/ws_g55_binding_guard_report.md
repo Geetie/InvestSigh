@@ -82,20 +82,26 @@
 
 ### 要求 ③ `G-07` 双落点 + 矩阵自动覆盖（**实测数量变化**）
 
-| 项 | 改动前（`main` 实测） | 改动后（实测） |
+| 项 | 改动前（实测） | 改动后（实测） |
 |---|---|---|
 | `run_all_gates.py::GATES` 条数 | **24** | **25**（末条 = `scenario_tag_binding_guard.py`） |
 | `tests/guards/test_exit_code_contract.py` 用例数 | **52 passed** | **54 passed**（+2：干净→0 / 缺 `code_root`→2） |
 | `pre-commit.sh` 门数 | **11** | **12**（第 ⑫ 道） |
 
 ```
-$ python -c "…load GATES…"                       # main  →  main GATES = 24
-$ python -c "…load GATES…"                       # 本分支 → GATES = 25
+# ── 对象（口径 9/10：读数一律带树 + SHA）──
+#   "改动前" = /Users/gaza/Developer/InvestSigh        @ 4006663                   (main)
+#   "改动后" = .worktrees/ws-schema-expand             @ 7835c0b                   (ws/ch13-e-benchmark-fields)
+#   ★ 取样后 main 已前进到 2fad7eb ⇒ 上面的"改动前"只在 4006663 这个对象上成立
+
+$ python -c "…load GATES…"                       # @4006663(main) → 24
+$ python -c "…load GATES…"                       # @7835c0b       → 25
 $ run_pytest.sh tests/guards/test_exit_code_contract.py -q
-  main → 52 passed in 18.50s     本分支 → 54 passed in 19.21s
-$ run_all_gates.py . --timeout 60
+  @4006663(main) → 52 passed in 18.50s
+  @7835c0b       → 54 passed in 19.21s
+$ run_all_gates.py . --timeout 60                # @7835c0b
   … scenario_tag_binding_guard.py      exit=0        0.22s      ← 已进汇总表
-$ sh system/scripts/ops/pre-commit.sh
+$ sh system/scripts/ops/pre-commit.sh            # @7835c0b
   pre-commit → scenario_tag_binding_guard
   RESULT: PASS（0 violations）
   pre-commit ✓ 全部门禁放行          ← 12 道门全绿
@@ -147,19 +153,36 @@ $ sh system/scripts/ops/pre-commit.sh
 
 ### 6.1 事实（同条件对拍）
 
+★ **口径 9/10 订正（本报告初版只写了"本分支/main"，未带 SHA ⇒ 判词会随对象漂移而失真）**：
+下列读数**一律带树 + SHA**；且取样时 `main` = `4006663`，此后 `main` 已前进到 `2fad7eb`
+（含 13-A 合并与本轮新裁定）⇒ **下面的 `main` 读数只在 `4006663` 这个对象上成立**，
+不得被引用为"当前 `main` 的状态"。
+
 ```
-$ verify.py --batch guards          # 本分支 → ✗ exit=124  60.01s/60s  **超时**
-$ verify.py --batch guards          # main   → ✗ exit=124  60.01s/60s  **超时**
+# 树 = .worktrees/ws-schema-expand @ 64aed64（ws/ch13-e-benchmark-fields）
+$ verify.py --batch guards   → ✗ exit=124  60.01s/60s  **超时**
+
+# 树 = /Users/gaza/Developer/InvestSigh @ 4006663（main，取样时刻同批次）
+$ verify.py --batch guards   → ✗ exit=124  60.01s/60s  **超时**
 ```
 
-**两条分支、同一条命令、同一时段** ⇒ 与本卡改动**无关**。
+**两个不同对象、同一条命令、同一时段** ⇒ 与本卡改动**无关**。
 
 ### 6.2 但"超时"不是"永远超时" —— 是**高方差**（`G-54` 的同一机理）
 
-| 观测 | 命令 | 结果 |
-|---|---|---|
-| ①（宿主 6 流并发时） | `run_pytest.sh tests/guards -q --durations=8` | **71 passed in 101.96s** ⇒ 越过 60s **1.7×** |
-| ②（较静时，含本卡 +5 例） | `run_pytest.sh tests/guards -q` | **76 passed in 30.73s** ⇒ 只到 60s 的 **0.51×** |
+| 观测 | 树 + SHA | 命令 | 结果 |
+|---|---|---|---|
+| ①（宿主多流并发时） | `.worktrees/ws-schema-expand` @ **`64aed64`** | `run_pytest.sh tests/guards -q --durations=8` | **71 passed in 101.96s** ⇒ 越过 60s **1.7×** |
+| ②（较静时，含本卡 +5 例） | 同树 @ **`7835c0b`** | `run_pytest.sh tests/guards -q` | **76 passed in 30.73s** ⇒ 只到 60s 的 **0.51×** |
+
+★ 两次是**不同对象**（② 比 ① 多本卡的 5 例）且**不同宿主负载** ⇒ 3.3× 的跨度里，
+**"负载"与"我加的 5 例"两个因子未被分离**；本卡只声明"读数跨度 3.3×"，**不声称**其中多少归因于哪一个。
+要分离需在**同一 SHA** 上做差分实验 —— 属 13-F 的取证范围。
+
+★ **合并 `main` 后的复跑**（对象 = 同树 @ **`664252f`**）：本守卫 `exit=0`；
+`run_all_gates.py . --timeout 60` 非零计数仍为 **1**（仅既存 `traceback`）；
+`run_pytest.sh tests/guards/test_scenario_tag_binding.py tests/unit/test_schema_expand.py -q`
+→ **48 passed in 32.44s**（5 + 43）。⇒ 合并**未**使本卡失效。
 
 `①` 的 `--durations=8` **全部是 `setup`**（5.15 ~ 6.49s/例），与 `G-54` 记录的 `unit` 批**逐字同形**：
 
@@ -172,6 +195,11 @@ $ verify.py --batch guards          # main   → ✗ exit=124  60.01s/60s  **超
 `guards` 批的 60s 上限对这个规模**本来就不够**，只是宿主不忙时才侥幸通过。
 
 ### 6.3 影响（为什么值得报）
+
+★ **本节判词的作用域（口径 10）**：以下结论所依据的读数取自
+`main@4006663` 与 `.worktrees/ws-schema-expand@64aed64 / @7835c0b`（见 §6.1/§6.2）。
+**判词对这三个对象成立**；`main` 此后已前进到 `2fad7eb`，
+**若要在新的 `main` 上引用本判词，应按新 SHA 重跑后再判**（不得把本判词当"当前 `main` 的状态"）。
 
 `verify.py --batch guards` 会**随机**判 TIMEOUT ⇒ 该批的覆盖处于**不可信**状态
 （同 `G-54` 对 `unit` 的判断：**它让这一批的门禁不可信**）。
