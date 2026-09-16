@@ -385,6 +385,49 @@ def _v02_binding_problems(root: Path) -> list[str]:
     return [f"{CONVENTIONS_REL}: {p}" for p in problems]
 
 
+# ── 反例的注入器：★ **按批次名定位，不按整行字面量** ──────────────────────────────
+# `#109` 现场教训（我自己的反例被自己的改动打红）：
+#   原来这三条反例把**整行字面量**（如 `| \`injection-g\` | 分片 G（反编造 + 分片绑定） | 300s | 5.67s |`）
+#   当锚点。于是**只要表里任一格改了**（`#109` 改了「内容」列），反例就**自己先崩**
+#   （报"找不到锚点"）—— 它从"守判据"退化成"制造假红"，**而且这一崩本身是假红**（`G-01`）。
+#   ⇒ 这正是 `V-11` 规则 9 的形态：**引用另一份文件的内容做判据，必须按真源定位**。
+#      这里的真源 = **批次名**（唯一、稳定），不是那一行的文字。
+
+
+def _v02_row_index(root: Path, name: str) -> int:
+    """现算 `` | `name` | `` 那一行的**下标**（作用于 `splitlines(keepends=True)` 的列表）。"""
+    lines = (root / CONVENTIONS_REL).read_text(encoding="utf-8").splitlines(keepends=True)
+    hits = [i for i, line in enumerate(lines) if line.startswith(f"| `{name}` |")]
+    assert len(hits) == 1, (
+        f"反例注入失败：`{name}` 的行现算出 {len(hits)} 条（期望恰好 1）—— 锚点必须唯一"
+    )
+    return hits[0]
+
+
+def _delete_v02_row(root: Path, name: str) -> None:
+    """删掉 `name` 那一整行（**按名字定位，不看内容**）。"""
+    path = root / CONVENTIONS_REL
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    del lines[_v02_row_index(root, name)]
+    path.write_text("".join(lines), encoding="utf-8")
+
+
+def _rewrite_v02_row_cell(root: Path, name: str, logical_index: int, new_value: str) -> None:
+    """替换 `name` 那一行的第 `logical_index` 个**逻辑格**（0=批次名 1=内容 2=超时 3=实测）。
+
+    ★ 按**位置**定位（与 `_v02_rows` 的取数口径同源），**不看那一格现在写的是什么** ——
+      否则"当前值"又变成一个会过期的锚点。
+    """
+    path = root / CONVENTIONS_REL
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    i = _v02_row_index(root, name)
+    raw = lines[i].split("|")            # 首尾各有一个空串 ⇒ 逻辑格 k 落在 raw[k + 1]
+    assert len(raw) >= 4 + 2, f"`{name}` 那行的格数不足 4 列：{lines[i]!r}"
+    raw[logical_index + 1] = f" {new_value} "
+    lines[i] = "|".join(raw)
+    path.write_text("".join(lines), encoding="utf-8")
+
+
 def test_v02_table_matches_batch_truth_source(code_root: Path) -> None:
     """★ `CONVENTIONS.md::V-02` 批次表必须与真源 `verify.py::BATCHES` **逐行一致**。
 
