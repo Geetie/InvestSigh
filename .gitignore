@@ -11,3 +11,7 @@ Thumbs.db
 *.tmp
 ~$*
 *~
+
+# --- 运行时状态（不进版本库；每次运行重写，可重建）---
+# 真源是 facts/ 与 derived/ 下的 JSONL；state.json 只是 resume 用的运行态快照。
+system/state.json
