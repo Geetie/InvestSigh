@@ -6,9 +6,10 @@
 
 - **工作树**：`/Users/gaza/Developer/InvestSigh/.worktrees/ws-degrade-contract`
 - **分支**：`ws/degrade-contract`（基点 `d5a37f8`）
-- **本单提交**：`abbe7b3`（代码，`fix(degrade): 修 G-43/G-45 —— 让「降级保留上次有效结果」在真数据上真的会拦`）
-  + `d34e6e5`（本报告，`docs(report): G-43/G-45 修复报告 —— 补齐 pipeline.py diff 的 hunk 复核结论`）
-- **报告时的 HEAD**：`d34e6e5027fa83b91003e02b2ed02b735ddf0668`
+- **代码 commit（评审对象）**：`abbe7b3` = `abbe7b367034c7987acb3d1660d82ab9d10b6c8c`
+  （`fix(degrade): 修 G-43/G-45 —— 让「降级保留上次有效结果」在真数据上真的会拦`）—— **全部代码改动都在这一个 commit 里**
+- **报告 commit**：`d34e6e5`、`4f03d7d`（`docs(report): …`，只改本文件，不动代码）
+- **改前基线（对照用）**：`d5a37f8`；后续任何新提交**只会是本报告文件**的修改
 - **`git status --short`**：**（空）** —— 工作树干净（本报告已入库，故不在未跟踪列表里）
 - **`$PY`** = `/Users/gaza/.workbuddy/binaries/python/envs/default/bin/python`
 - **纪律声明**：全程**未**触碰真仓库 `system/facts/`、`system/derived/`、`system/state.json`
