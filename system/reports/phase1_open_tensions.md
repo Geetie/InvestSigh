@@ -134,3 +134,47 @@
 `status='pending'` / `value_source='rules'` / **`method_version=''`** —— 因为真文件**没有 `method_version` 这个键**，
 而它的**测试夹具**给了。⇒ **夹具造了一个真文件里不存在的形状**，与 `G-43`/`G-45`（夹具与真写路径不同源）**完全同族**。
 ⇒ 已派该流修（要么找到真实载体，要么改**响亮失败**，**不许静默取空串**）。
+
+---
+
+## 批次 13 后续新增张力（`T-19` ~ `T-21`，主理人 2026-09-16 登记）
+
+### `T-19` · `method_version` 的**值**无 `rules/` 归属，且设计**自身两处示例不一致**
+
+| 双方 | 内容 |
+|---|---|
+| ① `05_价格与市场预期研究/02_实现方案.md:81` | 示例值 `"method_version":"v1"` |
+| ② 同文件 `:166` | 示例值 `method_version="val-v1"` |
+| ③ `§D.2` / `N5.3-02` | 要求"每个 price range → `formula` + `operands` + **`method_version`** + `share_count` + `compute_date`" ⇒ 它是**输出字段** |
+| ④ `rules/valuation-methods.yaml::valuation_compute.method_version_field` | **只登记了字段名**（`method_version`），**未登记取值** |
+
+**性质**：**设计未钉规范串**，两处示例互相不一致；且**值的归属未指派**（不像 `§J.2` 明写"参数化 `rules/…`"）。
+**现状**：13-B 代码里落为 `pricelayer-solver-v1` / `pricelayer-valuation-v1`（**自定**）；13-B 的 `scenario_guard` 还**误从 `rules/scenario.yaml` 读** `method_version`（该件无此键 ⇒ 静默取空串，已派修）。
+**状态**：**待裁定（需求方）** —— ① 规范串定为哪一个（或都不作准、另定）；② 是否进 `rules/`（若进，落点应为 `valuation-methods.yaml::valuation_compute.method_version`）。
+**主理人推荐**：**进 `rules/`**（它"影响产出标注"且被写进产物 ⇒ 按 `R8-3` 属**参数**）；**规范串交需求方**，代码不自行定值。
+
+### `T-20` · ★ `sensitivity` **同名不同域**（设计 vs `rules/` 指的不是一个东西）
+
+| 载体 | 形态 | 出处 |
+|---|---|---|
+| **设计** | **列表** `sensitivity[]`（一组敏感性项） | `05_价格与市场预期研究/02_实现方案.md:224` · `05/01:162` |
+| **`schema.models.Benchmark`** | **行内平铺**，类型 `dict[str, Any]`（**不是列表**） | 既有实现 |
+| **`rules/benchmark.yaml:23-26`** | **嵌套在内层**，且语义是**披露状态**：`non_listed_assets: {disclosure_state: undisclosed, sensitivity: {disclosure_state: undisclosed}}` | 实装件 |
+
+⇒ **三处的"位置 + 类型 + 语义"两两不同、零机器绑定**。
+★ **最要紧的一点**：`rules/benchmark.yaml` 里的 `sensitivity` 是一个 **`disclosure_state` 容器**，而设计的 `sensitivity[]` 是一组**敏感性项** ——
+**这两个很可能是同名不同义的东西**（同类风险本项目已有先例 `T-03`：`freeze_status` 在参数域与基准对象域是**两个枚举**）。
+**状态**：**待裁定（需求方）** —— ① 二者是否同一物？若是 ⇒ 定唯一的形态（列表 or 字典）与位置；若否 ⇒ **改名**（其中一个必须改）。
+**主理人推荐**：**先判"是否同一物"**。若同一物 ⇒ **按设计取列表**（`dict → list` 是破坏性契约变更，但 `facts/benchmarks.jsonl` **当前 0 行** ⇒ **此刻改成本最低**）；若不同物 ⇒ **`rules/` 侧改名**（避免与设计的 `sensitivity` 撞名）。
+
+### `T-21` · `claims_complete_forecast` 是**载体命名**（设计只给禁令、未给字段名）
+
+| 双方 | 内容 |
+|---|---|
+| ① `§E.5:264` | 「`modeled_coverage < 1` 时**不得声称**"完成整个基金预测"」—— **只有禁令，没有字段名** |
+| ② `N5.4-05`（`05/01:52`）+ `B4`（`00_待拍板项清单.md:46`） | 同样**只有禁令/阈值，无字段名** |
+| ③ 实装 | `schema/models.py::Benchmark.claims_complete_forecast: bool`（**沿用 13-B 的既有命名**） |
+
+**性质**：判据要知道"有没有声称"就必须有载体 ⇒ 载体**必须存在**，但**名字是转写方定的**。
+⇒ 主理人**批准**当前落法（`bool`），**但要求**：① docstring 必须逐字标注"**载体命名**"（已做）；② 测试**不得**把"载体命名"洗成"设计逐字"（已做：4 个设计逐字字段一条断言、此字段**单列**一条断言）。
+**状态**：**已批准 · 待需求方确认命名**。若需求方另有口径 ⇒ 改名成本 = 一行 + 一处测试（该字段名**不进 `rules/`**，不牵动任何锁）。

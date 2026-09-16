@@ -95,6 +95,13 @@ counterexamples:
     blocked_hint: "四要素"
     note: "写一条四要素（适用项）不全的建议（缺 derived/ 计算底稿）→ traceback 覆盖率 < 1.0 → 阶段② exit 1"
 
+  - stage: nvidia_sample
+    criterion_id: chapter4_g_depth
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_nvidia_sample_chapter4_g_depth_blocks_on_incomplete_form
+    blocked_hint: "Ch4 §G 形式完备性未过"
+    note: "批次 13-A 绑定（`Ch4 §G.2` 的校验器 = `scripts/valuelayer/completeness.py`）。反例：把 baseline 的 moat[]（④）与 valuation_inputs（⑤）两个 section 的载体清空 —— 字段在、值是合法空数组，但**实质没有内容** → `form_complete` 五项中 sections_nonempty/nonnull_rate 红 → 阶段② exit 1；合规输入（§G.2 五项 + §G.4 盈利分支全过）下该标记不出现。★ 该用例在**夹具副本**内自备 `rules/baseline.yaml`（§G.2 的阈值只从它读，G-06；真仓库那份尚不存在，故不写它就只能测到'规则缺失 ⇒ 无法判定'这一条）。"
+
   # ──────────────────────────── 阶段③ core_chain ────────────────────────────
   - stage: core_chain
     criterion_id: multi_company_transmission
