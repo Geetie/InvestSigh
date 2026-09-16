@@ -150,7 +150,7 @@ EXIT=0
   (b) 信号正常计数、守卫四组合判定、故意注入必红。
 - **无扩展设计**（`R-04`）：未新增 JSONL、未改 schema/rules/设计区、未触碰共享编排层。
 - **真仓库真源零污染**：收工复核 `claims=5 / dependency_edges=3 / companies=2 / tasks=3 / baselines=1 / recommendations=1 / prices=0`，行数不变。
-- **提交哈希**：`__COMMIT__`（提交后由主理人核对）。
+- **提交哈希**：`16dfe25546ba63026fa5921ff132a58c51ea7c59`（本报告随该提交入库；回填哈希的收尾提交紧随其后）。
 
 ---
 
