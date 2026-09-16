@@ -713,3 +713,34 @@ shutil.rmtree(child, ignore_errors=True)       →  只吞 OSError，吞不掉 S
 **不要**用三点 `main...b` 做"新增文件"结论。
 ★ 并记一条**新的失效模式**（第 4 种）：**分支上的 merge commit 本身**（标题形如 `Merge branch 'main' into <branch>`）
 就会让 `main..b = 1`，**而内容贡献为零** ⇒ 必须用两点内容差分排除。
+
+### 13.11 `G-61` **第二种形态：持久阻断**（`ws-ch4-valuelayer` 实测，与第一种形态**不同**）
+
+| 形态 | 成因 | 处置 | 是否"重试可解" |
+|---|---|---|---|
+| **(a) 瞬时**（首次记录） | main 工作树处于 **merge 逐文件中间态** | 等中间态结束 / 原样重试 | ✅ 可解 |
+| **(b) 持久**（本次新增） | **main 的门禁清单已含新守卫，而落后分支的树里没有那个脚本** | ★ **必须先 `git merge main`** | ❌ **重试无效** |
+
+**(b) 的实测（`ws-ch4-valuelayer`，只读）**：
+```
+main 树：quote_provenance_guard.py = YES · scenario_tag_binding_guard.py = YES · run_gate 条数 = 13
+其 树：quote_provenance_guard.py = NO  · scenario_tag_binding_guard.py = NO  · run_gate 条数 = 11
+⇒ 钩子跑到 ⑫ 直接 `can't open file … exit=2` ⇒ 提交被**持续**挡到"先 merge main"为止
+```
+⇒ **对任何落后 main 的分支，`main` 每新增一道门禁，就立刻把该分支的提交永久卡住** —— 与提交者改了什么无关。
+
+★ **结构性放大器（两条流独立提出）**：`.git/hooks/pre-commit` **逐字硬编码**了
+`exec sh "<主仓绝对路径>/system/scripts/ops/pre-commit.sh"` ⇒ **所有 34 个 worktree 永远跑 main 那一份清单**，
+而 `run_gate` 的目标脚本却从 **cwd 反解（= 提交者自己的树）** ⇒ **清单与对象天然不同源**。
+⇒ 短期处置 = **各流先 `merge main` 再提交**（已广播）；★ **长期解 = 让钩子按提交者的树解析**（见卡 13-O）。
+
+### 卡 13-O · **钩子同源化**（高危改动，先分析后动，**本回合不仓促改**）
+**目标**：让 `.git/hooks/pre-commit` 运行**提交者自己那棵树**的 `system/scripts/ops/pre-commit.sh`，
+使「判据清单 ↔ 被检对象」**天然同源**，从而同时消掉 (a)/(b) 两种假缺陷。
+**为什么定级"高危"**（本项目纪律：**改守卫/跑测器属高危改动**——它们出错的表现是"静默不检查"）：
+- 语义变化：**每棵树以自己的清单为准** ⇒ 落后分支可用**较旧/较弱**的清单提交成功；
+  ⇒ 必须论证"这仍是安全的"（`run_all_gates` 与 `verify.py` 批次仍是独立强制点），**否则不许改**；
+- 必须配**可执行反例**：① 树缺脚本 ⇒ 提交**成功**且**明确告警**（不再 `[Errno 2]` 伪装成"阻断"）；
+  ② 树有其脚本 ⇒ 跑的是**该树**那一份（不是 main 的）；
+- 必须**同时**保留"新门禁加入 main 后仍会被执行"的路径（否则 `G-07` 的意图被削弱）。
+**DoD**：设计短文 + 反例 2 条 + `install_hooks.sh` 改动 + 全量门禁 + 报告。
