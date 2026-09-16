@@ -22,6 +22,7 @@ from scripts.pricelayer.solver import (
     SearchBound,
     SolverError,
     assert_multi_solution,
+    load_solution_set_display,
     solve_implied_requirements,
     write_solution_set,
 )
@@ -266,3 +267,119 @@ def test_cli_rejects_missing_alternative_explanations(
     proc = run_script("scripts/pricelayer/solver.py", scratch, "--no-report")
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "IMPLIED-NO-ALTERNATIVE" in proc.stdout
+
+
+# ───────── 规则↔代码绑定：**在真 rules/valuation-methods.yaml 上**（防硬编码）─────────
+
+
+def test_real_rules_solution_set_display_values(scratch: Path, real_rules) -> None:
+    """★ 展示上限**读**真文件（B18：默认 3 / 最多 5）；多解下限由 `must_show_multiple` 派生。"""
+    real_rules(scratch, "valuation-methods.yaml")
+    display = load_solution_set_display(scratch)
+    assert display.value_source == "rules"
+    assert (display.default_count, display.max_count) == (3, 5)
+    assert display.must_show_multiple is True
+    assert display.min_count == 2, "「多」的机械化 = ≥2，由语义键派生（G-06 单一真源）"
+    assert display.selection and display.overflow
+
+
+def test_rule_change_to_must_show_multiple_changes_min_count(scratch: Path, real_rules) -> None:
+    """★ 反例/行为绑定：把 `must_show_multiple` 改成 `false` ⇒ 下限降为 1（代码随之改变）。"""
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["solution_set_display"]["must_show_multiple"] = False
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    assert load_solution_set_display(scratch).min_count == 1
+
+
+def test_rule_change_to_default_count_drives_folding(scratch: Path, real_rules) -> None:
+    """★ 行为绑定：`default_count` 由 3 改成 2 ⇒ 求解结果只展示 2 组、其余折叠（**不硬编码 3**）。"""
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+
+    # 三组可行解（解不同的第 5 类 + 一个不同固定值的同类解 ⇒ 排序后依次落在 0.19 / 0.20 / 0.25）
+    candidates = [
+        _combination("C-growth", SolvedVariable.growth, fixed_growth="0", fixed_margin="0.30", bound=("0.10", "0.30")),
+        _combination("C-margin", SolvedVariable.margin, fixed_growth="0.20", fixed_margin="0", bound=("0.25", "0.35")),
+        _combination("C-growth-2", SolvedVariable.growth, fixed_growth="0", fixed_margin="0.20", bound=("0.10", "0.30")),
+    ]
+
+    # 真值（`default_count: 3`）⇒ 三组全展示、零折叠
+    on_real_value = _solve(candidates, display=load_solution_set_display(scratch))
+    assert (len(on_real_value.solutions), len(on_real_value.folded)) == (3, 0)
+
+    # 规则改成 2 ⇒ 展示 2 组、折叠 1 组（代码跟随规则；折叠而非丢弃）
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["solution_set_display"]["default_count"] = 2
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    display = load_solution_set_display(scratch)
+    assert display.default_count == 2
+
+    result = _solve(candidates, display=display)
+    assert len(result.solutions) == 2, "展示组数必须跟随 default_count"
+    assert len(result.folded) == 1, "超出 default_count 的可行解应折叠，不得丢弃"
+    assert any("SOLUTION_SET_FOLDED" in n for n in result.notes)
+
+
+def test_illegal_display_values_fail_loudly(scratch: Path, real_rules) -> None:
+    """★ 反例：`default_count > max_count` → **响亮失败**（不静默夹紧）。"""
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["solution_set_display"]["default_count"] = 9
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(Exception, match="取值非法"):
+        load_solution_set_display(scratch)
+
+
+def test_real_rules_solver_ref_points_to_this_module(scratch: Path, real_rules) -> None:
+    """真文件的 `assumption_grid.solver_ref` 指向本模块 ⇒ 无绑定违例。"""
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml")
+    doc = yaml.safe_load((scratch / "rules" / "valuation-methods.yaml").read_text(encoding="utf-8"))
+    assert doc["assumption_grid"]["solver_ref"] == "scripts/pricelayer/solver.py"
+
+
+def test_cli_clean_on_real_rules_file(scratch: Path, real_rules, run_script) -> None:
+    """反向对照：真规则文件 → CLI **exit 0**（无绑定违例），即便 `facts/` 为空。"""
+    real_rules(scratch, "valuation-methods.yaml")
+    proc = run_script("scripts/pricelayer/solver.py", scratch, "--no-report")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "NO_IMPLIED_ROWS" in proc.stdout
+    assert "SOLVER-RULE-BINDING" not in proc.stdout
+
+
+def test_cli_flags_solver_ref_drift(scratch: Path, real_rules, run_script) -> None:
+    """★ 注入违例：规则文件的 `solver_ref` 不再指向本模块 → CLI **exit 1**。"""
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["assumption_grid"]["solver_ref"] = "scripts/pricelayer/solver_v2.py"
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/solver.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "SOLVER-RULE-BINDING" in proc.stdout
+
+
+def test_cli_flags_display_count_drift(scratch: Path, real_rules, run_script) -> None:
+    """★ 注入违例：规则文件的 `default_count` 与代码回落值不一致 → CLI **exit 1**。"""
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["solution_set_display"]["default_count"] = 4
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/solver.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "SOLVER-RULE-BINDING" in proc.stdout

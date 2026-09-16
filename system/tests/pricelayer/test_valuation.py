@@ -22,6 +22,7 @@ from scripts.pricelayer.valuation import (
     assert_traceability,
     compute_valuation,
     load_method_routing,
+    load_unregistered_fallback,
     route_method,
     trace_derived_chain,
 )
@@ -29,7 +30,9 @@ from scripts.pricelayer.valuation import (
 BASELINE_AT = datetime(2026, 8, 1, tzinfo=timezone.utc)
 COMPUTE_AT = datetime(2026, 9, 10, tzinfo=timezone.utc)
 
-#: `Ch5 §D.1` 的表内容（路由表的**内容**由设计给了；键名未给 ⇒ 见报告待裁定）。
+#: `Ch5 §D.1` 的表**内容**（ASCII 候选名，用于**纯函数**用例）。
+#: ★ 规则文件真值（中文方法类名）另在 `test_real_rules_*` 里用 `real_rules` 夹具核 ——
+#:   真值：`hardware`→4 / `cloud`→2 / `software`→3 / `etf`→1。
 DESIGN_ROUTING = {
     "hardware": ("normalized_earnings", "cash_flow_with_reinvestment", "segment", "peer_comparison"),
     "cloud": ("cash_flow_with_reinvestment", "segment"),
@@ -278,9 +281,51 @@ def test_cli_rejects_unregistered_method_class(
 
 
 def test_reverse_control_cli_passes_with_resolvable_chain(
+    scratch: Path, write_jsonl, write_derived_jsonl, real_rules, run_script
+) -> None:
+    """反向对照：链可解析 + 方法已注册 → **exit 0**。
+
+    ★ 用**真** `rules/valuation-methods.yaml`（含 `method_routing` / `unregistered_fallback` /
+      `valuation_compute`）；用旧的"只写 `method_routing`"的手写半截夹具会漏掉规则绑定判据，
+      正是 `G-43`/`G-45` 的病灶（夹具形状真文件写不出来）。
+    """
+    real_rules(scratch, "valuation-methods.yaml")
+    write_jsonl(
+        scratch,
+        "baselines",
+        [
+            _baseline(
+                "b1",
+                {"range": {"low": "80", "high": "120"}, "formula_ref": "dv-1", "method_class": "正常化利润"},
+            )
+        ],
+    )
+    write_derived_jsonl(
+        scratch,
+        [
+            {
+                "derived_id": "dv-1",
+                "value": "80",
+                "formula": "a / b",
+                "operands": ["a"],
+                "method_version": "v1",
+                "computed_at": "2026-09-15T12:00:00+00:00",
+            }
+        ],
+    )
+    proc = run_script("scripts/pricelayer/valuation.py", scratch, "--no-report")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "RESULT: PASS" in proc.stdout
+    assert "VALUATION-RULE-BINDING" not in proc.stdout
+
+
+def test_cli_flags_partial_handwritten_rule_missing_bound_keys(
     scratch: Path, write_jsonl, write_derived_jsonl, write_rules, run_script
 ) -> None:
-    """反向对照：链可解析 + 方法已注册 → **exit 0**。"""
+    """★ 注入违例：手写半截规则文件（只给 `method_routing`）→ **exit 1**。
+
+    该判据正是"夹具与真文件不同源"的守卫：真文件里的 3 个键必须都在。
+    """
     write_rules(scratch, "valuation-methods.yaml", {METHOD_ROUTING_KEY: DESIGN_ROUTING})
     write_jsonl(
         scratch,
@@ -306,8 +351,8 @@ def test_reverse_control_cli_passes_with_resolvable_chain(
         ],
     )
     proc = run_script("scripts/pricelayer/valuation.py", scratch, "--no-report")
-    assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "RESULT: PASS" in proc.stdout
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "VALUATION-RULE-BINDING" in proc.stdout
 
 
 def test_cli_notes_when_rule_file_absent_but_still_flags_trace(
@@ -323,3 +368,109 @@ def test_cli_notes_when_rule_file_absent_but_still_flags_trace(
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "NO_VALUATION_METHODS_RULE" in proc.stdout
     assert "VALUATION-TRACE-MISSING" in proc.stdout
+
+
+# ───────── 规则↔代码绑定：**在真 rules/valuation-methods.yaml 上**（防 G-43/G-45 同族病）─────────
+
+
+def test_real_rules_routing_matches_team_lead_measured_values(scratch: Path, real_rules) -> None:
+    """★ 在**真文件**上核路由真值（不是在手写夹具上）：4 个 `model_class` 及其方法类逐字。
+
+    真值（`ws-ch2-rules` 安装件 `bb32863`，本卡在主干实测复核）：
+    `hardware`→4 / `cloud`→2 / `software`→3 / `etf`→1。
+    """
+    real_rules(scratch, "valuation-methods.yaml")
+    routing = load_method_routing(scratch)
+    assert sorted(routing) == ["cloud", "etf", "hardware", "software"]
+    assert routing["hardware"] == ("正常化利润", "含再投资现金流", "分部估值", "同行比较")
+    assert routing["cloud"] == ("含再投资现金流（订阅/用量）", "分部")
+    assert routing["software"] == ("正常化利润", "现金流", "留存指标")
+    assert routing["etf"] == ("简化底稿",)
+    assert METHOD_ROUTING_KEY in {"method_routing"}, "真文件里的键名即 method_routing"
+
+
+def test_real_rules_unregistered_fallback_matches_code_defaults(
+    scratch: Path, real_rules
+) -> None:
+    """★ 未注册回落口径**读**真文件，且与代码默认值一致（`Ch5 §D.1` 末句 / `Ch11 §D.2`）。"""
+    from scripts.pricelayer.valuation import DEFAULT_UNREGISTERED_MARK, load_unregistered_fallback
+
+    real_rules(scratch, "valuation-methods.yaml")
+    fallback, mark = load_unregistered_fallback(scratch)
+    assert fallback == "generic" == DEFAULT_METHOD_CLASS
+    assert mark == "unregistered" == DEFAULT_UNREGISTERED_MARK
+
+
+def test_real_rules_route_method_on_real_values(scratch: Path, real_rules) -> None:
+    """在**真路由表**上：已注册 `model_class` 取到真方法类；未注册走真回落口径。"""
+    real_rules(scratch, "valuation-methods.yaml")
+    routing = load_method_routing(scratch)
+    fallback, mark = load_unregistered_fallback(scratch)
+
+    hw = route_method("hardware", routing, fallback_method_class=fallback, fallback_mark=mark)
+    assert hw.registered is True
+    assert hw.method_classes == routing["hardware"]
+    assert hw.method_class == "正常化利润"
+
+    unknown = route_method("biotech", routing, fallback_method_class=fallback, fallback_mark=mark)
+    assert unknown.registered is False
+    assert unknown.method_class == "generic"
+    assert mark in unknown.note
+
+
+def test_rule_binding_violation_on_renamed_entry(scratch: Path, write_jsonl, real_rules, run_script) -> None:
+    """★ 注入违例：真规则文件声明的方法类改了而代码没改 → CLI **exit 1**（防声明与实现脱节）。"""
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["unregistered_fallback"]["method_class"] = "misc"
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/valuation.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "VALUATION-RULE-BINDING" in proc.stdout
+
+
+def test_rule_binding_violation_on_unknown_declared_entry(
+    scratch: Path, write_jsonl, real_rules, run_script
+) -> None:
+    """★ 注入违例：规则文件声明的 `valuation_compute.entry` 在本模块内不存在 → exit 1。"""
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["valuation_compute"]["entry"] = "compute_value_renamed"
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/valuation.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "VALUATION-RULE-BINDING" in proc.stdout
+
+
+def test_reverse_control_cli_passes_on_real_rules_file(
+    scratch: Path, write_jsonl, write_derived_jsonl, real_rules, run_script
+) -> None:
+    """反向对照：真规则文件 + 合规估值（`method_class` 取真值）→ exit 0。"""
+    real_rules(scratch, "valuation-methods.yaml")
+    write_derived_jsonl(
+        scratch,
+        [
+            {
+                "derived_id": "dv-1",
+                "value": "100",
+                "formula": "a / b",
+                "operands": ["a"],
+                "method_version": "v1",
+                "computed_at": "2026-09-15T12:00:00+00:00",
+            }
+        ],
+    )
+    write_jsonl(
+        scratch,
+        "baselines",
+        [_baseline("b1", {"range": {"low": "80", "high": "120"}, "formula_ref": "dv-1", "method_class": "正常化利润"})],
+    )
+    proc = run_script("scripts/pricelayer/valuation.py", scratch, "--no-report")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "RESULT: PASS" in proc.stdout

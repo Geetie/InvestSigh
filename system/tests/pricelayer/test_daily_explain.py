@@ -23,13 +23,15 @@ from scripts.pricelayer.daily_explain import (
     Factor,
     PriceMove,
     QuoteCaliber,
+    RecheckTrigger,
+    assert_no_price_contamination,
     attribute,
     candidate_factors,
     enqueue_review,
     is_abnormal_decline,
+    load_recheck_trigger,
     quote_caliber_from_snapshot,
     validate_quote,
-    assert_no_price_contamination,
 )
 
 NOW = datetime(2026, 9, 15, 21, 0, tzinfo=timezone.utc)
@@ -242,3 +244,205 @@ def test_cli_notes_empty_price_source(scratch: Path, run_script) -> None:
     proc = run_script("scripts/pricelayer/daily_explain.py", scratch, "--no-report")
     assert proc.returncode == 0
     assert "NO_PRICES" in proc.stdout
+
+
+# ───────── 规则↔代码绑定：**在真 rules/review.yaml 上**（防硬编码阈值）─────────
+
+
+def test_real_rules_recheck_thresholds(scratch: Path, real_rules) -> None:
+    """★ 复查阈值**读**真文件（`rules/review.yaml::forced_recheck`，B2：−7% / −12%）。
+
+    规则文件写**百分点**（`-7`/`-12`），本层内部用**小数**（`-0.07`/`-0.12`）——
+    换算只在 `load_recheck_trigger` 一处完成，且结果必须与设计逐字值一致。
+    """
+    real_rules(scratch, "review.yaml")
+    trigger = load_recheck_trigger(scratch)
+    assert trigger.value_source == "rules"
+    assert trigger.single_day_drop == Decimal("-0.07") == ABNORMAL_DROP_1D
+    assert trigger.three_day_cumulative == Decimal("-0.12") == ABNORMAL_DROP_3D
+    assert trigger.keep_original_judgment_time is True, "T08"
+
+
+def test_rule_threshold_change_drives_judgement(scratch: Path, real_rules) -> None:
+    """★ 行为绑定：把单日阈值改成 −5% ⇒ −6% 立即命中（**不硬编码 −7%**）。"""
+    import yaml
+
+    real_rules(scratch, "review.yaml")
+    path = scratch / "rules" / "review.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["forced_recheck"]["single_day_drop_pct"] = -5
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    trigger = load_recheck_trigger(scratch)
+    assert trigger.single_day_drop == Decimal("-0.05")
+    assert is_abnormal_decline(Decimal("-0.06"), trigger=trigger) is True
+    assert is_abnormal_decline(Decimal("-0.06"), trigger=load_recheck_trigger(None)) is False
+
+
+def test_positive_rule_threshold_fails_loudly(scratch: Path, real_rules) -> None:
+    """★ 反例：阈值被写成非下跌口径（正数）→ **响亮失败**（不静默当阈值用）。"""
+    import yaml
+
+    real_rules(scratch, "review.yaml")
+    path = scratch / "rules" / "review.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["forced_recheck"]["single_day_drop_pct"] = 7
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(Exception, match="必须为负"):
+        load_recheck_trigger(scratch)
+
+
+def test_enqueue_review_uses_rule_thresholds(scratch: Path, real_rules) -> None:
+    """工单理由用**规则里的**阈值表述（不是代码常量）。"""
+    import yaml
+
+    real_rules(scratch, "review.yaml")
+    path = scratch / "rules" / "review.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["forced_recheck"]["single_day_drop_pct"] = -5
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    ticket = enqueue_review(
+        recommendation_id="rec-1",
+        original_judgment_time=NOW,
+        daily_change_pct=Decimal("-0.06"),
+        trigger=load_recheck_trigger(scratch),
+    )
+    assert ticket is not None
+    assert "-0.05" in ticket.trigger
+
+
+def test_cli_clean_on_real_rules_file(scratch: Path, real_rules, run_script) -> None:
+    """反向对照：真规则文件 → CLI **exit 0**（无绑定违例），即便 `facts/prices` 为空。"""
+    real_rules(scratch, "review.yaml")
+    proc = run_script("scripts/pricelayer/daily_explain.py", scratch, "--no-report")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "NO_PRICES" in proc.stdout
+    assert "DAILY-RULE-BINDING" not in proc.stdout
+
+
+def test_cli_flags_recheck_threshold_drift(scratch: Path, real_rules, run_script) -> None:
+    """★ 注入违例：规则阈值改了而代码回落值没改 → CLI **exit 1**（声明与实现脱节）。"""
+    import yaml
+
+    real_rules(scratch, "review.yaml")
+    path = scratch / "rules" / "review.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["forced_recheck"]["single_day_drop_pct"] = -5
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/daily_explain.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "DAILY-RULE-BINDING" in proc.stdout
+
+
+def test_cli_flags_forced_recheck_key_removed(scratch: Path, run_script) -> None:
+    """★ 注入违例：`review.yaml` 缺 `forced_recheck` 键 → CLI **exit 1**。"""
+    import yaml
+
+    doc = yaml.safe_load((Path(__file__).resolve().parents[2] / "rules" / "review.yaml").read_text(encoding="utf-8"))
+    doc.pop("forced_recheck", None)
+    path = scratch / "rules" / "review.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/daily_explain.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "DAILY-RULE-BINDING" in proc.stdout
+
+
+# ───────── 规则↔代码绑定：**在真 rules/review.yaml 上**（防硬编码阈值）─────────
+
+
+def test_real_rules_recheck_thresholds(scratch: Path, real_rules) -> None:
+    """★ 复查阈值**读**真文件（`rules/review.yaml::forced_recheck`，B2：−7% / −12%）。
+
+    规则文件写**百分点**（`-7`/`-12`），本层内部用**小数**（`-0.07`/`-0.12`）——
+    换算只在 `load_recheck_trigger` 一处完成，且结果必须与设计逐字值一致。
+    """
+    real_rules(scratch, "review.yaml")
+    trigger = load_recheck_trigger(scratch)
+    assert trigger.value_source == "rules"
+    assert trigger.single_day_drop == Decimal("-0.07") == ABNORMAL_DROP_1D
+    assert trigger.three_day_cumulative == Decimal("-0.12") == ABNORMAL_DROP_3D
+    assert trigger.keep_original_judgment_time is True, "T08"
+
+
+def test_rule_threshold_change_drives_judgement(scratch: Path, real_rules) -> None:
+    """★ 行为绑定：把单日阈值改成 −5% ⇒ −6% 立即命中（**不硬编码 −7%**）。"""
+    import yaml
+
+    real_rules(scratch, "review.yaml")
+    path = scratch / "rules" / "review.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["forced_recheck"]["single_day_drop_pct"] = -5
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    trigger = load_recheck_trigger(scratch)
+    assert trigger.single_day_drop == Decimal("-0.05")
+    assert is_abnormal_decline(Decimal("-0.06"), trigger=trigger) is True
+    assert is_abnormal_decline(Decimal("-0.06"), trigger=load_recheck_trigger(None)) is False
+
+
+def test_positive_rule_threshold_fails_loudly(scratch: Path, real_rules) -> None:
+    """★ 反例：阈值被写成非下跌口径（正数）→ **响亮失败**（不静默当阈值用）。"""
+    import yaml
+
+    real_rules(scratch, "review.yaml")
+    path = scratch / "rules" / "review.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["forced_recheck"]["single_day_drop_pct"] = 7
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(Exception, match="必须为负"):
+        load_recheck_trigger(scratch)
+
+
+def test_enqueue_review_uses_rule_thresholds(scratch: Path, real_rules) -> None:
+    """工单理由用**规则里的**阈值表述（不是代码常量）。"""
+    import yaml
+
+    real_rules(scratch, "review.yaml")
+    path = scratch / "rules" / "review.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["forced_recheck"]["single_day_drop_pct"] = -5
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    ticket = enqueue_review(
+        recommendation_id="rec-1",
+        original_judgment_time=NOW,
+        daily_change_pct=Decimal("-0.06"),
+        trigger=load_recheck_trigger(scratch),
+    )
+    assert ticket is not None
+    assert "-0.05" in ticket.trigger
+
+
+def test_cli_clean_on_real_rules_file(scratch: Path, real_rules, run_script) -> None:
+    """反向对照：真规则文件 → CLI **exit 0**（无绑定违例），即便 `facts/prices` 为空。"""
+    real_rules(scratch, "review.yaml")
+    proc = run_script("scripts/pricelayer/daily_explain.py", scratch, "--no-report")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "NO_PRICES" in proc.stdout
+    assert "DAILY-RULE-BINDING" not in proc.stdout
+
+
+def test_cli_flags_recheck_threshold_drift(scratch: Path, real_rules, run_script) -> None:
+    """★ 注入违例：规则阈值改了而代码回落值没改 → CLI **exit 1**（声明与实现脱节）。"""
+    import yaml
+
+    real_rules(scratch, "review.yaml")
+    path = scratch / "rules" / "review.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["forced_recheck"]["single_day_drop_pct"] = -5
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/daily_explain.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "DAILY-RULE-BINDING" in proc.stdout
+
+
+def test_cli_flags_forced_recheck_key_removed(scratch: Path, run_script) -> None:
+    """★ 注入违例：`review.yaml` 缺 `forced_recheck` 键 → CLI **exit 1**。"""
+    import yaml
+
+    doc = yaml.safe_load((Path(__file__).resolve().parents[2] / "rules" / "review.yaml").read_text(encoding="utf-8"))
+    doc.pop("forced_recheck", None)
+    path = scratch / "rules" / "review.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/daily_explain.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "DAILY-RULE-BINDING" in proc.stdout
