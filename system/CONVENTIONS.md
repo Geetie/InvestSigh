@@ -63,38 +63,48 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
 **数字只留在各自的真源里**，否则"手写的数"会随新增批次**静默过期**。
 本节给的是**人的索引**：内容与超时；**超时随实测更新，更新须同步守卫上限**）：
 
-| 批次 | 内容 | 超时 | 实测 |
+| 批次 | 内容 | 超时 | 实测（2026-09-16 · **生产配置**·单次） |
 |---|---|---|---|
-| `unit` | `tests/unit/`（契约 + 作用域匹配器） | 60s | ~8s |
-| `conflict` | `tests/conflict/`（P-03/P-05/P-07 schema） | 30s | ~0.3s |
-| `guards` | `tests/guards/`（门禁退出码契约 + 验证规范） | 60s | ~18s |
-| `injection-a` | `tests/injection/` 分片 A（审计回归 + 链路接线）· 27 例 | 300s | 63.67s（4.7×） |
-| `injection-b` | `tests/injection/` 分片 B（判据有效性 + 守卫防御性）· 28 例 | 300s | 63.72s（4.7×） |
-| `injection-c` | `tests/injection/` 分片 C（守卫拦截 A 半 + 追加式）· 27 例 | 300s | 未取得（配额触顶，§报告 §2.5） |
-| `injection-d` | `tests/injection/` 分片 D（守卫拦截 B 半 + 幂等 + 时间契约）· 31 例 | 300s | 136.80s（2.2×）★工作树实测 |
-| `injection-e` | `tests/injection/` 分片 E（提示注入 + rules 锁）· 27 例 | 300s | 未取得（配额触顶，§报告 §2.5） |
-| `injection-f` | `tests/injection/` 分片 F（阶段闸门 + 接线守卫 + 分片绑定）· 31 例 | 300s | 110.13s（2.7×，**29 例时**测得） |
-| `root` | `tests/test_ch11_invariants.py`（Ch11 不变量） | 30s | ~0.3s |
-| `compute` | `tests/compute/`（确定性计算层） | 60s | ~5s |
-| `graph` | `tests/graph/`（依赖图与 T12 传播） | 60s | ~4s |
-| `validators` | `tests/validators/`（locator 定位校验器） | 30s | ~5s |
-| `claim` | `tests/claim/`（主张五态状态机） | 30s | ~5s |
-| `decision` | `tests/decision/`（决策层 triage / gate / rules） | 30s | ~2.4s |
-| `transmit` | `tests/transmit/`（Ch7 传导编排引擎） | 60s | ~5s |
-| `evidence` | `tests/evidence/`（Ch6 证据层：去重/独立判定/预算闸门） | 150s | ~18s |
-| `daily` | `tests/daily/`（阶段④每日运行：覆盖可核/降级/幂等/调度） | 180s | ~43s |
-| `pricelayer` | `tests/pricelayer/`（Ch5 价格层：反解多解/估值路由/倒填/情景/历史外推/每日解释）· 168 例 | 300s | 53.89s / 83.80s（3.6~5.6×） |
-| `valuelayer` | `tests/valuelayer/`（Ch4 价值层：路由防串味/分部加总/增长质量/护城河/状态机/形式完备性）· 206 例 | 300s | 88.5s（≈3.4×） |
-| `gates` | `run_all_gates.py`（全部门禁逐项退出码） | 60s | ~3s |
-| `stage` | `stage_gate.py --stage all`（阶段判据） | 30s | ~0.3s |
+| `unit` | `tests/unit/`（契约 + 作用域匹配器） | 300s | 3.40s |
+| `conflict` | `tests/conflict/`（P-03/P-05/P-07 schema） | 30s | 0.50s |
+| `guards` | `tests/guards/`（门禁退出码契约 + 验证规范） | 300s | 13.23s |
+| `injection-a` | `tests/injection/` 分片 A（审计回归 + 链路接线） | 300s | 4.56s |
+| `injection-b` | 分片 B（判据有效性 + 守卫防御性） | 300s | 12.66s |
+| `injection-c` | 分片 C（守卫拦截 A 半 + 追加式） | 300s | 8.56s |
+| `injection-d` | 分片 D（守卫拦截 B 半 + 幂等 + 时间契约） | 300s | 13.88s |
+| `injection-e` | 分片 E（提示注入 + rules 锁 + 时间契约） | 300s | 4.80s |
+| `injection-f` | 分片 F（阶段闸门 + 接线守卫） | 300s | 7.32s |
+| `injection-g` | 分片 G（反编造 + 分片绑定） | 300s | 5.67s |
+| `root` | `tests/test_ch11_invariants.py`（Ch11 不变量） | 30s | 0.38s |
+| `compute` | `tests/compute/`（确定性计算层） | 180s | 2.60s |
+| `graph` | `tests/graph/`（依赖图与 T12 传播） | 60s | 2.68s |
+| `validators` | `tests/validators/`（locator 定位校验器） | 90s | 3.22s |
+| `claim` | `tests/claim/`（主张五态状态机） | 120s | 4.98s |
+| `decision` | `tests/decision/`（决策层 triage / gate / rules） | 120s | 2.97s |
+| `transmit` | `tests/transmit/`（Ch7 传导编排引擎） | 60s | 3.01s |
+| `evidence` | `tests/evidence/`（Ch6 证据层：去重/独立判定/预算闸门） | 150s | 4.24s |
+| `daily` | `tests/daily/`（阶段④每日运行：覆盖可核/降级/幂等/调度） | 180s | 8.65s |
+| `pricelayer` | `tests/pricelayer/`（Ch5 价格层：反解多解/估值路由/倒填/情景/历史外推/每日解释） | 300s | 15.36s |
+| `valuelayer` | `tests/valuelayer/`（Ch4 价值层：路由防串味/分部加总/增长质量/护城河/状态机/形式完备性） | 300s | 5.50s |
+| `gates` | `run_all_gates.py`（全部门禁逐项退出码） | 60s | 8.80s（**该批 `exit=1`**，既有真源红 `T-10`） |
+| `stage` | `stage_gate.py --stage all`（阶段判据） | 30s | 0.59s（**`exit=1` 为设计行为**：纪律 12 阻塞） |
 
-### ★ `tests/injection/` 为什么是 **6 个片**（不是设计选择，是宿主配额决定的）
+★★ **本表刻意**不写**「片数」与「例数」**（`#91`；与本节开头"刻意不写批次数"同一条规矩，此前只执行了一半）：
+唯一真源 = `verify.py::INJECTION_SHARDS`（片数）＋ `tests/injection/test_shard_coverage.py` 的
+`--collect-only` **现算**断言（每片例数）。**超时列的真源是 `verify.py::BATCHES` 的 `timeout` 字段。**
+本表此前写死过片数与例数，实测已漂移（写「6 片」实为 **7**；`a` 写 27 实为 **30**、`b` 写 28 实为 **32**、
+`d` 写 31 实为 **29**、`f` 写 31 实为 **27**，`g` **整行缺失**；`pricelayer` 写 168 实为 **183**）
+⇒ 漂移记录与复算见 `reports/ws_fixture_cost_report.md`（卡 13-F/`#91`）。**超时列本身也曾有 6 行过期**
+（`unit`/`guards` 写 60s 实为 300s、`compute` 60→180、`validators` 30→90、`claim`/`decision` 30→120）—— 同一次一并订正。
+
+### ★ `tests/injection/` 为什么要**切成多片**（不是设计选择，是宿主配额决定的）
 
 **根因（实测）**：夹具是**每个用例复制一份 `system/`**（`conftest.py::code_root`，
 实测每份 **273 项**：`copytree(ignore=_ignore)` + `_ENSURE_DIRS` + `_make_writable` +
 `_reset_truth_source` 之后 `os.walk` 计目录 + 文件）。宿主对**单轮（turn）**的删除操作有
 **累积配额**（触发时报 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`，`scope: "turn"`；
-守卫以「本轮的 `count`」对「`threshold`」比较）。`tests/injection` 合并跑 **165 例**，
+守卫以「本轮的 `count`」对「`threshold`」比较）。`tests/injection` 全目录合并跑一轮的例数
+（**现算值见 `verify.py` / `test_shard_coverage.py`，此处不写死**；原文写"165 例"**已过期**），
 每例约 **792 计数**（实测 ≈ **2.9 ×** 夹具项数，见 §下面那条 ★★）≈ **13 万计数/轮**，
 **远超阈值** ⇒ 越过阈值后**连单个用例目录都被拒删**，之后所有夹具 setup
 直接报 `E` —— **症状看起来完全像"测试坏了"，实际是配额**。
@@ -106,10 +116,10 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
 （当前宿主环境变量 `CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD=99999`）。
 故下面任何"安全片数"的结论都必须**带阈值的限定语**。
 
-**代价（如实写明）**：完整覆盖 `tests/injection` 现在需要 **6 个轮次**（每轮跑一片）。
+**代价（如实写明）**：完整覆盖 `tests/injection` 需要**与片数相同的轮次数**（每轮跑一片）。
 这是**宿主删除配额决定的**，不是设计选择 —— 合并成一轮就必然重现上面那个"被关掉"的故障。
-`--batch all` 会把 6 片连着跑完 ⇒ **恰好**会重新越过配额，在某一处突然变红。
-**要完整覆盖该目录，请分 6 个轮次跑**。
+`--batch all` 会把各片连着跑完 ⇒ **恰好**会重新越过配额，在某一处突然变红。
+**要完整覆盖该目录，请按片轮流次跑**（片数真源 = `verify.py::INJECTION_SHARDS`）。
 
 ★ **`--batch all` 这条禁令没有机器绑定，且不可能有**（`verify.py::INJECTION_SHARDS` 处也有同样一段注释）：
 `--batch all` 的越界是**跨进程累积**的 —— 每一片单跑都是绿的，红的是**第 N 片之后的那一片**，
@@ -150,29 +160,38 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
   ① 宿主 `threshold` **两次观测不同**（一次 `9999`、一次 `99999`）；
   ② `count` 的**计数单位不是"夹具项数"**（实测 ≈ **2.9 × 项数/例** ⇒ 约 **792 计数/例**）。
   ⇒ 按 `9999 ÷ 792`，安全上限只剩 **≈12 例/片**，完整覆盖需 **≈14 片**。
-  ★★ **故当前的 6 片（每片 ≤32）只标注为「实测可跑的当前配置」，不是「已证明安全」**：
-  它成立的**前提是阈值处于观测到的较高值（`99999`）**。**若阈值回落到 `9999`，6 片立刻不成立**
-  （目录现有 **171 例**，需要 ≈14 片），必须重排 —— 重排是**主理人决策**（会把轮次从 6 抬到 14），已上报，未擅自改。
-  保留 32 的另一半依据是**本单的工作树实测**：`a` 27 例 / `b` 28 例 / `d` **31 例** / `f` 31 例
-  **各自单轮 `exit=0` 跑完**（`d` 的 31 例是**最接近上限**的一片，也过了）。
+  ★★ **故当前的分片（每片 ≤32）只标注为「实测可跑的当前配置」，不是「已证明安全」**：
+  它成立的**前提是阈值处于观测到的较高值（`99999`）**。**若阈值回落到 `9999`，当前分片立刻不成立**
+  （安全上限 ≈12 例/片 ⇒ 需 ≈14 片），必须重排 —— 重排是**主理人决策**（轮次数会随之抬高），已上报，未擅自改。
+  ★ **片数与各片例数一律不在此处写死**（`#91`）：真源 = `verify.py::INJECTION_SHARDS` +
+  `test_shard_coverage.py` 的 `--collect-only` **现算**断言。原文此处曾写「6 片 / 171 例」并逐片列 4 个例数
+  —— 实测已全部漂移（片数 6→**7**；`a` 27→**30**、`b` 28→**32**、`d` 31→**29**、`f` 31→**27**，`g` 整行缺失）。
   上述口径**逐字写在代码里**：`test_shard_coverage.py::MAX_CASES_PER_SHARD` 上方注释 + 该断言的
   失败消息里都带"授权上限 / 阈值前提 / 回落时改成 ≈12 例"三句，避免下一个人把它当推导常数。
 
 ★★ **配额之外的第二重成本：工作区内的删除被宿主逐项监察**（实测 ≈ **16ms/项**）——
   同一份 273 项夹具副本：工作区内 `rmtree` **4.521s**、工作区外（`/tmp`）**0.046s**（**98×**）；
   而 `copytree` 两边一样快（0.106s / 0.102s）。
-  ⇒ ① 合并跑 165 例光删除就要 **≈12 分钟**，**既不可行也不被允许**；
+  ⇒ ① 全目录合并跑**光删除就要十几分钟**（按现算例数 × 每例 ≈0.75s，原文以"165 例 ≈12 分钟"计，
+  该例数**已过期**）⇒ **既不可行也不被允许**；
   ② **标定超时必须在工作树内测，不得用隔离副本的秒数** —— 拿隔离副本的秒数标定会**必然假红**
   （实例：`injection-f` 工作树 **110.13s**、隔离副本 **12.53s** ⇒ 按隔离 ×8 得 120s，余量仅 **1.09×**）。
-  故六片统一取 **300s**（`V-02` 上限；对工作树实测 = **2.2~4.7×**）——
+  故 `tests/injection/` 的各片统一取 **300s**（`V-02` 上限；对工作树实测 = **2.2~4.7×**）——
   与 `daily`（43s → 180s = 4.2×）同属"慢批次取不超过上限的最大值"，倍数的适用边界同 `V-02` 注。
   ★ 余量最薄的是 `injection-d`（136.80s / 300s = **2.2×**）与 `injection-f`（2.7×）；
   **见到这两片超时的第一步不是改断言，而是先确认有没有第二个 pytest 会话在同一工作树里跑**（`V-05`）。
 
-★★ **配额触顶后，本轮内不恢复**（新发现，2026-09-16 实测）：一旦命中
-  `SAFE_DELETE_BULK_CONFIRM_REQUIRED`，此后连**单个**用例目录的删除都被拒
+★★ **配额触顶后的现象与边界**（2026-09-16 实测；★ 原文断言"**本轮内不恢复**"，**该措辞已被后续实测收窄**）：
+  一旦命中 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`，**当时**此后连**单个**用例目录的删除都被拒
   （`targetCount: 1`），**任何建夹具的用例都跑不了**；隔数分钟重试，`count` **一个数字都没变**。
-  ⇒ 此时"多片全红"看起来**极像"分片方案坏了"** —— 所以 `verify.py::_exit_zero` 里那条
+  ★★ **但"不恢复"不能推广成"本会话剩余时间必然红"**：同一天稍后、**同一会话、零 env 覆盖**下
+  把 `verify.py` 的 **23 个批次全跑了一遍**，**全部 `exit=0`、一次告警都没有**
+  （含 `guards`／`pricelayer`／`injection-b..d` 这些夹具重的批次；见
+  `reports/ws_fixture_cost_report.md §6.6`）。⇒ **守卫"开"≠"一定收费"**，触发与否**依赖会话/阈值状态**，
+  机制**尚未钉死**（旁证：报文自述 `"scope":"turn"`）。**不要**拿本条去预判"之后一定红"。
+  ⇒ **可操作判据**：报"未测 / 环境红"之前，**先看输出里有没有那行 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`**
+  —— 有 ⇒ 环境（该格未测，`G-60`）；**无 ⇒ 红/慢就是判据自己的事，不许归因环境**。
+  ⇒ 至于"多片全红"看起来**极像"分片方案坏了"** —— 所以 `verify.py::_exit_zero` 里那条
   **配额归因**（判不合格、但输出里写明"这多半不是测试失败 + 处置"）是**必需**的，
   它把"配额"与"测试坏了"分开，且**不是放行**。
 
@@ -180,8 +199,9 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
   并行工作流的 Agent **不得**自行改 `verify.py`（多方同改必冲突），只报"需新增批次"。
 ★ **批次表不写"门禁项数"**（曾出现 18/19/20/23 四种数字）：项数的真源是 `run_all_gates.GATES`
   与 `tests/guards::GUARDS`（**两个不同的数**），描述里重复它必然漂移。
-  （上表 `injection-*` 行的**例数**是"分片配额"的直接依据，属该判据自身的量；其真源仍是
-   `verify.py` 的目标清单 + `test_shard_coverage.py` 的现算断言，表里的数字仅为可读性。）
+  ★（`#91`）上表 `injection-*` 行与 `pricelayer`/`valuelayer` 行**曾经**写过例数（"· 27 例"…），
+  并声明"仅为可读性"—— **该豁免是错的**：它正是"同一事实的第二个存放处"，实测已四格全错、`g`
+  整行缺失。⇒ **已从表中删除**，例数只认 `verify.py` 的目标清单 + `test_shard_coverage.py` 的**现算**断言。
 
 ### V-03 **超时 = 该批有问题**，且**绝不算通过**
 
@@ -289,8 +309,9 @@ python system/scripts/ops/verify.py --batch <名>       # 已内置同一环境�
 **处置（按优先级）**：
 
 1. **一轮内只跑一次全量**；诊断与迭代用**单批**（`--batch <name>`）或**单文件**（`run_pytest.sh tests/<dir>/<file>`）。
-   ★ **`tests/injection` 现在切成 6 片**（`injection-a`~`f`，见 `V-02`）：**每轮只跑一片**。
-   那是这条配额规则的直接产物 —— 该目录 165 例 × 273 项/例 ≈ 45,045 项/轮，合并跑必然超阈值。
+   ★ **`tests/injection` 现在切成多片**（片名与归属见 `V-02`，真源 = `verify.py::INJECTION_SHARDS`）：**每轮只跑一片**。
+   那是这条配额规则的直接产物 —— 该目录**全量**跑一轮必然越过阈值（例数与每例项数见 `verify.py` 的现算值与
+   `reports/ws_fixture_cost_report.md §2.6`）。
 2. 需要反复迭代时：**新开一轮**（配额按轮重置）。
 3. **不要**把"批次提前红"当成测试问题去改断言 —— 先看日志有没有 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`。
 4. 手工清理夹具目录时**分片删**（逐子项），不要一次 `rm -rf` 整个 `tests/.work`。
