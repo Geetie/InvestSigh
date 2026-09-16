@@ -222,7 +222,46 @@ blocked = True
 |---|---|---|---|---|
 | **G-28** | ★ **新门禁逃逸"退出码契约"矩阵**：`tests/guards/test_exit_code_contract.py` 的 `GUARDS` 是文件内的**手写清单**，**不从 `run_all_gates.GATES` 派生** → 本批次把门禁从 20 扩到 23（`+shell_var_guard` / `+graph_integrity_guard` / `+locator_check`），**新增的 3 项完全没被契约矩阵覆盖**（矩阵仍只测原 20 项）。<br>★ 这正是本项目**自己写的铁律第 5 条**："**'声明'与'实现'必须有机器绑定**：任何手工台账都能被一行数据编辑绕过。" | `CONVENTIONS.md::G-01`（"各守卫统一走 `run_checker`；`test_exit_code_contract.py` **逐守卫**断言"）· 铁律 5 | **中** | `OPEN`（**未动**：改动测试文件需跑 pytest 验证，而 pytest 通道当时被批次 7 审计员独占 → 待审计结束。修法：`GUARDS` 改为从 `run_all_gates.GATES` 派生 + 加一条"两者同步"断言） |
 | **G-29** | **无"报告成品审计门"**：现有 **23 项门禁管代码与真源**（追加式 / schema 同步 / 注入防护 / 占位符 / 验证规范…），**对产出的报告文字没有审计门**；而 `§一 底线 3` 要求"结论可追溯四要素"，在**报告层面无守卫** | `§一 底线 3` · `§八 N-3` | 中 | `OPEN`（外部同题作业的 Phase 6 是硬门槛："不过审的只能算草稿"。见 `reports/nvda_task_lessons_for_investsigh.md §2.5` 建议 `S-6`） |
-| **G-30** | **`DependencyEdge` 缺"强度 / 时滞"两列**：外部同题作业把"传导关系矩阵（**方向 / 强度 / 时滞**）"称为**排序的主要输入**，并为此建三张矩阵（上游→原点 / 竞争者→原点 / 原点→下游）；本项目 `schema/models.py::DependencyEdge` 只有 `{edge_id, from_ref, to_ref, kind}` | `Ch7 §C`（传导）· `Ch9 §3.4.3` | 中 | `OPEN`（改 `schema` 属**跨阶段契约变更** → 须需求方裁定，**主理人不自裁**。见 `nvda_task_lessons_for_investsigh.md §2.2` 建议 `S-2`） |
+| **G-30** | **`DependencyEdge` 缺"强度 / 时滞"两列**：外部同题作业把"传导关系矩阵（**方向 / 强度 / 时滞**）"称为**排序的主要输入**，并为此建三张矩阵（上游→原点 / 竞争者→原点 / 原点→下游）；本项目 `schema/models.py::DependencyEdge` 只有 `{edge_id, from_ref, to_ref, kind}` | `Ch7 §C`（传导）· `Ch9 §3.4.3` | 中 | ✅ **已裁定（需求方 2026-09-16「都按你的建议来」）**：**先不加**。理由：数值"强度"会撞 `P-09`（决策作用域禁数值权重），且提前加 = 设计未写先新增。**触发条件 = 阶段② 真实数据跑通后**，届时若确需，只能做**定性分档**（强/中/弱 · 短/中/长），以与 `T-09` 的 Pareto 逐维比较相容 |
+
+---
+
+## 批次 8 · 需求方裁定落账 + 真实数据首跑暴露的新缺口
+
+### 8.1 裁定落账（需求方 2026-09-16）
+
+| 项 | 裁定 | 落位 |
+|---|---|---|
+| **`T-01`~`T-07`** | 「均按你的取舍点确认」 | ✅ 已在 `phase1_open_tensions.md` 逐条标 `已确认` |
+| **`T-08`** | 选 A（注册 1–6，模型侧缺口显式标 gap） | ✅ 已在 `I-1`（`530c3cd`）落地 |
+| **`T-09`** | 选 **② Pareto 支配关系** | ✅ 已裁定；实现属分析/展示层，**不在本批**（约束见张力册） |
+| **`G-26`** | 按我的建议：给 step 1 加**显式"本日无新输入"声明**，**不放宽守卫** | ⏳ 待做（`ingest_step.py`，批次 9） |
+| **`G-27`** | 「**开豁免清单**，逐步加」 | ✅ 已开：`system/config/placeholder_exemptions.yaml`（白名单，每条须带理由与批准人；`no_placeholder_guard` 按 `(path, rule)` 放行） |
+| **`G-29`** | 「要，但放在阶段②之后」 | ⏳ **触发条件 = 阶段② 产出第一份真实报告** |
+| **`G-30`** | 「先不加」 | ✅ 见上 |
+| **`S-1`（共识层）** | 「按我的建议：分两步，先加取数入口 + 数据字段」 | ⏳ 待做 —— **注意**：数据字段必须落在**既有 18 张表**内（`Ch9 §3.3.3` 不得增删改名），首选扩 `expectations`（`ExpectationSample`）的语义而非新增表；取数入口属 `rules/` 变更（0444，走 `lock_rules.py` 流程） |
+
+### 8.2 ★ 真实数据首跑暴露的新缺口（`G-RC-01` ~ `G-RC-04`）
+
+> 背景：`ws/real-collect` 首次把真实数据落进真源（`main = bb42184`）。以下四条**全部是"项目第一次有真实数据"才暴露的**。
+
+| # | 缺口 | 严重度 | 状态 |
+|---|---|---|---|
+| **`G-RC-01`** | **step 6 用测试夹具伪造建议**（空仓库也产 `buy` + `signals_emitted=1`，并写进真源） | **阻断** | ✅ **已修**：`fix/decision-production-inputs`（`run_default` 不再读夹具、真用 `root`；无真输入 → `produced=[]` + `degraded` + `gap`）。审计 A 单独立复现同一根因（其 `B1`）→ 双证据闭合。**残留**：被伪造写入的那条 `recommendations` 行已由该流剔除并逐字节留证 |
+| **`G-RC-02`** | ★ **夹具默认"空真源"是个隐含耦合**：`conftest.code_root` 用 `copytree` 复制整个 `system/`（含 `facts/`、`raw/`）→ 测试**依赖"仓库里恰好没数据"**。真实数据一进真源，`tests/claim` 8 failed · `tests/graph` 5 failed · `tests/validators` 2 failed | **高** | ✅ **已修**：`conftest._reset_truth_source()` —— 夹具一律从**空真源**起步，测试自己声明自己的数据。受控实验（注入真实数据）：`claim+graph+validators+unit` **125 passed** |
+| **`G-RC-03`** | ★ **`tests/guards` 的"干净树"契约同样假设空真源**：`test_exit_code_contract.py` 用 `SYSTEM_ROOT`（真仓库）当 `code_root`，于是**真数据让守卫如实变红**，契约用例却把这当成"守卫坏了"。实测：`traceback` `exit=1`（见 `T-10`）、`no_signal_day` `exit=1` | 中 | `OPEN`（修法：契约用例改用**空真源的副本**当 `code_root` —— 与 `G-RC-02` 同一模式；`run_all_gates` 仍在**真仓库**上报真实违例，故不是掩盖） |
+| **`G-RC-04`** | **一条"已修 bug 的历史 `check_record`"会让 `no_signal_day` 永久红**：`facts/tasks.jsonl` 里有 `P7-1` 修复**之前**那次运行留下的记录（`无变化日产了新信号: signals_emitted=1`）。真源**追加式不可变** → 删不掉 → 门禁恒红。**修好 bug 也清不掉历史痕迹** | 中 | `OPEN`（需裁定：门禁是否只判**每个 `run_date` 的最新修订**（该模块已有 `_r<n>` 修订机制）；或把"历史违例"与"当前违例"分开表达） |
+
+### 8.3 A 单审计新增缺口（`G-31`~`G-36`，由审计员提出，主理人待并入）
+
+| # | 缺口 | 严重度 |
+|---|---|---|
+| `G-31` | step 6 夹具产信号（= `P7-1`/`B1`，**已修**） | 高 → ✅ |
+| `G-32` | `resume()` 不尊重 `incomplete_reason`（审计 `B2`） | 中 → ✅ **已修**（`6d390ab`） |
+| `G-33` | step 2/3 的 `produced` 是**既有对象**而非本次产出（与 `C-03` 同类、潜伏） | 中 → ✅ **已修 step 3**（改为纯显式缺口） |
+| `G-34` | `graph_integrity_guard` 自身 docstring 错锚点 `Ch2 §B.3`（该章只有 `Checker-1~5`），`chain_steps` 曾抄两遍 | 低 → 部分已修（`chain_steps` 侧已改；守卫自身待修） |
+| `G-35` | `verify.py` 批描述数字自相矛盾（曾出现 18/19/20/23 四个值；我"由对改错"过一次） | 低 → ✅ **已修**（描述里不再重复真源） |
+| `G-36` | `current_value` 无 `version` 选择器 | 低 |
 
 
 

@@ -1,0 +1,50 @@
+# system/config/placeholder_exemptions.yaml —— 反占位符**豁免清单**（白名单 · `R-06 ⑤`）
+#
+# ## 这是什么
+# `scripts/checks/no_placeholder_guard.py` 的命中**默认一律 FATAL**。本文件是**唯一**的豁免入口：
+# 只有在此**逐条登记**的 `(path, rule)` 组合才被放行，**其余一律照旧命中**。
+#
+# ## 为什么是白名单而不是放宽规则（`R-06 ⑤`）
+# `PLACEHOLDER-CN` 是**关键词式**判据（命中词：中文占位标记）。按 `R-06 ①`，
+# 关键词/名单类判据**不得作为防护判据**；按 `R-06 ④`，此类检查只能作辅助 lint。
+# 但它在 `pre-commit.sh` / `run_all_gates.py` 里是**硬门禁**，于是产生一个二阶代价：
+#
+#   实测（`G-27`）：该规则**抹白注释与 docstring、却保留普通字符串字面量**
+#   （因为它另一批规则的对象就是字符串）→ 于是**运行时缺口文案**也被扫。
+#   `scripts/orchestrate/chain_steps.py` 里 `incomplete_reason=` 的实参（"本步…未交付"）
+#   被判 `[FATAL] PLACEHOLDER-CN`，**提交被拦**。
+#
+# 当时的临时处置是**改用设计词汇**（"属阶段②③""本批次未交付"）表达同一含义。
+# 需求方 2026-09-16 裁定：**开豁免清单，逐步加** —— 即承认"存在正当的运行时声明文案"，
+# 用**可审计的登记**放行，而不是继续把文案往委婉语上推。
+#
+# ## 纪律（防止本文件变成后门）
+# 1. **逐条登记**：`path` 必须精确到文件（**不支持通配**，避免一条宽规则放行一片）；
+# 2. `rule` 必须是 `no_placeholder_guard` 真实产出的规则名；
+# 3. **每条必须写明 `reason`**（为什么这处命中是正当的）与 `approved_by`（谁批的）；
+# 4. **`scope_note` 必须写明"本豁免不放行什么"** —— 明确残余风险，避免后续真占位被顺手放过；
+# 5. 本文件**不是** `rules/`（那是 0444 设计真相源），它是**工具配置**，故可正常编辑与追加。
+#
+# 只读性：本文件属代码区（`system/config/`），无额外锁；变更走正常 Git。
+
+version: 1
+spec_anchor: "CONVENTIONS.md::R-06"          # 判据鲁棒性铁律（①禁关键词判据 / ④只能作 lint / ⑤白名单优先）
+approved_by: requester                        # 需求方 2026-09-16：「开豁免清单吧，这个清单逐步加就好了」
+
+exemptions:
+  - path: scripts/orchestrate/chain_steps.py
+    rule: PLACEHOLDER-CN
+    reason: >-
+      本文件是 step 2–6 的接线层，按张力 T-08 的 **A 方案**（需求方 2026-09-16 裁定），
+      未实现的模型侧部分必须**显式声明**、不得静默。`StepOutcome.incomplete_reason=` 的实参
+      正是这些**运行时缺口文案**（会显示给操作者），其性质与"占位符"**相反**：
+      占位符是"写了却没做，却让人以为做了"；此处是"**明确告知没做**"。
+      若禁止这些词，只会把系统提示推向委婉语（`G-27` 记录的二阶代价）。
+    approved_by: requester
+    approved_at: 2026-09-16
+    scope_note: >-
+      **本豁免只覆盖 `chain_steps.py` 的 `PLACEHOLDER-CN` 一词一项，不放行任何其它规则**
+      （`EMPTY_BODY` / `SWALLOW_EXCEPTION_PASS` / `NOT_IMPLEMENTED` / `FAKE_DATA` /
+      `PLACEHOLDER-TODO/FIXME/HACK` / `DATA_PLACEHOLDER` 在本文件内**照旧命中**）。
+      残余风险如实登记：本文件后续若有人写入**真**占位符，`PLACEHOLDER-CN` 将不再告警 ——
+      故本豁免若被用于新增位置，**必须重新评估**（本清单逐条登记，逐条可审）。

@@ -96,7 +96,11 @@ def make_verify_handler(root: str | Path, *, step_no: int = 2) -> Callable[[date
             degraded=not claims,
             incomplete_reason=(
                 f"`Ch6 §6.3` 追源去重与核验的**七步判定**（追源 / 交叉验证 / 采纳与否）属模型侧、"
-                f"阶段②③，本批次未交付；本次仅完成**定位机械复查**（{len(claims)} 条 claim 通过）。{_T08}"
+                # ★ 此处用**直白措辞**（而非先前的委婉语）—— 需求方 2026-09-16 裁定
+                #   「开豁免清单」，本文件的 `PLACEHOLDER-CN` 已在
+                #   `config/placeholder_exemptions.yaml` 逐条登记豁免。
+                #   运行时缺口文案的职责是**让人一眼看出"这步没做"**，委婉语恰恰削弱它（`G-27`）。
+                f"阶段②③，本批次**未实现**；本次仅完成**定位机械复查**（{len(claims)} 条 claim 通过）。{_T08}"
             ),
         )
 

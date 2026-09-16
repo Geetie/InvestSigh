@@ -87,6 +87,11 @@ SCAN_EXTENSIONS = (".py", ".yaml", ".yml", ".json", ".sh")
 
 # 免扫：测试夹具与检查器自身（检查器必须能说出这些词才能检测它们）
 EXEMPT_PATTERNS = (
+    # ★ 自豁免（`D-5` 同类）：**枚举/描述规则的文字，必然包含规则的关键词**。
+    #   本文件要写出 `TODO` / `占位` 这些词才能定义规则；豁免清单要写出规则名才能登记豁免。
+    #   若不豁免它们，规则会把自己的**文档**判成违例 —— 正是"误报刷屏 → 门禁被关掉"的引信。
+    "scripts/checks/no_placeholder_guard.py",
+    "config/placeholder_exemptions.yaml",
     "tests/",
     "scripts/checks/no_placeholder_guard.py",
 )
@@ -440,23 +445,63 @@ def _is_exempt(relpath: str) -> bool:
     return any(pat in normalized for pat in EXEMPT_PATTERNS)
 
 
+#: 豁免清单（**白名单**，`R-06 ⑤`；需求方 2026-09-16 裁定「开豁免清单，逐步加」）。
+#: 语义见清单文件自身的头注；此处只负责读取，**不做任何推断**。
+EXEMPTIONS_REL = "config/placeholder_exemptions.yaml"
+
+
+def _load_exemptions(root: Path) -> set[tuple[str, str]]:
+    """读豁免清单 → `{(relpath, rule)}`。
+
+    ★ **文件缺失或字段不全 → 返回空集**（**不放行任何东西**）：
+      豁免是**显式授权**，默认必须是"不豁免"。这与 `P-02` 的"配置走 `_cached_yaml`"一致。
+    """
+    from scripts._common import _cached_yaml
+
+    path = root / EXEMPTIONS_REL
+    if not path.exists():
+        return set()
+    data = _cached_yaml(path) or {}
+    out: set[tuple[str, str]] = set()
+    for item in data.get("exemptions") or []:
+        p = str((item or {}).get("path", "")).strip().replace("\\", "/")
+        r = str((item or {}).get("rule", "")).strip()
+        if p and r:
+            out.add((p, r))
+    return out
+
+
 def check(root: Path) -> CheckReport:
     report = CheckReport(checker="no_placeholder_guard")
     # ★ `rel(path, root)` —— 参数顺序**必须**是 (path, root)。曾写成
     #   `rel(root, p)`，`relative_to` 抛 ValueError 后 `rel` 返回裸绝对路径，
     #   于是 `_is_exempt` 永远 False、**免扫机制整体失效**（连本文件与 tests/
     #   都被扫），正是"误报刷屏 → 门禁被关掉"的引信。
+    exemptions = _load_exemptions(root)
     files = [p for p in walk_files(root, "", SCAN_EXTENSIONS) if not _is_exempt(rel(p, root))]
     report.scanned["files"] = len(files)
     report.scanned["exempt_patterns"] = len(EXEMPT_PATTERNS)
     report.scanned["line_rules"] = len(LINE_RULES)
     report.scanned["crossline_regex_rules"] = len(CROSSLINE_REGEX_RULES)
     report.scanned["crossline_structural_rules"] = 2
+    report.scanned["exemptions"] = len(exemptions)
+    exempted_hits = 0
     for path in files:
         findings, notes = scan_file(path, root)
         report.notes.extend(notes)
         for f in findings:
-            report.violations.append(Violation(f.rule, f.reason, rel(path, root), f.line))
+            relp = rel(path, root)
+            if (relp, f.rule) in exemptions:
+                # ★ **不静默**：豁免命中照样报出来（计入 `exempted_hits` + 逐条 note），
+                #   只是**不计为违例**。否则"豁免清单"本身就成了不可见的后门。
+                exempted_hits += 1
+                report.notes.append(
+                    f"EXEMPTED(not a violation): {relp}:{f.line} rule={f.rule}"
+                    f" —— 命中已在 {EXEMPTIONS_REL} 逐条登记"
+                )
+                continue
+            report.violations.append(Violation(f.rule, f.reason, relp, f.line))
+    report.scanned["exempted_hits"] = exempted_hits
     return report
 
 
