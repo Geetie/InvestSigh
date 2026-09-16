@@ -1,22 +1,139 @@
-"""AC-5：**每日运行薄封装**的端到端 + 反 KPI 自测（`Ch1 §D.3` / `Ch8 §D/§E/§F`）。
+"""AC-5：**每日运行薄封装**的端到端 + 反 KPI 守卫（`Ch1 §D.3` / `Ch1 §F G1-02` / `Ch8 §D/§E/§F`）。
 
 锚点：`Ch1 §D.3`（反 KPI：**每天维护判断 ≠ 每天必须产生新买卖信号**）/
+`Ch1 §F G1-02`（三条断言：无变化日零信号 / 新建议有 `change_reason` / 建议数 ≤ 变化数）/
 `Ch1 §D.1`（8 步闭环）/ `Ch8 §E`（降级可见）/ `Ch8 §N8.4-08`（同日重跑不重复产事件/建议）。
 
-★ 反 KPI 自测：**无变化日 → `signals_emitted == 0`**、`changed is False`，且缺口
-  （`gaps`）**如实报出**、不乐观改写。
+## ★ 本文件修的是"反 KPI 测试在空真源上恒真"这一缺陷（批次 10 审计 `ch8 AC-5 = FAIL`）
+
+**原缺陷**：`test_no_change_day_emits_zero_signals` 跑在 `code_root` 夹具的**空真源**上
+（`tests/conftest.py` 的契约"真源为空"）。空真源 ⇒ 无行情 / 无基准 ⇒ step 6（建议生成）
+**根本走不到** ⇒ `signals_emitted == 0` **恒真** ⇒ 该断言**不构成守卫**
+（`CONVENTIONS.md §二 G-03` 的"空样本不得当已核"同样适用于测试自身）。
+
+**修法**（`G-RC-02`：测试自己声明自己的数据）：见 `_seed_step6_inputs()` ——
+在夹具副本里播种**能走到 step 6 的最小真源**，然后**正反两向**：
+
+- **(a) 无交易信号的运行日** → `signals_emitted == 0`，且**确实产出了建议**
+  （非真空：零信号是"决策结论"，不是"路径缺失"）；
+- **(b) 有交易信号的运行日** → `signals_emitted` **正常计数**（反向对照，证明它不是"永远 0"）。
+
+★ **只有 (a) 通过不算通过** —— 没有 (b) 就无法区分"守卫在工作"与"路径根本没走到"
+（这正是原测试的毛病）。判别力另由 `test_no_signal_assertion_has_discrimination` 用
+**故意注入违规**钉死（`G-05` / `G-16`：不许有恒真断言）。
+
+## ★ 与"真仓库反 KPI 已破"的关系（缺口 `G-RC-04`，**本流写入域之外**，如实登记）
+
+真仓库 `facts/tasks.jsonl` 现有 `check_record = {changed: false, …, signals_emitted: 1}`
+（由 `pipeline.run_daily` 写出，同日产出 `rec-nvda-001`），`no_signal_day` 对它 FATAL。
+根因**不在本文件、也不在本流写入域**：`pipeline` 的 step 6 处理器**恒回传 `judgment_change={}`**
+（`scripts/decision/step.py`），故任何"买 / 卖"日写出的记录都是 `changed=False + signals=1`。
+本文件**不修**该缺口（属共享编排层，归主理人），但**测试能发现该形态**：见
+`test_anti_kpi_guard_discriminates`（`(changed=False, signals=1)` → 守卫命中）
+与 `test_no_signal_assertion_has_discrimination`（注入 → 真红）。
 """
 
 from __future__ import annotations
 
+import dataclasses
+import json
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from schema.models import Company
 from schema.store import append_records, read_records
+from scripts.checks import no_signal_day
 from scripts.daily import run as daily_run
 
 _RUN_DAY = date(2026, 9, 16)
+_START = date(2026, 9, 1)
+_END = date(2026, 9, 10)
+_COMPANY_SEC = "usNVDA"
+_BENCH_SEC = "usAGIX"
+
+
+# ── 播种：造出**能走到 step 6**的最小真源（`G-RC-02`） ─────────────────────────
+
+
+def _append_raw(root: Path, stem: str, rows: list[dict]) -> None:
+    """绕过 pydantic 直接写真源行（`facts/<stem>.jsonl`）。
+
+    ★ 为什么这两张表**不能**走 `append_records`（对象模型）：
+
+    - `facts/prices.jsonl` 的行由 `scripts.compute.driver.load_price_points` 按**原始 dict** 解析
+      （字段 `security_id` + `day` + `price`），与 `schema.models.PriceSnapshot` 的字段名不同；
+    - `facts/benchmarks.jsonl` 需要基准对象带**显式 `security_id`**（step 6 靠它解析基准证券），
+      而冻结的 `schema.models.Benchmark` **无 `security_id` 字段**。
+
+    这与 `tests/conftest.py::_reset_truth_source`（同样直接写 JSONL）同一形态，
+    且写入后经 `driver` 的**真实读取路径**消费（并非绕过被测逻辑）。
+    """
+    path = root / "facts" / f"{stem}.jsonl"
+    with open(path, "a", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def _seed_step6_inputs(root: Path, *, company_end_price: str, benchmark_end_price: str) -> None:
+    """播种**能走到 step 6（建议生成）的最小真源**（`G-RC-02`）。
+
+    最小集 = **2 张真源表**（均落在 `Ch9 §3.3.3` 的 18 个 JSONL 内，**不新增文件**）：
+
+    | 表 | 行 | 为什么这些够 |
+    |---|---|---|
+    | `facts/prices.jsonl` | 2 证券 × 2 行情点（同起止日 `2026-09-01` .. `2026-09-10`） | `run_default` 取"个股 / 基准各 ≥2 点"才能算区间收益（`<2` → `inputs_unavailable`） |
+    | `facts/benchmarks.jsonl` | 1 行**主基准对象**（显式 `security_id`） | step 6 靠它解析基准证券；缺 → `securities_unresolved` |
+
+    真实步序走查（`scripts/decision/run_decide.py::run_default`）：
+    `_load_truth_series`(读 prices) → `_load_primary_benchmark`(读 benchmarks) →
+    `_resolve_benchmark_security`(用显式 `security_id`) →
+    `_select_company_security`(行情里除基准外的**唯一**证券) →
+    `_run_core`: `compute_total_return` × 2 → 前置门 → 5 规则 → **落 `recommendations`**。
+
+    **收益率只由终点价决定**（起点价恒 `100`）：
+
+    - `company_end_price == benchmark_end_price` ⇒ 相对方向 `uncertain` ⇒ R3 `pending`（**不产信号**）；
+    - `company_end_price > benchmark_end_price` 且绝对为正 ⇒ R1 `buy`（**产 1 个信号**）。
+    """
+    _append_raw(
+        root,
+        "prices",
+        [
+            {"security_id": _COMPANY_SEC, "day": _START.isoformat(), "price": "100"},
+            {"security_id": _COMPANY_SEC, "day": _END.isoformat(), "price": company_end_price},
+            {"security_id": _BENCH_SEC, "day": _START.isoformat(), "price": "100"},
+            {"security_id": _BENCH_SEC, "day": _END.isoformat(), "price": benchmark_end_price},
+        ],
+    )
+    _append_raw(
+        root,
+        "benchmarks",
+        [
+            {
+                "benchmark_id": _BENCH_SEC,
+                "benchmark_role": "primary",
+                "security_id": _BENCH_SEC,
+                "return_source": "fund_market_price",
+                "proxy_index_used": False,
+                "return_basis": {
+                    "currency": "USD",
+                    "dividends_reinvested": True,
+                    "fee_deducted_again": False,
+                },
+            }
+        ],
+    )
+
+
+def _check_records(root: Path) -> list[dict]:
+    """取 `facts/tasks.jsonl` 里所有 `check_record` 子记录（`Ch1 §C.2`；控制面子记录）。"""
+    return [
+        t["check_record"]
+        for t in read_records(root, "tasks")
+        if isinstance(t.get("check_record"), dict)
+    ]
 
 
 def _degraded_marks(root: Path) -> list[dict]:
@@ -27,12 +144,112 @@ def _degraded_marks(root: Path) -> list[dict]:
     ]
 
 
-# ── 反 KPI：无变化日不得产信号，且如实报缺口 ────────────────────────────────
+# ── AC-5 (a)：无交易信号的运行日 → 零信号；且**路径确实走到了 step 6** ──────────────
+
 
 def test_no_change_day_emits_zero_signals(code_root: Path) -> None:
+    """(a) 无交易信号的运行日 → `signals_emitted == 0` 且 `changed is False`。
+
+    ★ **非真空断言**（本用例判别力所在）：同一次运行**必须真产出一条建议**
+      （`action=pending`）。这正是原测试缺的那一环 —— 空真源谈"零信号"没有分辨力；
+      "走到了 step 6 却按规则**不产**信号"才落进反 KPI 的口径（`Ch1 §D.3`）。
+    """
+    _seed_step6_inputs(code_root, company_end_price="110", benchmark_end_price="110")
     report = daily_run.run_daily(code_root, _RUN_DAY)
+
     assert report.signals_emitted == 0
     assert report.changed is False
+
+    # ★ 非真空：step 6 **确实执行并产出建议**（否则 `== 0` 是"没走到"而非"不产信号"）
+    actions = [r.get("action") for r in read_records(code_root, "recommendations")]
+    assert actions == ["pending"], actions
+    # 真源行情 / 基准被**真实消费**（无"输入缺失"缺口 → 排除退化路径冒充）
+    assert not any("inputs_unavailable" in g for g in report.gaps), report.gaps
+
+    # 该运行写出的 check_record 如实：无变化 + 零信号 → 反 KPI 守卫放行
+    checks = _check_records(code_root)
+    assert checks and checks[0]["changed"] is False and checks[0]["signals_emitted"] == 0
+    guard = no_signal_day.check(code_root)
+    assert guard.passed, [v.render() for v in guard.violations]
+
+
+# ── AC-5 (b)：有交易信号的运行日 → 信号**正常计数**（反向对照） ──────────────────────
+
+
+def test_change_day_signal_is_counted(code_root: Path) -> None:
+    """(b) 有交易信号的运行日 → `signals_emitted` **正常计数**（证明它不是"永远 0"）。
+
+    没有本用例，就无法区分"守卫在工作"与"路径根本没走到"（这正是原测试的毛病）。
+    """
+    _seed_step6_inputs(code_root, company_end_price="130", benchmark_end_price="110")
+    report = daily_run.run_daily(code_root, _RUN_DAY)
+
+    assert report.signals_emitted == 1
+    actions = [r.get("action") for r in read_records(code_root, "recommendations")]
+    assert actions == ["buy"], actions
+
+
+# ── 反 KPI 守卫（`scripts/checks/no_signal_day.py`）**两向判别力** ────────────────
+
+
+@pytest.mark.parametrize(
+    ("changed", "signals", "expect_hit"),
+    [
+        (False, 0, False),  # 无变化日、无信号 —— 反 KPI 期望态，不得误报
+        (True, 1, False),   # 有变化日、有信号 —— 反向对照：守卫**不得**误杀
+        (False, 1, True),   # ★ 无变化却产信号 —— 真违规（G1-02①），**必须**命中（= 真仓库形态）
+        (True, 0, False),   # 有变化却零信号 —— 反 KPI **不**覆盖该类（见报告"本层无法覆盖"）
+    ],
+)
+def test_anti_kpi_guard_discriminates(changed: bool, signals: int, expect_hit: bool) -> None:
+    """`check_no_signal_day` 对 `(changed, signals_emitted)` 四组合的判定力。
+
+    第三行 `(False, 1)` 即真仓库当前 `check_record` 的**同一形态**（`G-RC-04`）——
+    证明守卫**能发现**"无变化却产信号"。
+    """
+    rec = {"run_date": _RUN_DAY.isoformat(), "changed": changed, "signals_emitted": signals}
+    violations = no_signal_day.check_no_signal_day([rec])
+    hit = [v for v in violations if v.rule == "G1-02①"]
+    assert bool(hit) is expect_hit, (changed, signals, [v.render() for v in violations])
+
+
+# ── ★ 判别力反证（`G-05` / `G-16`）：故意制造违规 → (a) 的断言必须变红 ──────────────
+
+
+def test_no_signal_assertion_has_discrimination(
+    code_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**故意制造违规**：在"无变化"的播种数据上强制 step 6 报告 `signals_emitted=1`。
+
+    期望（三者缺一不可）：
+
+    1. 违规注入**生效**（`signals_emitted == 1`）；
+    2. 于是 (a) 的目标准确性 `signals_emitted == 0` **不成立** —— 若 (a) 是恒真断言，
+       这一步就不可能发生（本用例把"注入违规 → 必红"钉进测试，`G-16`）；
+    3. 反 KPI 守卫对本次运行写出的 `check_record`（`changed=False, signals=1`）**如实命中**。
+    """
+    _seed_step6_inputs(code_root, company_end_price="110", benchmark_end_price="110")
+    from scripts.decision import run_decide
+
+    real_run_default = run_decide.run_default
+
+    def _forced(root, **kwargs):  # type: ignore[no-untyped-def]
+        # 强制"多报一个信号"，模拟"无变化却产信号"的真违规形态（其余如实转回）。
+        return dataclasses.replace(real_run_default(root, **kwargs), signals_emitted=1)
+
+    monkeypatch.setattr(run_decide, "run_default", _forced)
+
+    report = daily_run.run_daily(code_root, _RUN_DAY)
+
+    assert report.signals_emitted == 1  # ① 违规注入生效
+    assert not (report.signals_emitted == 0)  # ② (a) 的目标在此不成立 → (a) 有判别力
+    guard = no_signal_day.check(code_root)  # ③ 守卫必须发现它
+    assert any(v.rule == "G1-02①" for v in guard.violations), [
+        v.render() for v in guard.violations
+    ]
+
+
+# ── 降级：空真源 → 降级可见 + 保留上次有效结果（如实为空） ───────────────────
 
 
 def test_report_is_faithful_not_optimistic(code_root: Path) -> None:
@@ -41,8 +258,6 @@ def test_report_is_faithful_not_optimistic(code_root: Path) -> None:
     assert report.blocked is True
     assert len(report.gaps) > 0
 
-
-# ── 降级：空真源 → 降级可见 + 保留上次有效结果（如实为空） ───────────────────
 
 def test_degradation_is_visible_on_empty_truth(code_root: Path) -> None:
     report = daily_run.run_daily(code_root, _RUN_DAY)
@@ -57,6 +272,7 @@ def test_degradation_is_visible_on_empty_truth(code_root: Path) -> None:
 
 
 # ── 幂等：同日重跑 N 次不重复产事件/建议，且运行记录幂等键唯一 ───────────────
+
 
 def test_same_day_rerun_no_duplicate_events_or_recommendations(code_root: Path) -> None:
     for _ in range(3):
@@ -79,6 +295,7 @@ def test_same_day_rerun_no_duplicate_events_or_recommendations(code_root: Path) 
 
 
 # ── 覆盖可核（阶段④ 硬判据）在真实运行路径上生效 ────────────────────────────
+
 
 def test_coverage_criterion_fires_on_run_path(code_root: Path) -> None:
     """空真源 → 覆盖目标集为空 → CV4（真空不得判过）命中 → `coverage_ok is False`。"""
