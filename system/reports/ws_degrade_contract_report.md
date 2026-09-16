@@ -9,15 +9,20 @@
 - **代码 commit（评审对象）**：`abbe7b3` = `abbe7b367034c7987acb3d1660d82ab9d10b6c8c`
   （`fix(degrade): 修 G-43/G-45 —— 让「降级保留上次有效结果」在真数据上真的会拦`）
   —— **本单的功能性代码改动全在这一个 commit 里**
-- **本单在 `abbe7b3` 之后的提交：8 个，逐个可核** ——
-  `d34e6e5` · `4f03d7d` · `44dee2e` · `de9a442` · `665cdb9` · `576c390` · `e6cdb67`：
-  **7 个 `docs(report)`，每个 `--stat` 只有 1 个文件（本报告）**（逐个实测，见下"核验命令"）；
-  第 8 个 = **本提交**（`docs(comment)`）= 本报告 + `pipeline.py` / `degrade.py` **各一处 docstring** ——
+- **本单在 `abbe7b3` 之后的提交** —— **按判据写，不按清单写**（清单每次提交都自我过期；本单已因此改过一次）：
+  ★ **核验判据**：`git log --no-merges --format='%h %s' abbe7b3..HEAD -- system/reports/ws_degrade_contract_report.md`
+  列出的**每一个** commit（只有本单会改这个文件），其 `git show <c> --stat` 的**文件集合** ⊆
+  { 本报告 · `system/scripts/orchestrate/pipeline.py` · `system/scripts/daily/degrade.py` }。
+  **实测**：其中 `docs(report)` 型的提交**每个只改 1 个文件（本报告）**（`d34e6e5` · `4f03d7d` ·
+  `44dee2e` · `de9a442` · `665cdb9` · `576c390` · `e6cdb67` —— 以上清单**截至 `e6cdb67`**，其后新增的提交以判据为准）；
+  `docs(comment)` 型的提交（`e4da5e4` 及之后）= 本报告 + `pipeline.py` / `degrade.py` **各一处 docstring** ——
   就地改正被 `abbe7b3` **自身推翻**的句子（"`output_refs=` 零个生产赋值点" / "③ 当前无生产写入点"），见 §④-7。
-  **零语义 = 机器证明，不是自称**：剥除 docstring 后比 `ast.dump` 相同 + 正向对照可证明仪器可红（§④-7 末）。
-  ★ **核验命令：必须逐个 `git show <本单commit> --stat`，不得用区间 diff。**
-  因为 `abbe7b3..HEAD` **不是"本单的提交范围"** —— 本分支已并入主干（`2f62f5d` / `612cafe` 等 merge），
-  该区间会**把别人的提交一并算进来**（实例：`2a8ca32` 给 `pipeline.py` 加了 24 行，**不是本单的**）。
+  **零语义 = 机器证明，不是自称**：去掉 docstring 后比 `ast.dump` 相同 + hunk 逐行落在 docstring 区间内
+  （非 docstring 行 = 0）；两条判据**各带正向对照**证明仪器可红（§④-7 末）。
+  ★ **不得用区间 diff 作为本判据**：`abbe7b3..HEAD` **不是"本单的提交范围"** —— 本分支已并入主干
+  （`2f62f5d` / `612cafe` 等 merge），该区间会**把别人的提交一并算进来**。
+  实例（实测）：`2a8ca32` 对 `pipeline.py` 的 numstat = **`24 0`**，落在 `assert_steps_complete`；
+  于是"拿 `abbe7b3` 当基线"会把**别人的 24 行**读成本单的改动 —— 见 §④-7 的双基线读数。
   ⇒ 本报告此前那句"`git diff abbe7b3..HEAD --stat` 只会列出本报告"**是错的，已就地更正**；
   同一教训另有他流在 `690f36c` 记过（"判断本单改动须用 `git show <本单commit>`，不能用 `本单commit..HEAD`
   —— 会把合并进来的他人改动算进来"）—— **本单曾独立踩中同一个坑，此处如实登记**。
@@ -712,6 +717,18 @@ team-lead 的推荐（记录备查）：**首版不把 `implemented_in_first_ver
    ⇒ **两文件「hunk 内非 docstring 行」均为 0**；改动文件集合 = **恰好** 3 个（本报告 + 两脚本）⊆ 允许集。
    **正向对照**：拿 `pipeline.py` 的 docstring 行区间去套一段无关代码 ⇒ **检出越界** ⇒ 仪器可红。
 ⇒ 本提交对两个脚本的改动**只在 docstring 层**，行为不可能变；`pipeline.py` 的改动也**仍在 `_write_check_record` 内**。
+
+★★ **双基线读数 —— 上面那条"基线必须是本提交的父"不是推理，是实测出来的**（`V-11` 仪器轴：
+**基线属于仪器**，换基线 = 换仪器）：
+
+| 基线 | `pipeline.py` | `degrade.py` | 读法 |
+|---|---|---|---|
+| **`HEAD^`**（= `e6cdb67`，本提交的父） | **语义相同** | **语义相同** | ★ **这才是"本提交零语义"的读数** |
+| `abbe7b3`（= "代码 commit"） | **★ 语义不同** | 语义相同 | **差额不是我的**：区间内含 `2a8ca32`（numstat **`24 0`**，落在 `assert_steps_complete`） |
+
+⇒ 同一个问题（"本提交是否零语义"）换基线就换答案，而**只有一个基线问的是正确的问题**。
+这正是报告头部那条更正（"不得用区间 diff"）的**机器版证据**，也说明
+**"基线"和"被测对象"一样必须写明**：只写"与 `abbe7b3` 对比"而不写"这是谁的改动"，就会把别人的 24 行算给自己。
 
 ---
 
