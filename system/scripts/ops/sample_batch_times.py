@@ -190,6 +190,10 @@ class Cell:
 
     name: str
     priority: str
+    #: 夹具用例数（**`PARAM` 口径的引用值**：参数字典 / 用例计数；出处见 `source`，各格来源不一）。
+    #: ★★ **它不是 `FIX` 口径、不得进配额预算** —— `FIX` 口径（`ast` 解析**夹具形参名**）
+    #: 由 `_measured_fixture_cases()` **现测**，配额只认那个（主理人提醒：两列**不同源、不该相等**）。
+    #: ★ 两列**都留痕**、**不判对错**（`口径 10`）；差值的归因（口径差 vs 真漂移）**未分离**。
     fixture_cases: int
     source: str
     note: str = ""
@@ -676,41 +680,57 @@ def _render_g60(v: dict) -> list[str]:
     return out
 
 
+def _measured_cost(cell: Cell) -> tuple[int, str]:
+    """按 **`FIX` 口径现测**算本格**一次**的配额消耗（项）；量不到 ⇒ 退回引用值并说明。
+
+    ★★ **只有 `FIX` 口径进配额预算与预检**（`Cell.fixture_cases` 是 `PARAM` 口径的**引用值**，
+    与 `FIX` **不同源**、**不该相等** —— 主理人提醒，见 `Cell.fixture_cases` 的注释）。
+    """
+    m_heavy, m_light, note = _measured_fixture_cases(cell.name)
+    if note:
+        return cell.quota_per_run, f"measured_unavailable({note}) ⇒ 退回引用值 {cell.quota_per_run}"
+    heavy_based = cell.quota_per_case == QUOTA_PER_FIXTURE_CASE
+    m_val = m_heavy if heavy_based else m_light
+    return m_val * cell.quota_per_case, ""
+
+
 def _print_plan(cells: tuple[Cell, ...], repeat: int) -> None:
     total_ref = total_meas = 0
     print("## 取样计划（`--plan`：**不执行任何批次**）")
     print()
-    print("| 优先级 | 批次 | 登记超时（★ 真源 `BATCHES`） | 夹具用例（引用值） | 现测 重型/轻量（`ast`） | 项/例 | 本格一次 ≈配额项（引用值） | 理由 |")
+    print("| 优先级 | 批次 | 登记超时（★ 真源 `BATCHES`） | 夹具用例（引用值 · **`PARAM` 口径**） | 现测（**`FIX` 口径**）重型/轻量 | 项/例 | 本格一次 ≈配额项（**按 `FIX`**） | 理由 |")
     print("|---|---|---|---|---|---|---|---|")
     for c in cells:
         timeout = BATCHES[c.name].timeout if c.name in BATCHES else None
         t = "—" if timeout is None else f"{timeout:.0f}s"
-        cost = c.quota_per_run
-        total_ref += cost * repeat
+        total_ref += c.quota_per_run * repeat
         cases = f"{c.fixture_cases}" + ("（假设）" if c.assumed else "")
-        # ★★ 引用值 vs **现测值** 并列 + 不一致就打 ★（不静默选一个）。
+        # ★★ 两列是**两个口径**（主理人提醒）⇒ 差异标「≠口径不同」，**不判对错**（`V-11` 仪器轴）。
         m_heavy, m_light, m_note = _measured_fixture_cases(c.name)
-        heavy_based = c.quota_per_case == QUOTA_PER_FIXTURE_CASE
+        cost_meas, cost_note = _measured_cost(c)
+        total_meas += cost_meas * repeat
         if m_note:
             measured = f"★量不到（{m_note}）"
-            total_meas += cost * repeat          # 量不到 ⇒ 退回引用值（并在列里显形）
         else:
+            heavy_based = c.quota_per_case == QUOTA_PER_FIXTURE_CASE
             m_val = m_heavy if heavy_based else m_light
-            measured = f"{m_heavy}/{m_light}" + (" ✓" if m_val == c.fixture_cases else " ★")
-            total_meas += m_val * c.quota_per_case * repeat
-        print(f"| {c.priority} | `{c.name}` | {t} | {cases} | {measured} | {c.quota_per_case} | ≈{cost:,} | {c.note} |")
+            measured = f"{m_heavy}/{m_light}" + (" 同" if m_val == c.fixture_cases else " **≠口径不同**")
+        print(f"| {c.priority} | `{c.name}` | {t} | {cases} | {measured} | {c.quota_per_case} | ≈{cost_meas:,} | {c.note} |")
+        if cost_note:
+            print(f"  ↳ ⚠ `{c.name}`：{cost_note}")
     print()
     print(f"- 单元格数：**{len(cells)}** ｜ 每格重复：**{repeat}** 次 ⇒ 共 **{len(cells) * repeat}** 次批次运行")
-    print(f"- ★ 估算总配额消耗（**引用值**）：**≈{total_ref:,} 项**"
-          f"（= Σ 夹具用例 × 每例项数 × {repeat}；重型夹具的 `250` 出处 `13-F §2.6`）")
-    print(f"- ★ 估算总配额消耗（**现测**）：**≈{total_meas:,} 项**"
-          f"　← ★ **以这一列为准**（`ast` 零夹具现测；量不到的格退回引用值，已在列里标 ★）")
+    print(f"- ★ 估算总配额消耗（**引用值 · `PARAM` 口径**）：≈{total_ref:,} 项　← **仅留痕，不用**")
+    print(f"- ★ 估算总配额消耗（**`FIX` 口径现测**）：**≈{total_meas:,} 项**　← ★ **以这一列为准**")
+    print("- ★★ **第 5 列 ≠ 第 4 列是正常的**：它们是**两个口径** ——"
+          "`FIX` = `ast` 解析**夹具形参名**（本卡配额要用的量 = 夹具 teardown 次数）；"
+          "`PARAM` = 参数字典 / 用例计数（出处见 `source`，**各格来源不一**）⇒ **不同源、不该相等**，"
+          "差异**不判对错**（`口径 10` / `V-11` 仪器轴）。★ 差值的归因（**口径差 vs 真漂移**）**未分离**。")
     print("- ★ **该估算必须与「全流共享的回合级配额」比**（本会话实测阈值 `99,999`）⇒"
           " 一轮**装不下**，须跨多轮并与其它流**互斥**（卡 `13-M` 不得并发跑批）。")
     print("- ★ 现测列为 **重型/轻量** 两个数：`29/0` = 29 例用复制整棵树的夹具；`0/100` = 100 例用**轻量根**夹具"
           "（每例 ≈10 项，见 `Cell.quota_per_case`）⇒ **不能只比一个数**。")
-    print("- ★ 引用值列会**过期**（用例增删 / 分片再平衡 / 参数化）⇒ 不一致时**以现测列为准**，**两列都留痕**。")
-    print("- ★ 夹具用例数与「项/例」都是**引用值**（出处见 `source`），会随用例增删与夹具形状漂移 ⇒ 用前请重新量。")
+    print("- ★ 量不到时**打印原因**并从**引用值**退回（已在行下 `↳` 标出），**不静默**。")
     st = _quota_state()
     if isinstance(st, str):
         print(f"- ⚠ **本回合余量读不到**（{st}）⇒ 开工前预检会**拒绝开跑**（不盲跑）。")
@@ -747,11 +767,13 @@ def _quota_gate(cell: Cell, repeat: int, skip: bool) -> str:
     st = _quota_state()
     if isinstance(st, str):
         return f"QUOTA_PREFLIGHT_UNAVAILABLE：{st} ⇒ 不得盲跑"
-    need = cell.quota_per_run * repeat
-    if st["remaining"] < need:
+    need, cost_note = _measured_cost(cell)
+    if st["remaining"] < need * repeat:
         return (f"QUOTA_PREFLIGHT_FAIL（**保守建议，非判决**）：瞬读余量 {st['remaining']} "
-                f"< 本格所需 ≈{need}（= {cell.fixture_cases} 例 × {cell.quota_per_case} 项/例 "
-                f"× {repeat}） ⇒ 建议**换轮次**（不重试、不降 `repeat`、不拿旧值代替）。"
+                f"< 本格所需 ≈{need * repeat}（= **`FIX` 现测**每例项数 × {repeat}；"
+                f"引用值口径为 {cell.quota_per_run * repeat}） ⇒ 建议**换轮次**"
+                f"（不重试、不降 `repeat`、不拿旧值代替）。"
+                f"{('★ ' + cost_note + '；') if cost_note else ''}"
                 f"★ 该读数是**瞬读、可能不成立**（本单实测同一 rid 数分钟后从 `99998` 变为"
                 f"**不在表里**）；若你确知环境已变，用 `--no-quota-check` 显式覆盖"
                 f"（读数会如实标注 `skipped`，**不得**当成「预检通过」）")
