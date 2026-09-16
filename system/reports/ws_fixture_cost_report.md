@@ -9,13 +9,38 @@
 
 ---
 
+## ★ 收口：本卡并入 main 后的最终状态（2026-09-16，`main@8aa7862`）
+
+| 项 | 最终状态 | 依据 |
+|---|---|---|
+| **核心修复** | **已在 main**（`system/tests/conftest.py` 的 `_COPY_SKIP` 含 `"raw"`，见 main 版第 72 行） | 本单 `49ce681`，主理人已并入 |
+| `unit` 超时 | **120s**（本单曾留 270s 并明示"等主理人裁决"） | 主理人以本单修后实测 15.79/11.42s 判 ≈7.6×（`V-02` 4~8× 内） |
+| `guards` 超时 | **210s**（本单曾取 120s） | 主理人指出 120s（4.4×）**与我自己给注入分片定的规则不一致**（分片用「实测 × 8 + 取整 30s 倍数 + 不低于 90s」，依据我自测的"并发可拖慢 11.8×"）⇒ `27.13 × 8 = 217` ⇒ **210s** |
+| `pricelayer` 超时 | **300s**（本单曾留 180s） | 两方一致：我的 127 例读数已被 168 例取代，180s 对 83.80s 只有 2.1× |
+| 新增批次 | **`injection-g`**（17 例 / 90s） | `V-06` 对 `tests/injection/test_quote_provenance.py` **如实变红**，且既有 6 片最大余量仅 5 例 ⇒ 只能新开一片 |
+| 批次总数 | **23**（本单开工时 21） | `verification_policy_guard`: `batches: 23` / `test_files: 76` / `test_files_uncovered: 0` |
+| 本单在 main 之外**仅剩** | ① 删掉 `verify.py` 模块 docstring 里"批次/超时"表的**超时列**（指向 `BATCHES` 唯一真源）② 本报告的最新几节 | `git diff --numstat main HEAD` = 报告 + `verify.py` 两个文件 |
+
+★ **主理人对我的两处"改口"是正当的，我全部接受**（尤其是 `guards`：它指出我的 120s
+与我自己写的规则不一致 —— 这比我原值自洽）。**留档理由不改**，见 ③-4 补记。
+
+★ 收口过程中撞到 **`G-61`**（main 侧 `f5dbc6f` 已登记，本单**独立诊断一致**）：
+**共享钩子跑 main 的 `pre-commit.sh` + 从 cwd 反解 `CODE_ROOT` ⇒ 判据与对象不同源 ⇒ 假缺陷**。
+本单连中两次（`quote_provenance_guard`、`scenario_tag_binding_guard` 报 `can't open file`），
+处置是**把 main 合进来**（`V-07` 顺序），**没有**用 `--no-verify`、**没有**去动共享钩子。
+
+---
+
 ## ① 改了什么
 
 | # | 文件 | 改动 | 为什么 |
 |---|---|---|---|
 | 1 | `system/tests/conftest.py` | `_COPY_SKIP` 加 **`"raw"`**（1 项 + 大段注释） | 副本里的 `raw/` **必须是空的**（`_reset_truth_source` 正是清空它的那一步）。"复制进来再逐项删掉"要按**删除调用次数**付费 ⇒ 直接不复制 |
 | 2 | `system/tests/conftest.py` | `_reset_truth_source()` docstring 记录**成本模型**（含实测表） | 这是"下一个 5s"的入口：**再往 `raw/` 放 5 个文件就又是 4s**。逐项清理循环**保留**为兜底 |
-| 3 | `system/scripts/ops/verify.py` | `guards` 60s→**120s**、`compute` 60s→**180s**、`validators` 30s→**90s**、`claim` 30s→**120s**、`decision` 30s→**120s** | 卡 13-F 的批次对照表实测出 **5 个批次余量 < 4×**（`V-02` 要求 4~8×）⇒ 它们**会随机红**。详见 ③-4 |
+| 3 | `system/scripts/ops/verify.py` | `compute` 60s→**180s**、`validators` 30s→**90s**、`claim` 30s→**120s**、`decision` 30s→**120s** | 卡 13-F 的批次对照表实测出 4 个批次余量 < 4×（旧值 1.2~1.6×）⇒ 它们**会随机红**。详见 ③-4 |
+| 3b | `system/scripts/ops/verify.py` | `guards` 的**值以主理人裁定为准（最终 210s）** —— 我先取 120s，合并时放弃 | ★ **自我更正**：主理人指出我的 120s（4.4×）**与我自己给分片定的规则不一致**（分片用「实测 × 8 + 取整 30s 倍数 + 不低于 90s」）⇒ `27.13 × 8 = 217` ⇒ 210s。**这是对我自己规则的正当代用 ⇒ 接受**。见 3-4 补记 |
+| 3c | `system/scripts/ops/verify.py` | 删掉模块 docstring 里"批次/**超时**"表的超时列（改为指向 `BATCHES` 唯一真源 + 查真值命令） | 该表**实测已漂移**（`unit` 行写 `60s`、分片写"6 个"而实际 7 个，且漏了 8 个批次）。与同文件 `guards` 段"不在描述里重复真源"同一课 |
+| 3d | （不是代码改动）**两次 `git merge main`**，每次之后立刻 `bootstrap_worktree.sh` | ★ 不是我主动同步，而是被 **`G-61`** 逼的：**共享钩子跑 main 的 `pre-commit.sh`** ⇒ main 一新增门而分支未合，分支上任何提交都必红（本次连中 `quote_provenance_guard`、`scenario_tag_binding_guard`）。**没有用 `--no-verify`、没有改共享钩子** |
 | 4 | `system/scripts/ops/verify.py` | `unit` 的注释：**更正根因**（原写"疑似整树拷贝、代价随仓库体积增长"） | 该判断已被实测证伪，留着会误导下一个人。`unit` 的 270s **故意不动**（理由见 ③-3） |
 | 5 | （不是代码改动）**提交前 `git merge main` → 立刻重跑 `sh system/scripts/ops/bootstrap_worktree.sh`** | `main` 已前进到 `65cef01`（含批次 13-A 的 `valuelayer`）。按 `V-07`/`G-53`：`merge` 会把 `rules/*.yaml` 的 `0444` 还原成 `644`，不重跑则 `rules_lock_guard` 必红。实测重跑输出：`已把 14 个 rules 文件置为 0444` + `rules_lock_guard … RESULT: PASS（0 violations）` |
 
@@ -120,6 +145,10 @@ $ CODEBUDDY_SAFE_DELETE_SANDBOX=0 python /tmp/fx_model.py     # 工作区 tests/
 ✓ [guards] … exit=0  27.13s/120s  exit=0
 69 passed in 21.24s
 ```
+
+★ 上面 B 组那行的 `27.13s/**120s**` 是**当时的真实转录**（那一刻我在本单里取的是 120s）；
+**最终交付值是 300s**（合并 `main` 时放弃我的 120s，理由见 ③-4 补记）。此处**保留原始输出不改写** ——
+转录一经修饰就不再是证据。
 
 ★ 这条比"慢"严重：**`guards` 在修复前是"每次都超时"的门禁** —— 也就是
 按本项目铁律「**卡死的门禁 = 被关掉的门禁**」，`guards` 当时**已经等于不存在**。
@@ -295,32 +324,64 @@ state.requestRejections = {}                                                ← 
 `verify.py --batch <名>`，2026-09-16，本工作树（`wall` 为 `verify.py` 记的批墙钟）。
 **"倍数"= 超时 ÷ 两次数值中较慢的一次**。
 
-| 批次 | run1 | run2 | 方差 | 当前超时 | 倍数 | 夹具用例 | 判定 | 处置 |
+| 批次 | run1 | run2 | 方差 | **最终超时**（`main@8aa7862`） | 倍数 | 夹具用例 | 判定 | 处置 |
 |---|---|---|---|---|---|---|---|---|
-| `unit` | 15.79s | 11.42s | 4.4s | 270s | **17.1×** | ~13 | ✓0 | 维持（见 3-3，建议值 ≈120s） |
+| `unit` | 15.79s | 11.42s | 4.4s | ~~270s~~ ⇒ **120s** | 7.6× | ~13 | ✓0 | 主理人裁定 120s（**接受**；见 3-3） |
 | `conflict` | 1.64s | 1.53s | 0.1s | 30s | 18.3× | 0 | ✓0 | 维持 |
-| `guards` | 27.13s | 19.11s | 8.0s | 60s→**120s** | **2.2×** ★ | ~20 | ✓0 | **已上调 120s**（4.4×） |
+| `guards` | 27.13s | 19.11s | 8.0s | ~~120s（我）~~ ⇒ **210s** | 7.7× | ~20 | ✓0 | 主理人裁定 210s（**接受**；见 3-4 补记） |
+| `injection-g` | 未测（新增） | — | — | **90s** | — | ? | 未测 | 新增片（17 例），`V-06` 如实变红所致 |
 | `root` | 1.60s | 1.40s | 0.2s | 30s | 18.8× | 0 | ✓0 | 维持 |
-| `compute` | 36.62s | 33.74s | 2.9s | 60s→**180s** | **1.6×** ★ | **0** | ✓0 | **已上调 180s**（4.9×） |
+| `compute` | 36.62s | 33.74s | 2.9s | 60s→**180s** | 4.9× | **0** | ✓0 | **已上调 180s** |
 | `graph` | 3.83s | 3.21s | 0.6s | 60s | 15.7× | ~20 | ✓0 | 维持 |
-| `validators` | 19.26s | 12.81s | 6.5s | 30s→**90s** | **1.6×** ★ | ~20 | ✓0 | **已上调 90s**（4.7×） |
-| `claim` | 22.44s | 17.88s | 4.6s | 30s→**120s** | **1.3×** ★ | ~20 | ✓0 | **已上调 120s**（5.3×） |
-| `decision` | 22.14s | 24.86s | 2.7s | 30s→**120s** | **1.2×** ★ | **0** | ✓0 | **已上调 120s**（4.8×）——全表最危险 |
+| `validators` | 19.26s | 12.81s | 6.5s | 30s→**90s** | 4.7× | ~20 | ✓0 | **已上调 90s** |
+| `claim` | 22.44s | 17.88s | 4.6s | 30s→**120s** | 5.3× | ~20 | ✓0 | **已上调 120s** |
+| `decision` | 22.14s | 24.86s | 2.7s | 30s→**120s** | 4.8× | **0** | ✓0 | **已上调 120s**（旧值 1.2×，全表最危险） |
 | `transmit` | 9.39s | 4.12s | 5.3s | 60s | 6.4× | ~20 | ✓0 | 维持 |
 | `evidence` | **配额** | **配额** | — | 150s | — | ~40 | 未取得 | 见 ④.1 |
 | `daily` | **配额** | **配额** | — | 180s | — | ~40 | 未取得 | 见 ④.1 |
-| `pricelayer` | 33.52s | 33.46s | 0.1s | 180s | 5.4× | 0 | ✓0 | 维持 |
+| `pricelayer` | 33.52s（127 例） | 33.46s（127 例） | 0.1s | ~~180s~~ ⇒ **300s** | **3.6×**（按 main 的 83.80s） | 0 | ✓0 | main 的 300s；我的 127 例读数已被 168 例取代 |
 | `valuelayer` | **未由本单复测** | — | — | 300s | **1.76×** ★ | 28 | 见下 | **需注意**（见下） |
 | `injection-a`…`f` | 未测 | 未测 | — | 300s | — | 32~69 | 未测 | 见 ④.1 |
 | `gates` | 9.36s | 9.45s | 0.1s | 60s | 6.4× | 0 | ✗1 | 既有真源红，见 ④.3 |
 | `stage` | 0.67s | 0.93s | 0.3s | 30s | 32× | 0 | ✓0 | 维持 |
 
-★ **倍数 < 4×（"会随机红"）= 5 个（本单实测）**：`guards` 2.2× · `compute` 1.6× · `validators` 1.6× ·
-`claim` 1.3× · `decision` 1.2×。**这 5 个已上调**（纯安全网上调，只会减少误报，不会掩盖卡死）。
-★ 值得注意：`compute` 与 `decision` **一个夹具用例都没有** ⇒ 它们的紧余量**与夹具无关**，
-夹具修复**不会**改善它们；`guards/validators/claim` 则**已经被夹具修复改善了**（否则更紧）。
+★ **"最终超时"列 = `main@8aa7862` 的真值**（23 批；`unit`/`guards`/`pricelayer` 三行为主理人裁定）。
+★ **倍数 < 4× 的批次（按最终真值）**：`valuelayer` **1.76×**（300s 已顶上限，无法再调）。
+  我实测出的 5 个 < 4× 批次（`guards` 2.2× / `compute` 1.6× / `validators` 1.6× / `claim` 1.3× / `decision` 1.2×）
+  **已全部处置**：`guards` 由主理人定 210s，其余 4 个由本单上调（现为 4.7~4.9×）。
+★ 值得注意：`compute` / `decision` / `pricelayer` **一个夹具用例都没有** ⇒ 它们的紧余量**与夹具无关**，
+夹具修复**不会**改善它们；`guards/validators/claim/graph/transmit` 则**已被夹具修复改善**（否则更紧）。
 
-★ **第 6 个 < 4× 的批次：`valuelayer`（1.76×）—— 由 `main` 侧批次 13-A 加入，本单未复测**。
+### 3-4 补记：「我的 120s」为什么被我自己放弃（★ 一条自我更正，最终值 210s）
+
+**经过两轮合并，最终值是主理人裁定的 `guards = 210s`。** 时间线（每一步都留了痕）：
+
+1. 本单原取 **120s**（依据：修后 27.13s × 4.4 = 4.4×，落在 `V-02` 的 4~8× 内）；
+2. 第一次合并 `main` 时，main 已上调到 **300s**（依据：**6 条并发流 101.96s** `exit=124`、
+   安静时 30.73s）⇒ 我**放弃 120s**，理由：
+   - `V-02` 以**较慢一次**为取值基准；我有"修后 + 轻负载"，main 有"**修前** + 6 并发"，
+     **我没有"修后 + 6 并发"**这个组合的读数 ⇒ 拿未测场景收紧超时 = 把本卡要消灭的"随机红"装回去；
+   - 收紧门禁 = 把门关小，应由主理人按新证据裁决，**不由我顺手做**；
+3. 第二次合并时主理人给出 **210s**，并指出一件我**自己没注意到**的事：
+   **我定的 120s（4.4×）与我自己给注入分片定的规则不一致** ——
+   我对分片用的是「**实测 × 8**（`V-02` 上沿）+ 向上取整到 30s 倍数 + 不低于 90s」，
+   依据是我自己实测的"**宿主并发可把同一片拖慢 11.8×**"。⇒ `27.13 × 8 = 217` ⇒ **210s（7.7×）**。
+   ⇒ **这是对我自己规则的正当代用，比我的 120s 自洽 ⇒ 接受 210s。**
+   ★ 我把它当作本卡最值得记的一条：**"我给了规则，却在别处没按规则取值"** ——
+   规则的价值在于被一致地套用，而不是只在方便的地方套用。
+★ **同族处置**：`pricelayer` main 取 300s（168 例实测 53.89/83.80s）；我的旧读数
+（127 例 33.52/33.46s）**已被 13-B 追加用例取代**，按 83.80s 算 180s 只有 **2.1×** ⇒ 保留 300s。
+★ **`unit` 最终 120s**：我在报告里**明确把这件事留给主理人**（"这是建议，未擅自改"），
+主理人依本单修后实测（15.79s / 11.42s）判 120s ≈ 7.6× ⇒ **接受**。我的 270s 是"没有满负载读数
+时不自作收紧"的保守值，两者不矛盾：**决策权归主理人，我提供实测与建议**。
+
+★ **一条很有价值的交叉验证**：main 的 **6 并发 101.96s** 与我的根因**互相印证** ——
+`guards` 约 20 个夹具用例 × 每例 ≈4.2s 的 `raw/` 清理 ≈ **84s**；修后安静值 27.13s，
+`27.13 + 84 ≈ 111s`，与 main 的 101.96s 同量级。**两条独立来源指向同一个机制**。
+（但**不据此宣称**"101.96s 全是夹具"—— 并发与夹具**两个变量同时变了**，按 `CONVENTIONS.md::口径 12`
+**不得归因**；这里只说"量级一致、互为旁证"。）
+
+★ **第 6 个薄余量批次：`valuelayer`（1.76×）—— 由 `main` 侧批次 13-A 加入，本单未复测**。
 它的注释（`verify.py` 里那一段）**自己已经如实登记了**这条风险（"本批余量仅 1.76×，
 比 `injection-f` 的 2.7× 更薄"），且已按 `V-02` 的 300s 上限取满
 （170.15 × 4 = 680 > 300 ⇒ **上限卡住了它**，不是没算）。**处置建议**：不需要改超时
@@ -352,8 +413,11 @@ state.requestRejections = {}                                                ← 
    ★ 顺带一条**必须登记的反直觉事实**（现已按 §2.6 精算）：**本次修复几乎不降低配额消耗** ——
    配额按**目标树下的项数**计，修复去掉的是 `raw/` 的 **5 项/例** ⇒ 每例 **255 → 250 项（−2%）**。
    省下的是**调用次数**（= 时间），不是配额。所以"一轮一片"的纪律**照旧成立**。
-2. **`unit` 的 270s 未按新实测收紧**（理由见 3-3）。**若你要收紧**，请以一次**满负载复测**为准；
-   我手上的 4 个样本（9.42 / 9.99 / 11.14 / 15.35s pytest 时长）都是**相对空闲**时取的。
+2. **`unit` 的 270s 已由主理人收紧到 120s**（依本单修后实测 15.79/11.42s ⇒ 120s ≈ 7.6×）。
+   ⇒ **这使 `unit` 的复测优先级升高**：我手上 4 个样本（9.42 / 9.99 / 11.14 / 15.35s）**都是相对空闲时取的**，
+   而本单已实测"**宿主并发可把同一片拖慢 11.8×**" ⇒ **120s 在 6 并发下不成立是可能的**
+   （15.79 × 11.8 ≈ 186s）。⇒ 请在**满负载**下复测 `unit` 一次；若确实被拖过 120s，
+   应按 `guards` 的同一规则重取（`最慢 × 8` + 取整 30s 倍数），**不是**改断言。
 3. **`gates` 批仍 `exit=1`，且是既有真源红，与本单无关**：唯一非零项是
    `traceback.py exit=1`，指向 `facts/recommendations.jsonl:0 — rec-nvda-001 四要素缺失`（`T-10`）。
    该守卫读的是 `facts/`，**不读 `tests/`**，故与本次 `conftest.py` 改动无因果关系。
@@ -382,6 +446,27 @@ state.requestRejections = {}                                                ← 
    夹具用例）与 `tests/daily/test_no_change_day.py` 增量合了进来，`tests/injection/` 也长了
    ⇒ `unit` / `daily` / `injection-*` 的**条目数与耗时都会变**。§2.5 与 3-4 的表是**合并前**的读数，
    我没有把它们当作合并后的结论（详见 §⑤ 的复测清单）。**这不是"没测"，是"测不了"**（配额，见 ④.1）。
+9. **★ 一条我不解释、只登记的读数冲突**：main 侧记录 `guards` **修前安静时 30.73s**，
+   而我修前在同一批上实测的是 **>60s**（两次都 `exit=124` @60.02s）。两者差约 2×，我**没有**能自洽
+   解释（可能是不同时刻的 `tests/guards` 内容不同、或"安静"的定义不同）。
+   按 `CONVENTIONS.md::口径 12`（**两个变量同时变 ⇒ 不得归因**），此处**只登记冲突、不编因果**。
+   对交付没有影响：**修后**的读数（27.13/19.11s）与 main 的安静值同量级，两方都指向"修后 ≈20~30s"。
+10. **★ `G-61`：共享钩子让"判据与对象不同源"（本单连中两次，已由 main 侧 `f5dbc6f` 登记）**。
+    实测 `$(git rev-parse --git-path hooks)/pre-commit` 的内容：
+    ```
+    #!/bin/sh
+    # installed-by: system/scripts/ops/install_hooks.sh
+    exec sh "/Users/gaza/Developer/InvestSigh/system/scripts/ops/pre-commit.sh"
+    ```
+    ⇒ **共享钩子跑的是主工作树的 `pre-commit.sh`**（硬写绝对路径），而该脚本又从 cwd 反解
+    `REPO_ROOT`/`CODE_ROOT`（它刻意 unset 了 `GIT_DIR`）⇒ **门禁清单取自 main、门禁脚本取自当前工作树**。
+    后果（本单实测两次）：main 每新增一道门而分支未合，分支上**任何提交都必红**，且报错是
+    `can't open file '.../quote_provenance_guard.py'` / `.../scenario_tag_binding_guard.py` ——
+    **看起来像"守卫脚本丢了"，实为两条真源错配**（反方向：清单比树短 ⇒ **静默少跑门禁**）。
+    **本单处置**：不绕过（不用 `--no-verify`、不动共享钩子），改为**把 main 合进来**。
+    ⇒ 仍需**根治**（归 `install_hooks.sh`/钩子安装面）：钩子应解析**当前工作树**的脚本路径
+    （或用 `git rev-parse --show-toplevel`），并让 `pre-commit.sh` 在"脚本不存在"时
+    **报出"清单与树不同源"**而不是裸的 `can't open file`。
 
 ---
 
@@ -397,14 +482,15 @@ cd <worktree>/system
 PY="${HOME}/.workbuddy/binaries/python/envs/default/bin/python"   # 必须有 pytest；系统 python3 没有
 
 # 每轮只跑下面一条，跑两遍（run1 / run2）：
-"$PY" scripts/ops/verify.py --batch unit          # 合并后应重测：main 给 tests/ 加了新文件
-"$PY" scripts/ops/verify.py --batch guards
+"$PY" scripts/ops/verify.py --batch unit          # ★ 优先：已被收紧到 120s，需在满负载下确认（见 ④.2）
+"$PY" scripts/ops/verify.py --batch guards        # 210s（主理人裁定）
 "$PY" scripts/ops/verify.py --batch conflict
-"$PY" scripts/ops/verify.py --batch pricelayer
-"$PY" scripts/ops/verify.py --batch valuelayer    # ★ 关键：验证 3-4 结尾那条可证预测（应显著 < 170.15s）
+"$PY" scripts/ops/verify.py --batch pricelayer    # 300s，168 例；本单只有 127 例的旧读数
+"$PY" scripts/ops/verify.py --batch valuelayer    # ★ 验证 3-4 那条可证预测（应显著 < 170.15s）
 "$PY" scripts/ops/verify.py --batch daily
 "$PY" scripts/ops/verify.py --batch evidence
-"$PY" scripts/ops/verify.py --batch injection-a   # …b / c / d / e / f 各一轮，共 6 轮
+"$PY" scripts/ops/verify.py --batch injection-g   # 新增片（17 例 / 90s），本单从未测过
+"$PY" scripts/ops/verify.py --batch injection-a   # …b / c / d / e / f 各一轮，共 7 轮
 ```
 
 **填表时只需补这几格**（3-4 的表已经建好，把"未测/未复测"改成 run1/run2 即可）：
@@ -468,19 +554,42 @@ EOF
 
 ## ⑦ 提交与仓库状态
 
-**本报告首次随提交 `49ce681` 落地**（分支 `ws/fixture-cost`；合并 `main` 后 `HEAD == 65cef01`）：
+**本报告首次随提交 `49ce681` 落地**（分支 `ws/fixture-cost`）：
 
 ```
-49ce681 fix(conftest)+fix(verify): 卡13-F/G-54 共享夹具每例≈4.2s 的根因已定位并修掉 + 5 个批次超时按 V-02 上调
-65cef01 docs(batch13): 13-A 八项裁定 …（= main，merge 前 fast-forward 到位）
+c8fc807 Merge branch 'main' into ws/fixture-cost（第二次：取回 quote_provenance_guard / injection-g / scenario_tag_binding_guard）
+e18aedd Merge branch 'main' into ws/fixture-cost（第一次：含两处超时冲突的如实改口）
+dc43d26 docs(report): 卡13-F 报告章节重排为 ①~⑦
+e98a91f docs(report): 报告补 §2.6（机制从源码钉死）+ §⑤ 复测清单 + §⑦ 提交与状态
+49ce681 fix(conftest)+fix(verify): 卡13-F/G-54 根因已修 + 批次超时按 V-02 上调
+8aa7862 (= main，第二次合并的落点)
+f5700dc (= main，第一次合并的落点)
+65cef01 （本单开工时的 main 落点）
 ```
 
-改动面（**只 `git add` 这三个显式路径，没有 `git add -A`**）：
+★ **两次合并都不是"顺手同步"，而是被 `G-61` 逼出来的**（共享钩子跑 main 的清单 ⇒
+main 一加门，分支就提交不了）。**没有用 `--no-verify`、没有改共享钩子** —— 每次都按 `V-07`
+`merge` → 立刻 `bootstrap_worktree.sh`。
+
+**并入状态（`CONVENTIONS.md::口径 11` 要求的那一条，取**最新的** `main@8aa7862`）**：
+
+```
+$ git merge-base --is-ancestor main HEAD && echo OK
+OK                       # ⇒ main 已是本分支祖先，未回退 main 任何内容
+$ git diff --numstat main HEAD          # （含本报告已随 dc43d26 进 main 的部分后的增量）
+ 70 19  system/reports/ws_fixture_cost_report.md
+ 19 12  system/scripts/ops/verify.py
+                         # ⇒ **conftest.py 已不在差异里 ⇒ 核心修复已进 main**
+                         #    （main 版 `tests/conftest.py` 第 72 行 = `"state.json", "raw",`）
+                         #    本单在 main 之外只剩：docstring 去重复真源 + 本报告最新几节
+```
+
+改动面（**只 `git add` 显式路径，从来没有 `git add -A`**）：
 
 ```
 A  system/reports/ws_fixture_cost_report.md      ← 本文件
-M  system/scripts/ops/verify.py                  （超时 + 注释更正）
-M  system/tests/conftest.py                      （`raw` 进 `_COPY_SKIP` + docstring 成本模型）
+M  system/scripts/ops/verify.py                  （超时注释更正 + docstring 删"超时列"去重复真源）
+M  system/tests/conftest.py                      （`raw` 进 `_COPY_SKIP` + docstring 成本模型）★已进 main
 ```
 
 提交后 `git status --short`：**空**（工作树干净）。
@@ -490,16 +599,18 @@ $ git status --short
 (无输出)
 ```
 
-`pre-commit`（**无 `--no-verify`**）：**11 门全 PASS（0 violations）**，末行 `pre-commit ✓ 全部门禁放行`：
+`pre-commit`（**从未使用 `--no-verify`**）：
+- 早期 3 次提交（分支自身的清单）：**11 门 PASS**
+- 收口两次提交（按**共享钩子 = main 的清单**）：**14 门全 PASS（0 violations）**，
+  含新取回的 `quote_provenance_guard`（21 claim / 0 violation）与 `scenario_tag_binding_guard`；
+  末行 `pre-commit ✓ 全部门禁放行`
+- `verification_policy_guard` 终值：`batches: 23` · `max_timeout_s: 300` · `test_files: 76` ·
+  `test_files_uncovered: 0`
 
-| 门 | 结果 |
-|---|---|
-| `append_only_guard` / `rules_lock_guard` / `registry_schema_guard` / `schema_sync_guard` | PASS |
-| `conflict_scan(L1-L5)` / `no_placeholder_guard` / `injection_guard` | PASS |
-| `verification_policy_guard` | PASS（`batches: 22` · `max_timeout_s: 300` · `test_files: 74` · `test_files_uncovered: 0`） |
-| `shell_var_guard` / `graph_integrity_guard` / `criterion_effectiveness_guard` | PASS |
+★ 按 `V-07`：**每次 `git merge` 之后立刻重跑 `bootstrap_worktree.sh`**，三次都得到
+`已把 14 个 rules 文件置为 0444` + `rules_lock_guard … PASS（0 violations）`。
 
-★ **自指说明**：本段（§⑦）是**在 `49ce681` 之后**补写入的 ⇒ 本文件的**最新一次**提交 hash 与上表不同。
+★ **自指说明**：本段（§⑦）是**在 `c8fc807` 之后**补写入的 ⇒ 本文件的**最新一次**提交 hash 与上表不同。
 取最新一次请用：
 
 ```bash

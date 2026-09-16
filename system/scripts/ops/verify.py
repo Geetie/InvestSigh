@@ -26,15 +26,16 @@ python system/scripts/ops/verify.py --batch all            # 逐批跑，每批�
 | `unit`       | `tests/unit/`（契约 + 作用域匹配器） |
 | `conflict`   | `tests/conflict/`（P-03/P-05/P-07 schema 断言） |
 | `guards`     | `tests/guards/`（门禁退出码契约 + 验证规范） |
-| `injection-a`…`injection-f` | `tests/injection/` 的 **6 个分片**（每片一组显式文件路径） |
+| `injection-a`…`injection-g` | `tests/injection/` 的 **7 个分片**（每片一组显式文件路径） |
 | `root`       | `tests/test_ch11_invariants.py` |
 | `gates`      | `run_all_gates.py`（全部门禁逐项退出码） |
 | `stage`      | `stage_gate.py --stage all`（阶段判据 + 退出码自洽） |
 
 ★ **超时值不在本表重复** —— 唯一真源是下面的 `BATCHES`（每批一个 `Batch.timeout`）。
-  本表原先带一列"超时"，**已实测漂移**（`unit` 那行写着 `60s`，真值是 `270s`；且漏了
-  `compute`/`claim`/`decision`/`transmit`/`evidence`/`daily`/`pricelayer`/`valuelayer` 八批）——
-  同一事实两处写必然漂移，与 `guards` 那段"不在描述里重复真源"是同一课（卡 13-F 发现并删除该列）。
+  本表原先带一列"超时"，**已实测漂移**（`unit` 那行写着 `60s`，真值早不是它；分片那行写 `6 个`
+  而实际已 7 个；且整张表漏了 `compute`/`claim`/`decision`/`transmit`/`evidence`/`daily`/
+  `pricelayer`/`valuelayer` 八批）—— 同一事实两处写必然漂移，与 `guards` 那段
+  "不在描述里重复真源"是同一课（卡 13-F 发现并删除该列）。
   查真值：`python -c "from scripts.ops.verify import BATCHES; print({n: b.timeout for n, b in BATCHES.items()})"`。
 
 超时值的**判据**见 `CONVENTIONS.md::V-02`（现行判据：`0 < timeout <= 300s`，且余量要能区分
@@ -312,6 +313,14 @@ BATCHES: Mapping[str, Batch] = {
         #     ② 拿未测场景去**收紧**超时，等于把本卡要消灭的"随机红"重新装回去；
         #     ③ 收紧门禁属于"把门关小"，应由主理人按新证据裁决，不由我顺手做。
         #     ⇒ **120s 是"确认后可选"的值**（需一次修后+满负载复测），**不是现在该取的值**。
+        #   ★★ **一处必须登记的丢失（卡 13-F 第三次合并时发现，不改值、只登记）**：
+        #     `main` 曾在另一支上把本行定成 **210s**，推导是**按 13-F 自己给分片定的规则**
+        #     「实测 × 8 + 取整 30s 倍数 + 不低于 90s」（`27.13 × 8 = 217 ⇒ 210`，7.7×，落在 4~8× 内）
+        #     —— 那条推导**比我这个 300s 更有依据**（300s 是"4× 越上限只好取顶"的兜底）。
+        #     但随后 `main` 的 `f2d1371`（合并 `ws/fixture-cost`）**冲突取了分支侧 = 我这个旧的 300s**，
+        #     210s 因此**被覆盖丢失**。⇒ **本行现值 300s 是"合并产物"，不是谁的裁决**。
+        #     ★ 我**不**在这次合并里顺手改回 210s：**收紧门禁应由主理人裁**（同 ③ 的理由）。
+        #     若主理人认可 210s，改动只有一处：把下面的 `300.0` 换成 `210.0`，并删掉本段。
         "guards", "tests/guards/（门禁退出码契约 + 验证规范）",
         _pytest("tests/guards"), 300.0, _exit_zero,
     ),
@@ -443,9 +452,14 @@ BATCHES: Mapping[str, Batch] = {
         # 依据 `CONVENTIONS.md::V-02` 注：判据是「`<= 300s` + 余量足以区分"慢"与"卡死"」，
         # 倍数边界在慢批次上已不成立（8× = 671s > 300s）⇒ 与 `daily`/`injection-*` 同属
         # "慢批次取不超过上限的最大值"。
+        # ★ 13-F 曾据 **127 例**的复测（33.52s / 33.46s）主张 180s = 5.4×；但本批现为 **168 例**
+        #   且 13-F 的夹具降本（`raw` 入 `_COPY_SKIP`）**落地后**尚无 168 例的复测数 ⇒
+        #   **主理人裁定：暂取上限 300s**（安全网），最终值由 13-F 的「批次实测耗时 vs 超时」对照表按 `V-02` 重算。
         # ★ 卡 13-F 的旧读数 **33.52s / 33.46s（127 例）已被取代**（用例数 127→168，13-B 后续追加）
         #   ⇒ 取舍：**以 168 例的 83.80s 为基准**，180s 只有 **2.1×**、不成立；**300s 保留**。
         # ★ 本批 **0 个夹具用例** ⇒ 卡 13-F 的夹具修复**不会**改善它（别拿修后去预期它变快）。
+        # ★ 13-F 收口时的实测状态：**168 例的修后复测仍未取得**（宿主单轮删除配额），
+        #   清单见 `reports/ws_fixture_cost_report.md §⑤` ⇒ 本行 300s 仍是"待重算"的暂取值。
         "pricelayer", "tests/pricelayer/（Ch5 价格层：反解多解/估值路由/倒填/情景/历史外推/每日解释）",
         _pytest("tests/pricelayer"), 300.0, _exit_zero,
     ),
