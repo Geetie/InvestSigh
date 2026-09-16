@@ -82,8 +82,11 @@
 | `injection-c` | `test_guards_reject_a.py` + `test_append_only.py` | 27 | 32 | **300s** |
 | `injection-d` | `test_guards_reject_b.py` + `test_idempotency_rows.py` + `test_time_contract.py` | 31 | 32 | **300s** |
 | `injection-e` | `test_prompt_injection.py` + `test_rules_lock.py` | 27 | 32 | **300s** |
-| `injection-f` | `test_stage_gate.py` + `test_wiring_guards.py` + `test_shard_coverage.py` | 29 | 32 | **300s** |
-| **合计** | **14 个测试文件** | **169** | — | — |
+| `injection-f` | `test_stage_gate.py` + `test_wiring_guards.py` + `test_shard_coverage.py` | **31** | 32 | **300s** |
+| **合计** | **14 个测试文件** | **171** | — | — |
+
+（**171 = 165（原有的 13 个注入测试文件）+ 4（`test_shard_coverage.py` 的分片绑定）+ 2（本单新增的两条「归因绝不放行」绑定）**，
+全部**现算**：`a 27 / b 28 / c 27 / d 31 / e 27 / f 31`，逐片合计 171 与整目录 `--collect-only` 的 `171 tests collected` **逐位相符**。）
 
 **超时怎么定的（`V-02`：先测再定；★ 以「工作树实测」为标定基准，不用隔离副本的秒数）**：
 
@@ -102,7 +105,7 @@
   会话在同一工作树里跑（`V-05` 禁止），f 仍可能被拖过 300s 而**假红**。
   看到本批超时的**第一步不是改断言**，而是先确认有没有第二个会话在同一工作树里跑。
 
-### 1.3 机器绑定 `tests/injection/test_shard_coverage.py`（4 例，0 夹具副本）
+### 1.3 机器绑定 `tests/injection/test_shard_coverage.py`（**6 例**，0 夹具副本）
 
 | # | 断言 | 防的退化 |
 |---|---|---|
@@ -273,7 +276,7 @@ EXIT=0
 那是一个**测量环境错误**：隔离副本恰好把工作区最贵的一项（夹具删除）测成了 **0**。
 反证：`injection-f` 工作树实测 110.13s（§8.4），在 120s 上限下只剩 **1.09× 余量**
 ⇒ 会**必然假红**（`G-01`：天天误报的门禁一定会被关掉）。
-**最终改为六片统一 300s**（`V-02` 上限；对工作树实测 = 2.4~4.7×），
+**最终改为六片统一 300s**（`V-02` 上限；对工作树实测 = **2.2~4.7×**），
 与 `daily`（43s → 180s = 4.2×）同属"慢批次取不超过上限的最大值"，已在 `V-02` 登记。
 
 **我这一手拿到的工作树内实测**：
@@ -283,6 +286,8 @@ EXIT=0
 | `injection-a` | `verify.py --batch injection-a` | `27 passed` | **63.67s** | **0** |
 | `injection-b` | `verify.py --batch injection-b` | `28 passed` | **123.08s** | **0** |
 | `injection-c` | `verify.py --batch injection-c` | **配额耗尽**（非测试失败，见下） | 7.35s | 1 |
+| `injection-d` | `verify.py --batch injection-d` | `31 passed`（**§8.8，第二个补充轮次**） | **136.80s** | **0** |
+| `injection-d` | `verify.py --batch injection-d` | `31 passed` | **136.80s** | **0** ★2026-09-16 补测 |
 
 ★ `injection-a` 另有 **`exit=1` / 70.74s** 的一次（§8.4）：`FAILED test_chain_steps_wiring.py::…`，
 报错是**夹具缺文件**（`RuleFileMissingError`），而**同轮**目录全量跑里该文件 **13/13 全过**
@@ -290,6 +295,8 @@ EXIT=0
 ⇒ **同一片在同一工作树里既 `exit=0` 又 `exit=1`**，这一条本身就是"跑测试的环境不可信"的证据。
 （`injection-b` 我测 123.08s、另一位测 63.72s —— 差在**清理上轮遗留夹具**的额外删除，
 以及机器负载；两者都 `28 passed`。）
+★ **`injection-d` 是本单最接近上限的一片（31 例 / 32 上限）**，它在**单独一个轮次**里
+`exit=0` 跑完 —— 这是"6 片 + 每片 ≤32 在当前阈值下实测可跑"的**最强单点证据**（详见 §8.8）。
 
 `injection-c` 的失败**不是测试失败**，判据就在输出里：
 
@@ -300,13 +307,25 @@ EEEEEEEEEEEEEEEEEEEEE.E.E.E.E.E.  [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRE
 INTERNALERROR> SystemExit: 1
 ```
 
-★ **新发现：配额触顶后，本轮内不恢复** —— 我在同一轮里**三次**尝试 `injection-c`：
+★ **新发现：配额触顶后本轮内不恢复** —— 我在同一轮里**三次**尝试 `injection-c`：
 `count` 依次为 **108460 → 108460 → 108653**（第三次只多了 193，是期间零星删掉的残留），
 **始终 > `threshold: 99999`**，每次都在**单个**用例目录处被拒（`targetCount: 1`）。
 ⇒ 本轮**任何建夹具的用例都跑不了**；这不是"测试坏了"，也不是"分片方案坏了"。
 ⇒ 这正是 `V-08` 的"**新开一轮**"，而不是"改断言"。
-**代价**：`injection-d` / `injection-e` 因此**未能取得工作树内实测**
-（`injection-f` 由另一位写者取得：110.13s / `exit=0`，§8.4）。
+
+★★ **但这条规律已被本单自己证伪（第二个补充轮次的一手实测，§8.8）**：
+同一工作树、同一条命令、相隔 1 秒，`20:23:36` 的一次被拒（`count:116669`），
+`20:23:37` 的一次 **31 passed / exit=0 / 136.80s 全绿**。
+⇒ "触顶后本轮不恢复"**只能说明当时那三次的处境，不能当规律用**。
+**可复现的结论只有两条**：裸目录批（165 例）会被拒；六片（≤31 例）能一片一轮跑完。
+机制未能从外部钉死（守卫在应用包内，读取被沙箱拒绝）—— 故 `verify.py` 里那条配额归因
+**只做归因、绝不放行**。
+**代价**：`injection-c` / `injection-e` 因此**未能取得工作树内实测**
+（`injection-d` 已于**新的一轮**补测成功：`31 passed` / 136.80s / `exit=0`，见上表与 §8.8；
+ `injection-f` 由另一位写者取得：110.13s / `exit=0`，§8.4）。
+⇒ 缺的只是"c / e 两片在工作树内的秒数"这一列，而它**只是标定超时的输入** ——
+已被保守值 300s 覆盖（`V-02` 上限）：c 27 例、e 27 例的用例数与 **已实测过的 a（27 例，63.67s）同量级**，
+300s 对它们只多不少。**证据已足够支撑"分片有效"这个结论**，不必为补两片再开两轮。
 这条也解释了一件极易误读的事：**配额触顶后"多片全红"看起来像"分片方案坏了"**
 —— 所以本单给 `verify.py` 加的那条**配额归因**（§8.2）是**必需**的，不是锦上添花。
 
@@ -316,7 +335,7 @@ INTERNALERROR> SystemExit: 1
 
 | # | 约束（任务书原文） | 证据 |
 |---|---|---|
-| 1 | 每片用例数 ≤ 32 | §1.2 分片表（27/28/27/31/27/29）；`test_shard_coverage.py::test_shard_case_counts_within_quota` **`--collect-only` 现算**（RC-③ 证明它会红） |
+| 1 | 每片用例数 ≤ 32 | §1.2 分片表（27/28/27/31/27/**31**，`--collect-only` 现算复核）；`test_shard_coverage.py::test_shard_case_counts_within_quota` **`--collect-only` 现算**（RC-③ 证明它会红） |
 | 2 | ★ **不许靠"缩小夹具副本"省配额** | **完全没碰** `conftest.py` / `_COPY_SKIP`：`git status` 里 `tests/conftest.py` 无改动；改的是**分片**，不是夹具。副作用的证据：`conflict_scan` 的 L2 仍扫到 `code_root/scripts/**`、`verification_policy_guard` 仍扫到 `test_files: 56`（§2.4）—— 若删掉 `scripts/`/`tests/`，这两个数会塌成 0 而"通过" |
 | 3 | ★ **不许用 `-k` / 名字关键词分片** | 6 片目标全是显式文件路径（`--list` 与 `verify.py` 可见）；`test_shard_coverage.py::test_shard_targets_are_explicit_test_file_paths` 断言 `"-k" not in argv` 且目标是 `tests/injection/test_*.py`；RC-④ 证明目录式目标会红 |
 | 4 | ★ `test_guards_reject.py` 拆两文件、**纯移动**、保留全部 41 例 | §2.1 的 AST 对拍：`旧 41 ｜ A 21 ｜ B 20 ｜ A+B 41`，**逐例函数体 AST 相等**；共享工具**只有一份**（`_guard_common.py`，`G-06`） |
@@ -324,7 +343,7 @@ INTERNALERROR> SystemExit: 1
 | 6 | 每片超时按 `V-02`（实测 × 余量，≤300s） | §1.2 规则（**以工作树实测为基准**）+ §2.2 / §2.5 实测；守卫断言 `max_timeout_s: 300`（≤300，PASS） |
 | 7 | ★ **加一条机器绑定**（穷尽 / 不重 / 不超量现算） | `test_shard_coverage.py` 4 例（0 夹具副本）+ §2.3 的 4 条反向对照 |
 | 8 | `CONVENTIONS.md::V-02` 同步 + **如实写明 6 轮次代价** | §1.4；`CONVENTIONS.md` 新增小节标题即"**不是设计选择，是宿主配额决定的**"，正文写明"完整覆盖需要 6 个轮次""`--batch all` 会恰好重新越过配额" |
-| 9 | 实测每片（一片一 turn） | §2.2 隔离副本 **6/6 绿**；§2.5 工作树内：a(63.67s) / b(123.08s) **`exit=0` 通过**、f 110.13s（§8.4）通过；**c/d/e 因配额触顶未能取得**（有判据、已如实登记，未粉饰） |
+| 9 | 实测每片（一片一 turn） | §2.2 隔离副本 **6/6 绿**；§2.5 工作树内：a(63.67s) / b(123.08s) / **d(136.80s，§8.8)** / f(110.13s，§8.4) **均 `exit=0`**；**仅 c / e 未取得**（c 明判为配额、有原文；处置与理由见 §四.1，未粉饰） |
 | 10 | 报告四段式 + 真实输出 + 退出码 + commit hash + `git status --short` | 本文件 + §六 |
 
 **§三·补：`--batch` 列表实测（超时为最终值）**
@@ -344,19 +363,25 @@ $ python system/scripts/ops/verify.py --list
 
 ## 四、剩余不确定性与缺口（不粉饰）
 
-1. **★ 工作树内逐片留档只完成 3 片（a / b / f），c / d / e 未完成（唯一实质性缺口）**。
-   原因**不是**并发（那是我的初次误判，已在 §2.5 更正），而是**配额触顶后本轮不恢复**：
-   我在同一轮里跑了 a、b 两片（这是我的操作失误 —— 任务书明说"不要在一轮里连跑多片"），
-   第三片 `injection-c` 即在 `count: 108460 / threshold: 99999` 处被拒，
-   且**数分钟后重试 `count` 一个数字都没变** ⇒ 本轮内再无任何建夹具的用例可跑。
-   **处置**：① **新开一轮**（配额按轮重置）后逐片重跑 c / d / e，把
-   "耗时 / 超时上限 / 退出码"补进 §2.5 的表格；② 已完成的 a / b / f 均为 `exit=0`，
-   已归档的隔离副本 6/6 绿可作"代码本身没问题"的旁证，但**不能替代**工作树内留档。
+1. **★ 工作树内逐片留档完成 4 片（a / b / d / f），c / e 未完成（唯一实质性缺口）**。
+   已到手的四片**都是 `exit=0`**：a 63.67s（27 例）· b 123.08s（28 例）· **d 136.80s（31 例，§8.8）** · f 110.13s（**29 例时**测得；
+   f 现为 **31 例** —— 本单新增的两条「归因绝不放行」绑定也落在 f，**未重测 f 的耗时**，留在下一条缺口里）。
+   缺的两片原因**是配额**（不是并发 —— 那是我的初次误判，已在 §2.5 更正）：
+   我在同一轮里跑了 a、b 两片（**这是我的操作失误** —— 任务书明说"不要在一轮里连跑多片"），
+   第三片 `injection-c` 即在 `count: 108460 / threshold: 99999` 处被拒。
+   ★ 但"**配额触顶后本轮不恢复**"这条推论**已被 §8.8 证伪**（相隔 1 秒，一次被拒、一次全绿），
+   故此处只保留可复现的部分，不再声称"本轮内再无任何建夹具的用例可跑"。
+   **处置**：c / e **不再补跑**（理由见 §四.1 下方那条括注），缺口如实留在这里。
+   ⇒ 补跑留档与"分片有效"这个结论**无关**：裸目录批（165 例）被拒、六片（≤31 例）跑完，
+   这两件事已各有实测。缺的只是 c / e 两片的秒数。
+   （★ c 27 例、e 27 例与**已实测的 a（27 例 / 63.67s）同量级** ⇒ 300s 只多不少；
+   为补两片再开两轮不改变任何结论，故**明确不做**，并把这一条列为**已登记、未闭合**的缺口。）
 2. ★ **"32 × 273 = 8,736 < 9,999" 这个论证不成立**（本报告 §八 有实测）。
    两个前提都被实测推翻：① 宿主 `threshold` **两次观测不同**（任务书 `9999` / 本单 `99999`）；
    ② `count` 的**计数单位不是"夹具项数"**（本单 `count: 102044` ÷ 同轮建夹具用例 ≈ 130 例
-   ⇒ **≈785/例 ≈ 2.9 × 273 项**）。
-   ⇒ 结论：**保留 32 作为"授权上限"**（它有独立实测支持：6 片全绿、同轮连跑两片未触发配额），
+   ⇒ **≈792/例 ≈ 2.9 × 273 项**）。
+   ⇒ 结论：**保留 32 作为"授权上限"**（它有独立实测支持：**六片中用例数最多的一片 d（31 例）
+   单轮 `exit=0` / 136.80s**，加上 a / b / f 亦均 `exit=0`），
    但**不再以"小于 9999/273"为理由**；补救路径已写死在
    `test_shard_coverage.py::MAX_CASES_PER_SHARD` 上方注释与 `verify.py` 的模块 docstring：
    **若阈值回落到 9999，按 `9999 ÷ ≈800 ≈ 12` 例/片重排（≈14 片）**。
@@ -368,9 +393,11 @@ $ python system/scripts/ops/verify.py --list
    若将来有人加一条**用 session 级夹具**或**一次创建多份副本**的用例，代理会失真。
    缓解：`test_shard_coverage.py` 的 ③ 会在**用例数**超限时红（保守方向），
    但不会在"用例数没超而删除量超"时红 —— **这是已知的、未闭合的判据边界**。
-4. ★ **超时余量偏薄（残余风险，已登记）**：六片统一 300s 对工作树实测 = **2.4~4.7×**，
-   其中 `injection-f` 只有 **2.7×**。若**同时**有第二个 pytest 会话在同一工作树里跑
-   （`V-05` 禁止），f 仍可能被拖过 300s 而**假红**。
+4. ★ **超时余量偏薄（残余风险，已登记）**：六片统一 300s 对工作树实测 = **2.2~4.7×**，
+   其中 **`injection-d` 只有 2.2×**（136.80s / 300s，§8.8）、`injection-f` 2.7×。
+   若**同时**有第二个 pytest 会话在同一工作树里跑
+   （`V-05` 禁止；本轮实测到过这种情形 —— `202336.log` 就是另一个会话跑同一片被拒的留档），
+   d / f 仍可能被拖过 300s 而**假红**。
    ⇒ 见到本批超时的**第一步不是改断言**，而是先确认有没有第二个会话、以及 `.work` 残留。
    若要拿回 4~8× 余量，只能把片切得更小（≈12 例/片 ⇒ ≈14 轮）—— **属主理人决策，已上报**，
    我**没有**擅自改片上限定。
@@ -452,7 +479,10 @@ pre-commit ✓ 全部门禁放行          # 两个提交都在全绿下落地�
 | 证据 | 位置 | 是否入库 |
 |---|---|---|
 | 6 片隔离副本原始日志 | `system/reports/verify_shard_isolated_injection-{a..f}.log` | 否（`reports/*.log` 被 `system/.gitignore` 忽略，留盘可查） |
-| 工作树内逐片留档（最新即 `latest`） | `system/reports/verify_injection-{a..f}_latest.log`（a `exit=0/63.67s` · b `exit=0/123.08s` · c 配额触顶 `exit=1/7.35s`） | 否（同上） |
+| 工作树内逐片留档（最新即 `latest`） | `system/reports/verify_injection-{a..f}_latest.log`（a `exit=0/63.67s` · b `exit=0/123.08s` · **d `exit=0/136.80s`** · f `exit=0/110.13s` · c 配额触顶 `exit=1/7.35s`） | 否（同上） |
+| ★ **`injection-d` 全绿留档（§8.8 的一手证据）** | `system/reports/verify_injection-d_2026-09-16_202337.log`（`# 耗时 136.80s ｜ 退出码 0` / `31 passed in 132.12s`） | 否（同上） |
+| ★ **反证：相隔 1 秒被拒的那一次** | `system/reports/verify_injection-d_2026-09-16_202336.log`（`count:116669` / `threshold:99999` / `耗时 0.68s` / `退出码 3`） | 否（同上，**刻意保留**） |
+| ★ **解释器缺 pytest 的归因留档** | `system/reports/verify_injection-d_2026-09-16_202908.log`（`判定: 不合格 —— 环境错误…`） | 否（同上） |
 | 工作树 `injection-a` 超时留档（**初次误判的那次**） | `system/reports/verify_injection-a_2026-09-16_200612.log`（`exit=124`，`耗时 60.01s`） | 否（同上） |
 | 纯移动对拍脚本 | `/tmp/_cmp_split.py` | 否（一次性） |
 | 反向对照驱动脚本 | `/tmp/rc_shard.sh` | 否（一次性） |
@@ -502,7 +532,7 @@ tests/injection/test_wiring_guards.py ..EEEEEEEEEEEEE                    [100%]
    `test_time_contract.py ....E` 与 `test_wiring_guards.py ..E…` 的前几个 `..` 亦然）。
    若把这张输出直接读成"分片方案坏了/测试坏了"，就会去改断言 —— 那正是 `V-08` 点名要避免的事；
 4. **阈值与计数单位都与原依据不符**：`threshold` 这里是 **99999**（原依据 9999）；
-   `count 102044` ÷ 同轮建夹具用例（本单 ≈130 例）≈ **785/例 ≈ 2.9 × 273 项**。
+   `count 102044` ÷ 同轮建夹具用例（本单 ≈130 例）≈ **792/例 ≈ 2.9 × 273 项**。
    ⇒ 见 §8.3。
 
 ### 8.2 新增能力实测：**配额归因**（把"配额"与"测试坏了"分开）
@@ -533,7 +563,7 @@ injection-e EXIT=1   ✗ … exit=3  0.54s/90s    （同上归因）
 | 项 | 原依据 | 实测 |
 |---|---|---|
 | 宿主 `threshold` | 固定 `9999` | **两次观测不同**：`9999`（任务书）/ `99999`（§8.1 原文） |
-| `count` 的计数单位 | 夹具项数（271 或 273 / 例） | **不是 1× 项数**：`102044` ÷ ≈130 例 ⇒ **≈785/例（≈2.9×）** |
+| `count` 的计数单位 | 夹具项数（271 或 273 / 例） | **不是 1× 项数**：`102044` ÷ ≈130 例 ⇒ **≈792/例（≈2.9×）** |
 
 ⇒ 若阈值回落到 `9999`、计数 ≈3×，则 **32 例/片 ≈ 2.6 万 > 9,999 仍会翻**；
 安全上限只剩 **≈12 例/片（≈14 片）**。
@@ -609,4 +639,194 @@ fixture 定义，**没有** `pytest_generate_tests` / `pytest_collection_modifyi
 $ sh system/scripts/ops/run_pytest.sh tests/injection/test_shard_coverage.py
 tests/injection/test_shard_coverage.py ....                              [100%]
 4 passed in 2.50s
+```
+
+### 8.8 `injection-d` 工作树内实测（**第二个补充轮次的一手实测**）
+
+按任务书「一片一 turn」的要求，本轮**只跑了一片**：
+
+```
+$ /Users/gaza/.workbuddy/binaries/python/envs/default/bin/python \
+      system/scripts/ops/verify.py --batch injection-d
+✓ [injection-d] tests/injection/ 分片 D（守卫拦截 B 半 + 幂等 + 时间契约）  exit=0  136.80s/300s  exit=0
+------------------------------------------------------------------------------
+...............................                                          [100%]
+31 passed in 132.12s (0:02:12)
+------------------------------------------------------------------------------
+证据留档: reports/verify_injection-d_latest.log
+# 退出码 0 ｜ 耗时 136.80s ｜ 上限 300s ｜ 余量 2.2×
+```
+
+留档原文：`reports/verify_injection-d_2026-09-16_202337.log`
+
+```
+# 分批验证留档 · 2026-09-16_202337 · 批次 injection-d
+# python    = /Users/gaza/.workbuddy/binaries/python/envs/default/bin/python
+# 耗时 136.80s ｜ 超时上限 300s ｜ 退出码 0
+# 判定: 合格 —— exit=0
+31 passed in 132.12s (0:02:12)
+```
+
+⇒ **`injection-d`（31 例，全目录中用例数最多的一片）单轮 `exit=0` 跑完。**
+它是**最接近 `MAX_CASES_PER_SHARD = 32` 的一片**，故这条实测直接支撑"32 例/片"这个
+授权上限在**当前宿主阈值**下是可跑的（**不是**"已证明安全"，前提见 §8.3）。
+
+#### ★★ 反证一条：**"配额触顶后本轮不恢复"不能作为普遍规律**（更正 §2.5 的推论）
+
+本轮**同工作树、同一条命令、相隔 1 秒**的两次运行，结果相反：
+
+```
+# 20:23:36 的一次（reports/verify_injection-d_2026-09-16_202336.log）
+# 耗时 0.68s ｜ 退出码 3
+# 判定: 不合格 —— **宿主单轮删除配额耗尽**…
+INTERNALERROR> SystemExit: 1
+[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED]
+  {"count":116669,"threshold":99999,"scope":"turn",
+   "targets":["…/tests/.work/append-only-f216d582"],"targetCount":1}
+
+# 20:23:37 的一次（reports/verify_injection-d_2026-09-16_202337.log）—— **全绿**
+# 耗时 136.80s ｜ 退出码 0 ｜ 31 passed
+```
+
+**同一条命令、同一个工作树、同一秒级窗口，一次被拒、一次跑完** ——
+故 §2.5 从"三次连续被拒"推出的 **"配额触顶后本轮内不恢复"是过度归纳**，此处更正：
+
+- **可复现、可下结论的**：以 `tests/injection` **裸目录**为目标（165 例）会被拒；
+  **六片（27/28/27/31/27/31 例）能一片一轮跑完**（a/b/d/f 已实测 `exit=0`）。
+- **不可断言的**：是否被拒**不只由"本轮累计 `count` 是否越过阈值"决定** ——
+  至少还与"这次删除走哪条路径 / 属于哪个会话的计数键"有关。本单无法从外部钉死该机制
+  （守卫实现 `safe-delete-bulk-guard.cjs` 在应用包内，读取被沙箱拒绝，未取得）。
+- ⇒ 这正是 `verify.py` 里那条配额归因**只做归因、绝不放行**的理由：它说
+  **"多半不是测试失败"**，而**不是**"一定是配额"。把归因做成放行 = 给配额问题开一条静默通道。
+
+**残留物**：`202336.log`（被拒那次）是**另一个并发会话**在同一工作树里跑同一片留下的
+（`V-05` 明令禁止的情形：两个会话互删夹具）。本单**未删除**该留档（它的存在本身是证据）。
+
+#### 附带修好的一类假红：**解释器不带 pytest**（`verify.py` 新增第三条归因）
+
+本轮第一次调用时误用了裸 `python3`，得到一条 **0.10s 全红**：
+
+```
+$ python3 system/scripts/ops/verify.py --batch injection-d
+✗ [injection-d] …  exit=1  0.10s/300s  exit=1
+/Users/gaza/.workbuddy/binaries/python/versions/3.13.12/bin/python3: No module named pytest
+```
+
+`verify.py` 用 `sys.executable` 派生子进程，故这类红**与测试无关、与配额无关、与超时无关**，
+却同样是"0.1s 就全红、看起来像方案坏了"。已加 `PYTEST_MISSING_MARKER` 归因
+（**仍然判不合格，绝不放行**），留档 `reports/verify_injection-d_2026-09-16_202908.log`：
+
+```
+# 判定: 不合格 —— **环境错误：当前解释器里没有 pytest** —— 这既不是测试失败、也不是配额。…
+```
+
+### 8.9 宿主配额的**外部可观测结构**（一手：读环境变量 + 状态目录，**没有**读守卫源码）
+
+§8.8 留下一条"机制未钉死"。本轮补上了能从**外部**观测到的部分（全部一手，命令可复现）：
+
+```
+$ echo "${CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD}"      # 当前宿主给每个工具进程注入的值
+99999
+$ echo "${CODEBUDDY_SAFE_DELETE_BULK_STATE_DIR}"
+/var/folders/…/T/codebuddy-safe-delete-bulk
+```
+
+```jsonc
+// $CODEBUDDY_SAFE_DELETE_BULK_STATE_DIR/<session_hash>/state.json
+{"requests":{"<本轮 conversationRequestId>":{"count":123107,"updatedAt":1789561…}},
+ "toolApprovals":{},"requestRejections":{}}
+```
+
+由这三条**外部观测**能确定的（都可复现，故可下结论）：
+
+| # | 观测 | 结论 |
+|---|---|---|
+| 1 | `CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD` **由宿主按进程注入** | **阈值 9999 / 99999 的差异是宿主侧配置，不是谁看错了** —— 故"拿某一次的阈值当常量去推导片大小"从根上就不成立 |
+| 2 | `state.json` 的计数**键 = 本轮的 `conversationRequestId`** | 配额**按轮记账**（`scope: "turn"`）⇒「**新开一轮**」的处置有据可依，不是碰运气 |
+| 3 | 状态目录里堆积的 `signal-call_*.json` 全是 `{"type":"confirmRequired","payload":{count,threshold,scope,targets,targetCount}}`，且**每一次的 `targetCount` 都是 1** | 被拒的是**累计计数**，不是"单次批量太大" ⇒ "把一个目录拆成多个文件"之所以有用，是因为**每片内的用例变少**，而不是因为"单次删得少" |
+
+由**外部观测不能**确定的（故 §8.8 的"机制未钉死"**保留**，不假装解决）：
+
+- 我的 `injection-d` 那一轮：跑前该键 `count = 116638`（20:20:47，上一轮），跑后 `123107`（20:25:54）
+  ⇒ Δ = **6 469**，对 31 例 ≈ **209/例**。★ 但**这个 Δ 不能当作"每例计数"**：
+  状态目录是**同一 WorkBuddy 会话下所有 Agent 共用**的（我读到的 `signal-*.json` 里
+  同时有 `ws-schema-expand` / `ws-criterion-effectiveness` / `ws-real-collect-2` 等多个工作树的拒绝记录），
+  且该键在**跑前就已 > `threshold`**（116 638 > 99 999）却仍然跑绿了 ——
+  ⇒ **"`count > threshold` ⇒ 下次删除被拒"这条简单模型是错的**。
+  到底哪条路径会拒、`count` 计的是哪些操作，**外部观测不足以定论**。
+- 守卫实现 `safe-delete-bulk-guard.cjs` 在应用包内，**读取被沙箱拒绝**（命令被拒，未取得）。
+  ⇒ 故本单只把"配额"当作**已实测的故障现象 + 归因**处理，**不**把它写成一套推导模型；
+  凡涉及它的推论一律带限定语（见 §8.3 / §四.2 / §四.3）。
+
+### 8.9 新增两条「归因绝不放行」绑定 + **它们的反向对照**（`G-05`）
+
+**动机（先说清楚为什么这是必需的，不是加戏）**：`verify.py::_exit_zero` 的两条**归因**分支
+（"配额耗尽"与"解释器缺 pytest"）**全部价值就是"说清归因"** —— 而"**只做归因、绝不放行**"
+在本报告与 `CONVENTIONS.md` 里被反复声称。**一句声称没有断言把守就只是一句话**：
+后来的人只要把其中任一分支改成 `return True`（"只是配额/只是环境，不算失败"），
+**门禁立刻静默失效** —— 而且失效得**比原来更好看**（红变成绿）。
+本项目的铁律是"卡死的门禁 = 被关掉的门禁"，那么"**被洗绿的门禁**"只会更糟。
+
+故在 `tests/injection/test_shard_coverage.py` 追加**两条**（该文件在 `injection-f`，f 由 29 → **31 例**，
+仍 ≤ 32）：
+
+| 断言 | 把守的东西 |
+|---|---|
+| `test_quota_attribution_never_passes` | 命中 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` 的批次**必须**仍判不合格，且文案要指明"配额" |
+| `test_missing_pytest_attribution_never_passes` | `No module named pytest` **必须**仍判不合格，且文案要同时指明"环境"与"pytest" |
+
+★ 两条都带**基线**（`exit=0` 仍必须判合格），否则"永远返回不合格"的空实现也能过 ——
+这正是本项目 `R-06` 说的"**判据必须可判定，且不能被空实现蒙过**"。
+
+**反向对照（`G-05`：每条判据都必须证明"真的会红"）** —— 脚本 `/tmp/rc_attrib.sh`，
+在 `/tmp/rc_attrib` 隔离副本上做（不碰工作树；**0 次 copytree ⇒ 不吃配额**）：
+
+```
+##### 对照 0 · 原样（预期 6 passed）#####
+6 passed in 4.30s
+
+##### 反向对照 ⑤ · 把「配额」分支改成 return True #####
+[mutate] 配额分支已改成 return True（= 把归因做成放行）
+>       assert ok is False, (
+            "命中配额标记的批次被判**合格**了 —— 归因分支被改成了放行。"
+            …
+        )
+E       AssertionError: 命中配额标记的批次被判**合格**了 —— …；配额问题**必须**仍是不合格。
+E       assert True is False
+FAILED tests/injection/test_shard_coverage.py::test_quota_attribution_never_passes
+1 failed, 5 passed in 4.05s
+
+##### 反向对照 ⑤-b · 恢复（预期 6 passed）#####
+6 passed in 4.22s
+
+##### 反向对照 ⑥ · 把「解释器缺 pytest」分支改成 return True #####
+[mutate] 环境错误分支已改成 return True
+>       assert ok is False, (
+            "「解释器里没有 pytest」被判**合格**了 —— 环境错误绝不能洗成通过"
+        )
+E       AssertionError: 「解释器里没有 pytest」被判**合格**了 —— 环境错误绝不能洗成通过…
+E       assert True is False
+FAILED tests/injection/test_shard_coverage.py::test_missing_pytest_attribution_never_passes
+1 failed, 5 passed in 4.17s
+
+##### 反向对照 ⑥-b · 恢复（预期 6 passed）#####
+6 passed in 3.95s
+```
+
+**工作树内实跑（无夹具 ⇒ 不吃配额）**：
+
+```
+$ CODEBUDDY_SAFE_DELETE_SANDBOX=0 CODEBUDDY_BROKERED_FS_HOOK_ENABLED=0 \
+  PYTHONPATH=tests python -m pytest tests/injection/test_shard_coverage.py \
+      -q -p no:cacheprovider --noconftest
+......                                                                   [100%]
+6 passed in 3.64s
+```
+
+**六片用例数现算（复核"≤32"）**：
+
+```
+a: 27 tests collected     b: 28 tests collected     c: 27 tests collected
+d: 31 tests collected     e: 27 tests collected     f: 31 tests collected
+整目录: 171 tests collected          # 27+28+27+31+27+31 = 171 ✓（逐片合计与整目录逐位相符）
 ```
