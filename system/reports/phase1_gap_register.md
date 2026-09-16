@@ -10,8 +10,8 @@
 
 | # | 缺口 | 设计锚点 | 严重度 | 状态 |
 |---|---|---|---|---|
-| **G-01** | **注入防护 10 用例全缺**：base64 藏指令 / 同形字 / 诱导 shell / 伪造分隔符 / 自称官方提权 / 忽略规则买入 / 换基准 / 删反证 / 改规则文件 / 藏表格图片字幕。全仓 `grep base64\|同形字\|homoglyph\|伪造分隔符\|官方提权\|诱导` **零命中** | `施工图 §3.4`（测试资产）· `Ch9 §3.2.1`「注入防护 = B 规则 + C 执行器」 | **高** | `OPEN` |
-| **G-02** | **数据/指令分离执行器未实现**：G-01 的被测对象。设计明确它是 C 档自建项（"规则 = 只读 Git 文件（模型不可写）" + "数据/指令分离执行器 + 测试"） | `Ch9 §3.2.1` 第 6 行 | **高** | `OPEN` |
+| **G-01** | **注入防护 10 用例全缺**：base64 藏指令 / 同形字 / 诱导 shell / 伪造分隔符 / 自称官方提权 / 忽略规则买入 / 换基准 / 删反证 / 改规则文件 / 藏表格图片字幕。全仓 `grep base64\|同形字\|homoglyph\|伪造分隔符\|官方提权\|诱导` **零命中** | `施工图 §3.4`（测试资产）· `Ch9 §3.2.1`「注入防护 = B 规则 + C 执行器」 | **高** | `DONE`（证据：`tests/injection/test_prompt_injection.py`（10 正向 AC-13~22 + 10 反向对照 AC-23~32 + AC-34 空样本）；`reports/verify_injection_latest.log` 批次 `injection` **98 passed / exit=0**） |
+| **G-02** | **数据/指令分离执行器未实现**：G-01 的被测对象。设计明确它是 C 档自建项（"规则 = 只读 Git 文件（模型不可写）" + "数据/指令分离执行器 + 测试"） | `Ch9 §3.2.1` 第 6 行 | **高** | `DONE`（证据：`scripts/guard/`（7 模块：`rawsink`/`annotate`/`rulewrite`/`toolwatch`/`claims`/`executor`/`__init__`）+ `scripts/checks/injection_guard.py`；主理人独立验收见 `reports/batch4_acceptance_record.md`；`reports/verify_gates_latest.log` 20 项门禁全绿） |
 | **G-03** | **`facts/` 13/18 个 JSONL 无消费方**：仅 `industry_nodes.jsonl` 有 44 行（且**有写无读**，`§6.2 Empty Execution`）；其余 12 个业务代码零引用、且为空文件 | `Ch9 §3.3.3` / `§十三 第 2 问` | **高**（阶段① 固有） | `PARTIAL`：消费方按设计在 ②–⑤ 阶段随各层交付而产生；**不得据此判"已验证"** |
 | **G-04** | **7 条声明为 `automated` 的通过判据未实现**（本实现已用 `criterion()` 在函数体内**显式绑定**，并在报告里逐条列出）：<br>`nvidia_sample`: `chapter4_g_depth` · `evidence_locatable`<br>`core_chain`: `t01_t14_all_pass` · `graph_and_ask_traceable`<br>`daily_run`: `coverage_verifiable`<br>`expansion`: `research_standard_consistent` · `investment_result_verifiable` | `registry/delivery.yaml` 各阶段 `pass_criteria_testable` | **高** | `OPEN`（阶段②–⑤ 前置；**前置齐备时会直接阻断该阶段**） |
 | **G-05** | **`scripts/{compute,decision,graph,validators}/` 是空包**：施工图把它们列为 ②③ 阶段 C 档承重块（确定性计算 / 三维决策函数 / T12 传播 / `locator_check`） | `施工图 §3.2` | 中（②③ 前置） | `OPEN` |

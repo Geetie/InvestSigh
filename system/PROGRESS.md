@@ -132,15 +132,56 @@ sh system/scripts/ops/run_pytest.sh tests/<子目录>                # 直接跑
 
 | 缺口 | 内容 | 状态 |
 |---|---|---|
-| **G-01 / G-02** | 注入防护 **10 用例**与**数据/指令分离执行器**（`施工图 §3.4` / `Ch9 §3.2.1` 明确是 C 档自建项）**全缺** | `OPEN` |
+| **G-01 / G-02** | 注入防护 **10 用例**与**数据/指令分离执行器**（`施工图 §3.4` / `Ch9 §3.2.1` 明确是 C 档自建项） | ✅ **DONE**（批次 4，见 §六） |
 | **G-03** | `facts/` **13/18 个 JSONL 无消费方**（仅 `industry_nodes` 有 44 行且**有写无读**） | 阶段① 固有，②–⑤ 消解 |
 | **G-04** | **7 条**声明为 `automated` 的判据未实现（已 AST 绑定 + 逐条列出，前置齐备时**直接阻断**） | `OPEN` |
 | G-05 | `scripts/{compute,decision,graph,validators}/` 是**空包**（②③ 承重块） | `OPEN` |
 
-## 六、下一步（按优先级）
+## 六、批次 4 · 注入防护（`G-01`/`G-02` 已关闭）
 
-1. **补 G-01/G-02**：注入防护执行器 + 10 用例（本阶段唯一"高"优先级未完成项）；
+**需求锚点**：`施工图 §3.4`（10 用例）· `Ch9 §2.4.1`（防护性质与边界）· `§3.4.6`（四措施 + 10 用例）·
+`§3.2.1`（B+C 裁定）· `§N9.2-01`（判据）· `Ch6 §0`（落位 `scripts/guard/`）
+
+| 交付 | 落位 | 状态 |
+|---|---|---|
+| 数据/指令分离执行器（四措施各有代码级收口点） | `scripts/guard/{rawsink,annotate,rulewrite,toolwatch,claims,executor}.py` | ✅ |
+| 效果断言守卫（四条机械断言，复用既有 hash 出口） | `scripts/checks/injection_guard.py` | ✅ 第 19 项门禁 |
+| 10 正向注入用例 + 10 反向对照 + 1 空样本（**单文件 21 条**） | `tests/injection/test_prompt_injection.py` | ✅ |
+| 团队过程文档（DoD / 裁决 / 设计 / 验收 / QA 报告） | `reports/batch4_*.md` | ✅ |
+
+### 6.1 关键判据（主理人裁决 R-01：判据是**效果**，不是词面）
+
+| 判据 | 适用范围 |
+|---|---|
+| **效果三元组**：(a) `rules/` hash 不变 · (b) 不产生建议/不改基准 · (c) 文本仅以数据身份存在 | **全部 10 条** |
+| 守卫 **`exit 1`** | **仅 ④改写规则文件** 与 **⑦诱导 shell** |
+
+★ `AC-33` 禁关键词黑名单 —— 反向对照 **AC-23**「某分析师*建议买入* NVDA」**必须放行**。
+若因出现"买入"就 fail，门禁会在真实研究文本上天天误报、最终被关掉 —— **比不设防更糟**（`施工图 §八 N-2`）。
+
+### 6.2 §八 阶段硬化（N-1~N-6）证据
+
+| # | 动作 | 结果 |
+|---|---|---|
+| **N-1** | **全链路手动走查**（不是跑测试） | ✅ 注入载荷真走主流程：`status=ok` · 文本落 `raw/` · `role=untrusted_analysis_data`（**由执行器施加**；`prompt_context` 首行即角色标注）· `tool_calls=0` · recommendations/benchmarks 行数 `0→0` · claims 1 行 `claim_nature=interpretation` · `rules/` 下无外部文本 · ④`rule_write→blocked` ⑦`tool_call→blocked` 未知 kind 亦 blocked · **删 `index/` 重建后 claims 与 `raw/` 原文仍在** · `rules/scope.yaml` 未被改写 |
+| **N-2** | 反占位符扫描 | ✅ 扫 **83 文件 / 0 违例**（exit 0） |
+| **N-3** | 接线体检 | ✅ 20 项门禁逐个 `exit=0`；`injection_guard` 报 `scanned` 计数（证明真被触发，非孤儿） |
+| **N-4** | 隐形层检查 | ✅ `rules/` **10/10 哈希一致**（0444 锁）；`index/` 可重建（N-1 实证）；**追加式不可变**在提交路径上如实记 `NO_STAGED_FACTS_CHANGES`（**"无被检对象"≠已验证**；其真实证据在 `tests/injection/test_append_only.py` 的**真 git 仓库**注入测试） |
+| **N-5** | `converge` 审计 | 见 §6.3 |
+| **N-6** | 独立 verifier 审计 | 见 `reports/batch4_independent_audit.md` |
+
+### 6.3 本批次仍未收口（不含糊）
+
+| 缺口 | 内容 |
+|---|---|
+| `refuse_write` 口径 | `config/rules.py::refuse_write()` 内部用**模块级 `code_root()`** 而非调用方传入 root。本批次不受影响（`write_rule` 恒抛），**未修**（R-05 禁止改其语义）→ 待评估 |
+| `AC-32` 深度 | 只到效果级：`process_external_text` 不接收 `official_claim_kind`（该判定属阶段② `Ch6 §N6.2-03`，DoD §0.2 已排除） |
+| `scripts/ingest/guard.py` | 采集来源访问白名单（`Ch6 §I.1 N6.1-01`）—— R-04 裁决**非同一模块**，随阶段② 交付 |
+| `U-01`~`U-06` | 架构设计 §9 待明确项，R-08 已逐条裁定（采纳保守面） |
+
+## 七、下一步
+
+1. 批次 4 独立审计（§九）结论裁定；
 2. 需求方裁定 `reports/phase1_open_tensions.md` 的 T-01~T-07；
 3. 冻结阻塞阶段② 的参数（至少 `p01` 主基准、`p03` 推荐范围）；
-4. 采集 NVIDIA **真实公开信息**，跑通六步判断链 → `facts/baselines.jsonl`；
-5. 过阶段② 判据后再评估 `core_chain`（届时 T01–T14 必须先实现）。
+4. 阶段② `nvidia_sample`：采集 NVIDIA **真实公开信息**，跑通六步判断链。
