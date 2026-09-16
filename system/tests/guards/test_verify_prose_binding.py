@@ -16,13 +16,14 @@
 ★ 判据刻意**从真源派生**（不写死片名、不写死片数）：片名集合 = `verify.py::INJECTION_SHARDS` 现读。
 改片名 / 加片 ⇒ 本文件自动跟上；**若有人把散文改回去 ⇒ 本文件立刻变红**。
 
-## 三条判据（都只作用于**散文**：模块 docstring + 注释）
+## 四条判据（都只作用于**散文**：模块 docstring + 注释）
 
 | # | 退化 | 判据 |
 |---|---|---|
 | ① | 散文里出现**分片名单**（同一处 ≥2 个不同全名） | 现读片名逐个在散文里找；同一处命中 ≥2 个 = 违规 |
 | ② | 散文里出现**片数 / 轮次**的数字写法 | 正则 `6 片` / `6片` / `6 个分片` / `六片` / `6 个轮次`；命中即违规 |
 | ③ | 散文里出现**「片字母+用例数」**的旧分片数写法 | 由片名后缀现算字母集（`a`…`g`），匹配独立的 `<后缀><1~3 位数字>`（`a27` / `e32`）；命中即违规 |
+| ④ | 散文里出现**范围式枚举且上界已过期**（`injection-a..f` / `a..f`） | 两端字母由后缀集现算；**右端 ≠ 最大后缀**即违规（右端 = 最大后缀 = 恰好等于真源，放行） |
 
 ★ ① 的阈值取"**≥2 个**"而不是"0 个"，理由是**单个**片名是**交叉引用**
 （"由 `injection-d` 移入"这类注释是必要的），**2 个以上**才构成"名单/枚举"。
@@ -30,6 +31,11 @@
 这条例外**刻意**保留，且不掩盖真实退化 —— `六片` / `6 片` / `6 个分片` 都仍然命中。
 ★ ③ 用**前后都不是 `[0-9A-Za-z_]`** 的边界，正是为了不误伤夹具目录名里的十六进制片段
 （docstring 里就有 `…/test_L3_…-0a05b843`：`a05` 前面是 `0`，故**不**算）。
+★ ④ 是**卡 13-N 收尾时补的**：`injection-a..f` 这种**范围写法**曾把 ① 漏过去
+（它只含 **1 个**全名 `injection-a`，右端是裸字母）—— 而它恰恰就是本卡的题面「枚举上界只到 `f`」。
+★ ④ **刻意放行**右端 = 最大后缀的范围（`a..g`）：它不与真源冲突。判据只抓"**上界已过期**"
+—— 也就是"常量加了片、散文没跟上"这一种退化。若把正确范围也判红，
+正当交叉引用会被逼到无法书写，最终结果是**门禁被关掉**（`G-01`）。
 
 ## 为什么判据不作用在代码上
 
@@ -119,6 +125,25 @@ def _shard_size_rx(shards: tuple[str, ...]) -> re.Pattern[str]:
     return re.compile(rf"(?<![0-9A-Za-z_])(?:{body})\d{{1,3}}(?![0-9A-Za-z_])")
 
 
+def _shard_range_rx(shards: tuple[str, ...]) -> re.Pattern[str]:
+    """④ 的判据，两端字母**从片名后缀现算**（不写死 `a` / `f`）。
+
+    匹配 `injection-a..f` 与裸写法 `a..f`（`..` / `…` / `–` / `—` / `-` 都算范围符）。
+    ★ 是否违规在**匹配之后**判（右端 ≠ 最大后缀）—— 正则本身不写死"上界应该是谁"。
+    ★ 两端用**捕获组**取出，**不要**在匹配结果上再 `re.split` 一次：`injection-a..g` 里
+      有连字符，从左边 split 会把 `injection` 当成左端字母 ⇒ 误报（本文件
+      `test_guard_ignores_single_shard_reference_and_idiom` 的"正确范围"用例**当场抓到过这个 bug**）。
+    ★ 左边界排除 `-`：否则 `injection-a..g` 会从裸 `a` 起匹配（那是同一个枚举的尾巴）。
+    """
+    suffixes = sorted({s.rsplit("-", 1)[-1] for s in shards}, key=len, reverse=True)
+    assert suffixes, "片名为空 —— 分片真源失效，本判据随后的一切都无意义"
+    body = "|".join(re.escape(s) for s in suffixes)
+    return re.compile(
+        rf"(?<![0-9A-Za-z_-])(?:injection-)?({body})\s*(?:\.\.|…|–|—|-)\s*"
+        rf"(?:injection-)?({body})(?![0-9A-Za-z_])"
+    )
+
+
 def _violations(doc: str, comments: list[tuple[int, str]], shards: tuple[str, ...]) -> list[str]:
     """**纯函数**：给定"散文"与"片名真源"，返回违规清单（空 = 合格）。
 
@@ -127,6 +152,8 @@ def _violations(doc: str, comments: list[tuple[int, str]], shards: tuple[str, ..
     """
     out: list[str] = []
     size_rx = _shard_size_rx(shards)
+    range_rx = _shard_range_rx(shards)
+    last_suffix = max(s.rsplit("-", 1)[-1] for s in shards)
     units = [("docstring", doc)] + [(f"注释 :{ln}", text) for ln, text in comments]
 
     for where, text in units:
@@ -137,6 +164,13 @@ def _violations(doc: str, comments: list[tuple[int, str]], shards: tuple[str, ..
             out.append(f"②{where}：出现了片数写法 {match.group(0)!r}")
         for match in size_rx.finditer(text):
             out.append(f"③{where}：出现了旧分片数写法 {match.group(0)!r}")
+        for match in range_rx.finditer(text):
+            left, right = match.group(1), match.group(2)
+            if right != last_suffix:
+                out.append(
+                    f"④{where}：范围式枚举 {left!r}..{right!r} 的上界停在 {right!r}"
+                    f"（真源最大后缀是 {last_suffix!r}）"
+                )
     return out
 
 
@@ -197,21 +231,46 @@ def test_guard_fires_on_injected_prose(bad_prose: str) -> None:
     assert violations, f"注入的坏散文 {bad_prose!r} **未被**守卫抓到（判据被改窄或失效）"
 
 
-def test_guard_ignores_single_shard_reference_and_idiom() -> None:
-    """**反向的反向**：单个数量的片名引用、惯用语「一片」、十六进制片段**不得**被误报。
+def test_guard_fires_on_stale_shard_range_derived_from_truth() -> None:
+    """**④ 的反向对照（从真源现算）**：把「上界停在倒数第二片」的范围写法注入 ⇒ 必须变红。
 
-    三者都是真文件里**正当**的写法。没有这一条，守卫可能被"改宽"
-    （例如把 ① 的阈值改成 ≥1 个片名）而没人发现 —— 那会把正当注释逼成无法书写的状态，
-    最终结果是**门禁被关掉**（`G-01`）。
+    ★ 坏散文**不是字面量**，而是拿真源后缀现拼：`suffixes[-2]`。这样即使将来片名/片数变了，
+      注入的样本**永远是过期的上界**，这条反向对照不会跟着一起腐坏。
+      注入的两条正是卡 13-N 收尾时在 `verify.py` 里抓到的真实写法（`injection-a..f` / `a..f`）。
     """
     shards = tuple(_load_verify().INJECTION_SHARDS)
-    for ok_prose in (
+    suffixes = sorted({s.rsplit("-", 1)[-1] for s in shards})
+    assert len(suffixes) >= 2, "少于 2 片时 ④ 无从构造反向对照 —— 判据本身也就无意义"
+    first, stale = suffixes[0], suffixes[-2]
+    for bad_prose in (
+        f"★ 超时（主理人裁定）：与 `injection-{first}..{stale}` **齐平**（同族一致性优先）",
+        f"而同期 `{first}..{stale}`（300s）不会。",
+    ):
+        assert _violations(bad_prose, [], shards), (
+            f"注入的范围式枚举 {bad_prose!r} **未被**守卫抓到（上界停在 {stale!r}，真源最大是 {suffixes[-1]!r}）"
+        )
+
+
+def test_guard_ignores_single_shard_reference_and_idiom() -> None:
+    """**反向的反向**：单个数量的片名引用、惯用语「一片」、十六进制片段、**正确范围**不得被误报。
+
+    四者都是真文件里**正当**的写法。没有这一条，守卫可能被"改宽"
+    （例如把 ① 的阈值改成 ≥1 个片名、或让 ④ 连正确范围也判红）而没人发现 ——
+    那会把正当注释逼成无法书写的状态，最终结果是**门禁被关掉**（`G-01`）。
+    """
+    shards = tuple(_load_verify().INJECTION_SHARDS)
+    suffixes = sorted({s.rsplit("-", 1)[-1] for s in shards})
+    ok_proses = (
         "★ 每次**只跑一片**：同一轮里连跑多片会重新越过配额",              # ② 的"一片"例外
         "`test_time_contract.py`   # ← 由 `injection-d` 移入",          # ① 单个片名 = 交叉引用
         "同一片 `injection-a` 在**工作树**里跑成 80.92s",                # ① 单个片名
         '{"count":102044,"targets":["…/tests/.work/test_L3_…-0a05b843"]}',  # ③ 十六进制片段
         "阈值 99999 时 ≈360 例/轮，阈值 9999 时 ≈36 例/轮",               # ② 数字后面是"例"，不是"片"
-    ):
+        # ④ 的例外：右端 = 真源最大后缀 ⇒ 不与真源冲突，放行
+        f"依次跑 `injection-{suffixes[0]}..{suffixes[-1]}` 全片",
+        f"`{suffixes[0]}..{suffixes[-1]}` 各片的上限值相同",
+    )
+    for ok_prose in ok_proses:
         assert _violations(ok_prose, [], shards) == [], (
             f"误报了正当散文 {ok_prose!r} —— 守卫过宽会把注释逼到无法书写，进而被关掉"
         )
