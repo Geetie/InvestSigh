@@ -179,9 +179,58 @@ sh system/scripts/ops/run_pytest.sh tests/<子目录>                # 直接跑
 | `scripts/ingest/guard.py` | 采集来源访问白名单（`Ch6 §I.1 N6.1-01`）—— R-04 裁决**非同一模块**，随阶段② 交付 |
 | `U-01`~`U-06` | 架构设计 §9 待明确项，R-08 已逐条裁定（采纳保守面） |
 
-## 七、下一步
+## 七、批次 5 / 5b / 5c + 并行三流（当前状态）
 
-1. 批次 4 独立审计（§九）结论裁定；
-2. 需求方裁定 `reports/phase1_open_tensions.md` 的 T-01~T-07；
-3. 冻结阻塞阶段② 的参数（至少 `p01` 主基准、`p03` 推荐范围）；
-4. 阶段② `nvidia_sample`：采集 NVIDIA **真实公开信息**，跑通六步判断链。
+### 7.1 「让项目能真实开始干活」已达成
+
+| 项 | 证据 |
+|---|---|
+| **step 1 接线**：`Pipeline` 默认注册采集步；`run_daily` 从"永远 `blocked=True`、8 步全 `gap`"变为 **step 1 报 `ok`** | `scripts/orchestrate/ingest_step.py` · `pipeline.py` |
+| **真实落库**：外部文本 → `raw/<快照>` → `facts/claims.jsonl`（**五类时间齐备 + `locator` 非空 + `recorded_seq` 严格递增**） | 批次 5b 报告附原始 JSON；合成样例已清理，真源保持干净 |
+| **R-06 白名单化**：`injection_guard` 的 B/C 改**能力白名单**（`ALLOWED_IMPORTS` + `ALLOWED_DUNDERS` + 别名感知），不可穷尽部分主动标 `AUX_LINT` | 主理人自造探针：A-3 四绕过（`__builtins__[..]` / `builtins.exec` / 别名导入 / `os.__dict__[..]`）**全 exit 1**，反向对照不误报 |
+
+### 7.2 并行工作流（`reports/parallel_workstreams.md`）
+
+三条流**同时**推进，文件集互斥，**merge 零冲突**（与解耦分析预判一致）：
+
+| 流 | 交付 | 测试 |
+|---|---|---|
+| `ws/compute` | `scripts/compute/` 确定性计算层（算术程序化 + 缺口对象 + 基准口径唯一真源） | **82 passed** |
+| `ws/graph` | `scripts/graph/` 依赖图遍历 + T12 传播 + SCC 环检测 + 事件指纹 + 停止判定 7 条件 | **36 passed** |
+| `ws/claim` | `scripts/validators/locator_check.py`（定位校验器）+ `scripts/claim/transition.py`（五态状态机） | **20 + 20 passed** |
+
+### 7.3 当前验证基线（**分批，各自独立超时**）
+
+**11 个批次，全部合格**（`stage` 的 `exit=1` 为设计预期：①PASS + ②–⑤BLOCKED）：
+
+```
+unit 2.0s · conflict 0.3s · guards 4.0s · injection 29.7s · root 0.3s
+compute 4.0s · graph 3.2s · validators 4.3s · claim 4.1s · gates 2.4s · stage 0.2s
+```
+
+**测试总数 389 passed**（unit 42 · conflict 6 · guards 56 · injection 119 · root 8 ·
+compute 82 · graph 36 · validators 20 · claim 20）；**20 项门禁**全绿。
+
+### 7.4 并行开发暴露的 3 处真缺陷（同类：**从没被真实输入跑过**）
+
+| 缺陷 | 暴露者 | 处置 |
+|---|---|---|
+| `freeze_guard` 对 `ast.Import` 访问 `node.module`（该属性只有 `ImportFrom` 有）→ 决策域内**任何裸 `import` 都让守卫自己崩** | `ws/graph` | ✅ 根治 `getattr(node,"module",None)` |
+| `Claim.status = "active"` **不在 `Ch6 §E` 五态内** → 真实链路写出的 claim 带违约状态 | `ws/claim` | ✅ 改**封闭枚举** `ClaimStatus` + 默认 `pending_verification` |
+| `class X(str, Enum)` 的 `str(member)` 返回 `'X.member'` 而非值 → 状态机把**每次合法迁移**误判 | `ws/claim` | ✅ 基类改 **`enum.StrEnum`** 根治；★ 仓库另有 ~30 个同模式枚举 → **待评估** |
+
+### 7.5 我自己认下的失误
+
+1. `test_verification_policy.py` **写死 `"batches: 7"`** → 加批次后即红（**把实现细节数量当契约**）→ 改为不写死；
+2. 改枚举基类后**忘重建 schema** → 被 `schema_sync_guard` 逮到漂移 → 已重建（**守卫按设计工作**）；
+3. **派单疏漏**：批次只加在 `main`/`integration`，**没进 WS 工作区** → WS 的 V-06 必红（已据 §1.5 授权 `--no-verify`）。
+   **教训：若 WS 需遵守 V-06，应在派单时就预置批次**。
+
+## 八、下一步
+
+1. ✅ 并行三流已并入 `main`（`a543983`）
+2. **阶段② 最小真实采集**：用 WorkBuddy 网络能力抓 NVIDIA 官方原文 → 走 step 1 → 落 `raw/` + `claims`，
+   先把"**从互联网到唯一真源**"这条链用**真实数据**跑通（`施工图 §1.3` 把"取数"裁定为 B 档复用）
+3. `compute`/`graph` 签名已冻结 → 可开**第二批并行流 `ws/decision`**（阶段③ 的门）
+4. 仍等需求方裁定：`T-08`（step 2–6 声明 vs 现实）· `p01`/`p03` 冻结
+5. 待评估：~30 个 `(str, Enum)` 是否统一切 `StrEnum`（同一 `str()` 陷阱）
