@@ -212,6 +212,54 @@ def test_new_claim_still_gets_count_reverse_control(code_root: Path) -> None:
     assert latest["late"]["independent_evidence_count"] == 1, "新独立根：计数 = 1"
 
 
+# ─────────────── `written_*_ids`：供 StepOutcome.produced（4f95c3d）的返回值 ───────────────
+
+
+def test_written_ids_nonempty_first_round_and_empty_on_rerun(code_root: Path) -> None:
+    """★ `written_*_ids`（`StepOutcome.produced` 语义的输入）：首轮非空、重跑**皆空**。
+
+    这是 `G-B10-07` 在**模块返回值**层面的判别式（与"文件行数不增"互补）：
+    重跑若只是"文件没长"但 `written_*_ids` 仍非空，则 `produced` 会误报"本轮有产出"，
+    与主线 `4f95c3d` 的 `produced`/`skipped` 契约冲突（`G1-05` 允许清单会失真）。
+    """
+    claims = [_claim("root", source_id=_ANON_MESSAGE)] + [
+        _claim(f"re{i}", source_id=f"article-{i}", capability_root=_ANON_MESSAGE) for i in range(1, 4)
+    ]
+    append_records(code_root, "claims", claims)
+
+    first = classify_and_record(code_root)
+    assert first.written_claim_ids, "首轮：确有 claim 版本被追加 ⇒ 非空"
+    assert first.written_propagation_ids, "首轮：确有传播行被追加 ⇒ 非空"
+    assert list(first.written_claim_ids) == sorted(first.written_claim_ids), "`claim_id` 须升序"
+    assert list(first.written_propagation_ids) == sorted(first.written_propagation_ids), "须升序"
+    assert set(first.written_propagation_ids) == {"re1", "re2", "re3"}, "3 条同根转述"
+
+    again = classify_and_record(code_root)
+    assert again.written_claim_ids == (), "重跑：claim 侧幂等命中 ⇒ 空"
+    assert again.written_propagation_ids == (), "重跑：传播侧幂等命中 ⇒ 空"
+
+
+def test_written_claim_ids_reverse_control_true_change_rewrites(code_root: Path) -> None:
+    """★ 反向对照（`G-05` 成对）：制造**真实变更**（某 `claim` 的记录值与再判定结果不一致）⇒
+    该 `claim_id` **必须**重现于 `written_claim_ids` —— 否则"永远不写"也能骗过"重跑为空"。
+    """
+    claims = [_claim("root", source_id=_ANON_MESSAGE)] + [
+        _claim(f"re{i}", source_id=f"article-{i}", capability_root=_ANON_MESSAGE) for i in range(1, 4)
+    ]
+    append_records(code_root, "claims", claims)
+    assert classify_and_record(code_root).written_claim_ids
+    assert classify_and_record(code_root).written_claim_ids == (), "前提：重跑为空"
+
+    # 真实变更：把 root 的 `independent_evidence_count` 改成与再判定结果（1）不一致
+    changed = dict(_latest(code_root)["root"])
+    changed["independent_evidence_count"] = 99
+    changed["recorded_seq"] = 1000
+    append_records(code_root, "claims", [changed])
+
+    after = classify_and_record(code_root)
+    assert after.written_claim_ids == ("root",), "真实变更必须触发重写（证不欠写、且只重写该条）"
+
+
 # ───────────────────────────── (b) 3 条真独立 ⇒ 3 ─────────────────────────────
 
 
