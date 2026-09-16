@@ -412,7 +412,10 @@ $ python system/scripts/ops/verify.py --list
 ### 6.1 提交后实录
 
 ```
-$ git log --oneline -3                      # 分支 ws/verify-shard（基于 main = 016f311）
+$ git log --oneline -4                      # 分支 ws/verify-shard（基于 main = 016f311）
+<报告补录>  docs(report): 补 §6.1 提交后实录（hash + git status + 设计区零改动）与证据索引
+            ↑ 纯文档补录，**只有本报告一个文件**；hash 用 `git log --oneline -1 -- \
+              system/reports/ws_verify_shard_report.md` 查（自指，故不写死在这里）
 6a4bd2f fix(verify): 分片超时改以「工作树实测」标定（统一 300s）+ 更正三处不成立的论证
 2012150 fix(verify): injection 批按显式文件路径分 6 片（原目录全量批事实上被宿主配额关掉）
 016f311 docs: T-13 已裁定「扩表 18→22」；登记 G-RC-09 / G9-1 / G9-2 / G-28
@@ -437,6 +440,7 @@ pre-commit ✓ 全部门禁放行          # 两个提交都在全绿下落地�
 
 | 提交 | 内容 |
 |---|---|
+| **报告补录**（纯 docs，仅本报告一个文件） | §6.1 提交后实录 + 证据索引；hash 见 `git log --oneline -1 -- system/reports/ws_verify_shard_report.md` |
 | **`2012150`** | 41 例纯移动拆分（+`_guard_common.py`）、`verify.py` 6 片显式文件路径 + `INJECTION_SHARDS`、`test_shard_coverage.py` 四条机器绑定、`CONVENTIONS.md::V-02` 15→20 批 + 6 轮次代价、报告首版 |
 | **`6a4bd2f`** | 超时改以**工作树实测**标定（统一 300s）+ 更正三处不成立的论证（隔离副本标定 / `32×273<9999` / 我的并发误判）+ 配额归因 + 配额触顶后本轮不恢复的实测 |
 
