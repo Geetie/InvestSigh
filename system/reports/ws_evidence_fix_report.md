@@ -252,7 +252,7 @@ $ python /tmp/evi_idem/meas.py {real|synthetic} {without38|with38} <dst>/system
 - **§④-8 洞口**：**已闭合（实测）**，功劳属 `ws/idempotency`（`a29ec90`）。
 - **③G3 / ⑤G6**：落点在 `scripts/daily/**`，**已按主理人裁决（2026-09-16「归属随模块走」）移交 `ws/daily-fix`，本流未动该域**（见 §④）。
 
-**提交哈希**：首交付 `66422a88ac0b15ce9e19af6f09c2f66239214d42`（11 files, +1220/-21）；`G-B10-07` 硬化 = `9ba54a8`（4 files, +159/-9）。分支 `ws/evidence-fix`。
+**提交哈希**（分支 `ws/evidence-fix`）：首交付 `66422a88ac0b15ce9e19af6f09c2f66239214d42`（11 files, +1220/-21）；`G-B10-07` 硬化 = `9ba54a8`（4 files, +159/-9）；⑧ 落库返回值 = `16b791b`（4 files, +173/-17）。
 
 ---
 
