@@ -297,19 +297,25 @@ BATCHES: Mapping[str, Batch] = {
         300.0, _exit_zero,
     ),
     "injection-d": Batch(
-        "injection-d", "tests/injection/ 分片 D（守卫拦截 B 半 + 幂等 + 时间契约）",
+        # ★ 重平衡记录（2026-09-16，主理人）：`test_time_contract.py`(5 例) 由本片**移入**
+        #   `injection-e`。原因：合并 `main` 带进了 `ws/idempotency` 新增的 3 条用例
+        #   （`test_idempotency_rows.py` 6 → 9），本片因此涨到 **34 例 > 上限 32** ——
+        #   `tests/injection/test_shard_coverage.py::test_shard_case_counts_within_quota`
+        #   **如实变红**并给出了具体片名与数字（机器绑定按设计生效，不是假红）。
+        #   ⇒ 现为 a27 b28 c27 **d29** e32 f29，合计 172，全部 ≤32。
+        "injection-d", "tests/injection/ 分片 D（守卫拦截 B 半 + 幂等）",
         _pytest(
             "tests/injection/test_guards_reject_b.py",
             "tests/injection/test_idempotency_rows.py",
-            "tests/injection/test_time_contract.py",
         ),
         300.0, _exit_zero,
     ),
     "injection-e": Batch(
-        "injection-e", "tests/injection/ 分片 E（提示注入 + rules 锁）",
+        "injection-e", "tests/injection/ 分片 E（提示注入 + rules 锁 + 时间契约）",
         _pytest(
             "tests/injection/test_prompt_injection.py",
             "tests/injection/test_rules_lock.py",
+            "tests/injection/test_time_contract.py",   # ← 由 `injection-d` 移入（见 D 片注释）
         ),
         300.0, _exit_zero,
     ),
