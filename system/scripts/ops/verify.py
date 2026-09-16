@@ -233,6 +233,7 @@ def _pytest(*targets: str) -> tuple[str, ...]:
 INJECTION_SHARDS: tuple[str, ...] = (
     "injection-a", "injection-b", "injection-c",
     "injection-d", "injection-e", "injection-f",
+    "injection-g",
 )
 
 BATCHES: Mapping[str, Batch] = {
@@ -370,6 +371,20 @@ BATCHES: Mapping[str, Batch] = {
         ),
         300.0, _exit_zero,
     ),
+    "injection-g": Batch(
+        # ★ 新增分片（主理人，批次 13 集成期）：合并 `ws/real-collect-2` 带进了
+        #   `tests/injection/test_quote_provenance.py`（17 例），而 `V-06` **如实变红**：
+        #   「以下测试文件不被任何批次覆盖（写了却永远不被验证）」—— 机器绑定按设计生效。
+        #   ★ 为什么**不能**塞进既有分片：现为 a27 b28 c27 d29 e32 f29，**最大余量只有 5 例**，
+        #     而本文件 **17 例** ⇒ 任何既有片都会 > 上限 32 ⇒ 只能**新开一片**。
+        #   ★ 超时 90s：按 13-F 给分片定的规则（实测 × 8 上沿、不低于 90s）；17 例量级与本片
+        #     `injection-a`（27 例 / 6.85s 隔离）同阶 ⇒ 90s 起步，待 13-F 对照表重算。
+        "injection-g", "tests/injection/ 分片 G（反编造：引用溯源守卫）",
+        _pytest(
+            "tests/injection/test_quote_provenance.py",
+        ),
+        90.0, _exit_zero,
+    ),
     "injection-f": Batch(
         "injection-f", "tests/injection/ 分片 F（阶段闸门 + 接线守卫 + 分片绑定）",
         _pytest(
@@ -498,6 +513,7 @@ ORDER = (
     #   在某一处突然变红（`V-08`）。要完整覆盖该目录，请分 6 个轮次跑。
     "injection-a", "injection-b", "injection-c",
     "injection-d", "injection-e", "injection-f",
+    "injection-g",
     "root",
     "compute", "graph", "validators", "claim", "decision", "transmit", "evidence", "daily",
     "pricelayer",
