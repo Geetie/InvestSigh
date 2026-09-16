@@ -1172,3 +1172,155 @@ RESULT: PASS（0 violations）
 ### §12.6 本节一句话
 
 **`rules/` 侧装得很好（落点、逐字、头注依据都对，我逐条给了"为什么好"）；但"装了"与"读了"之间隔着一次接线 —— 现在 `rules` 的那对值是当局的第二次"声明 ≠ 有效力"（`G-50` 家族），而 `13-A` 面连被检对象都还没有。⇒ `#69` 保持 `in_progress`，13-B 面收口、13-A 面挂账。**
+
+---
+
+## §13 13-A 面**首次有对象**（`git stash pop` 冲突期中途实测）—— `R8-1` / `R8-2` 实质已做，但**有一个阻塞项**
+
+> ★ **快照不稳定声明（必须先读）**：13-A 此刻**正处于 `git stash pop` 的冲突期**（不是稳定提交态）：
+> ```
+> $ git -C .worktrees/ws-ch4-valuelayer status --short
+> M  system/registry/criterion_counterexamples.yaml
+> M  system/scripts/delivery/stage_gate.py
+> UU system/scripts/ops/verify.py                       ← 冲突（现已解：0 个冲突标记）
+> M  system/scripts/orchestrate/chain_steps.py
+> UU system/tests/injection/test_criterion_effectiveness.py   ← ★ 冲突**未解**（6 个标记）
+> ?? system/scripts/valuelayer/
+> ?? system/tests/valuelayer/
+> $ git -C /Users/gaza/Developer/InvestSigh log --oneline main..ws/ch4-valuelayer
+> (空)      ⇒ **零领先提交**：以下全部是**工作区未提交**内容
+> ```
+> ⇒ 本节结论**对应工作区、不是 commit hash**；`#69` 的 A/B 仍须在**提交后**按 hash 重跑一次。**被审文件一律未改。**
+
+### §13.1 ★★ 阻塞项：`test_criterion_effectiveness.py` **仍有冲突标记 ⇒ 文件语法非法 ⇒ 门禁当场 INPUT-ERROR**
+
+```
+$ grep -nE '^(<<<<<<<|=======|>>>>>>>)' system/tests/injection/test_criterion_effectiveness.py
+895:<<<<<<< Updated upstream
+901:=======
+912:>>>>>>> Stashed changes
+930:<<<<<<< Updated upstream
+932:=======
+934:>>>>>>> Stashed changes
+
+$ python3 -c "import ast; ast.parse(open('system/tests/injection/test_criterion_effectiveness.py').read())"
+  File "<unknown>", line 895
+    <<<<<<< Updated upstream
+    ^^
+SyntaxError: invalid syntax
+
+$ cd system && python3 scripts/checks/criterion_effectiveness_guard.py > /tmp/ceg_13a.txt 2>&1 ; echo $?
+2
+$ tail -1 /tmp/ceg_13a.txt
+[INPUT-ERROR] criterion_effectiveness_guard.py: ValueError: tests/injection/test_criterion_effectiveness.py:
+              语法错误，无法核对登记的反例测试: invalid syntax (test_criterion_effectiveness.py, line 895)
+```
+| 事实 | 证据 |
+|---|---|
+| 冲突标记在 **895/901/912 + 930/932/934**（**两组**） | 上面 `grep` |
+| 冲突来源 = **`git stash pop`**（不是 merge） | 标记尾 `>>>>>>> Stashed changes` |
+| 文件**语法非法** ⇒ 若照此提交，`injection` 分片批必红 | `ast.parse` → `SyntaxError` |
+| ⇒ **`criterion_effectiveness_guard` 当前跑不起来**（`exit=2`，INPUT-ERROR） | 上面实测 |
+| 同一冲突期里 **`verify.py` 已解干净**（0 标记），**只有测试文件没解** | `grep -c '^<<<<<<<' verify.py` → `0` |
+
+★ 判词：**❌ 错 / 阻塞**（不是"不够"）—— 这是一份**照当前状态提交就必然红**的工作区；且**冲突只在两个文件里，一个已解一个未解**，最容易漏。→ 已直接告知 13-A。
+
+### §13.2 `R8-1` 实质已做，且**我用真件实测通过**（这正是 §6.3 那两层不一致的收口）
+
+**(a) 两层**都改了（**"只改键名会白干"的那个结论已被正确吸收**）：
+```
+system/scripts/valuelayer/_rules.py:44   THRESHOLDS_GROUP = "thresholds"
+system/scripts/valuelayer/_rules.py:108  def baseline_cfg(root) -> …  """…即 rules/baseline.yaml 的 **`thresholds` 分组**…
+                                         缺 `thresholds` 分组时**响亮失败**（不猜深度、不摊平规则文件）"""
+system/scripts/valuelayer/completeness.py:84-87
+  CFG_MIN_NONNULL_RATE     = "min_nonnull_rate"
+  CFG_MIN_FIELDS_PER_SECTION = "min_fields_per_section"
+  CFG_MIN_LOCATORS         = "min_locator_count"      ← 旧名 min_locators 已改
+  CFG_MIN_DERIVATIONS      = "min_derivation_count"   ← 旧名 min_derivations 已改
+```
+**(b) 真件实测（`root='.'`）**—— 缺键/未拍板都**响亮**，且**真的读到了真值**：
+```
+$ PYTHONPATH=. python3 -c "import scripts.valuelayer._rules as R; …R.baseline_threshold('.', k)…"
+  min_locator_count                 = 1
+  min_derivation_count              = 1
+  min_fields_per_section            -> UndecidedThreshold: rules/baseline.yaml::thresholds 的 'min_fields_per_section'
+                                       'tbd' —— `tbd`/未拍板的值不得被当成一个可用阈值（G-03：空 ≠ 已验证）
+  min_nonnull_rate                  = 0.9
+  max_primary_drivers_per_business  = 5
+```
+⇒ 与 §6.3 的旧实测（**6/6 键全 `MissingRuleInput`**）对照：**6 个键现在 5 个读通、1 个按 `tbd` 响亮拒用**。`min_nonnull_rate = 0.9` / `max_primary_drivers_per_business = 5` = **真文件真值**，不是夹具值。
+★ **我自己的一个假阳性（当场记下）**：我第一次跑这个探针时把 `root` 传给了 `baseline_threshold_from(cfg, key)`（它的首参是 **cfg**，不是路径），得到 5 条 "缺少键 … （现有键：`['.']`）"，差点写成"键名仍未对上"。**新签名是 `baseline_threshold(root, key)`**（`_rules.py:127`）；`baseline_threshold_from(cfg, key)` 存在的原因是 `§G.2` 的 `form_complete(baseline, cfg)` 里 `cfg` 是**入参**（`:130-136` docstring 明写）。⇒ **这是我的调用错，不是它的缺陷。**
+
+**(c) `tbd` 的处理 = 既不恒红也不放行，且✅ **非静默****：
+```
+completeness.py:441   minimum = _rules.threshold_or_none(cfg, CFG_MIN_FIELDS_PER_SECTION)
+completeness.py:463   scanned["min_fields_undecided"] = len(SECTIONS)     ← 计数，不写 0（与"没有不可核项"区分）
+completeness.py:465-468  note: "MIN_FIELDS_UNDECIDED: …§G.2 项①的『达最小字段数』半项**不可核**（本次 6 个 section），
+                          已按下界 1（=『非空』）强制；不可核 ≠ 已核（G-03）"
+completeness.py:1049  # ★ 逐项把「半项不可核」等声明带到 CLI 输出（G-03：不可核必须**显式可见**）
+```
+⇒ 判 ✅ **好**（`G-01`/`G-03` 两侧都照顾到了）。
+
+**(d) `g_depth_violations(真件)`：从"1 条读不到规则"→"9 条**可判定**的 FATAL"**
+```
+$ len(g_depth_violations('.')) = 9 ；9 条**全部 severity='FATAL'**
+  理由样例（逐字）：
+  "Ch4 §G 形式完备性未过 [baseline-nvda-001][sections_nonempty]：①业务与产业位置 为空（0 个字段非空，
+   §G.2 项①'六项 section 非空'）；空字段 ['business_refs', 'relations']"        （②③④⑤ 同形）
+  "Ch4 §G 形式完备性未过 [baseline-nvda-001][nonnull_rate]：必填字段非空率 0.1429 < 阈值 0.9（空字段 […]）"
+```
+⇒ ★ **判据性质变了，这才是 `R8-1` 的验收口径**：旧态是"**规则读不到 ⇒ 不可判定 ⇒ 恒红**"（`G-01`，不管数据好坏都红）；新态是"**读得到规则、按真阈值判数据**"（现在红是因为**真样例数据的六节确实为空 + 非空率 0.1429 < 0.9**）。
+⇒ 我**如实报**：阶段②**仍然红**，但**红的理由是正确的**（真数据不完备）。这属 13-A 的样例数据面，**我不判为判据缺陷**；但它意味着"`chapter4_g_depth` 恒红"这句在**数据侧仍未解除**，别把"判据修好了"读成"阶段②能过了"。
+
+**(e) ⚠ 一处残留（小）**：`completeness.py:542` / `:651` 的 docstring 仍写旧名（"阈值 = `cfg.min_locators`"、`cfg.min_derivations`），而同文件 `:86/:87` 的常量已是 `_count` 名 ⇒ **文档 ≠ 实现**（`G-06` 家族的小尾巴，建议顺手改；`:82` 已说明"初版曾用旧名"，所以是**漏改**不是故意）。
+
+### §13.3 `R8-2` 两项**都做了，且边界守住了**
+
+```
+$ grep -nE 'valuelayer|pricelayer|ORDER' system/scripts/ops/verify.py
+:348  "pricelayer": Batch( … )          ← 13-B 的条目，**未被改**（文本仍是"由**批次 13-B**…一并加入"）
+:395  "valuelayer": Batch(
+:408    "valuelayer", "tests/valuelayer/（Ch4 价值层：指标集/加总/增长质量/护城河/状态机/完备性）", …, 300.0, …
+:437  "valuelayer",                       ← 已进 ORDER
+```
+```
+$ sed -n '98,103p' system/registry/criterion_counterexamples.yaml
+  - stage: nvidia_sample
+    criterion_id: chapter4_g_depth
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_nvidia_sample_chapter4_g_depth_blocks_on_incomplete_form
+    blocked_hint: "Ch4 §G 形式完备性未过"
+```
+| `R8-2` 要求 | 现状 | 判词 |
+|---|---|---|
+| 只加**自己那一条** `valuelayer` 批次（`V-06`） | `verify.py:395-409` + `:437`，共**一条** | ✅ **好** |
+| **没动** 13-B 的 `pricelayer` 条目 | `:348-354` 逐字未变 | ✅ **好**（共享文件边界守住） |
+| 只加**自己那一条** `nvidia_sample::chapter4_g_depth` 反例 | `criterion_counterexamples.yaml` 现**恰好一条** `chapter4_g_depth` | ✅ **好** |
+| `stage_gate` 函数体内绑定 | `stage_gate.py:467` `criterion("nvidia_sample", "chapter4_g_depth", v)`，且**锚在** `six_step_chain_complete`（`:468`）**之前**（与任务卡 L294 的要求一致） | ✅ **好** |
+| `criterion_effectiveness_guard` 的 `未绑定判据[nvidia_sample]` 应从 **2 → 1** | ⛔ **本轮无法核**（该门禁因 §13.1 的语法错误 `exit=2`） | **待提交后重跑** |
+
+### §13.4 ⚠ `criterion_counterexamples.yaml` 的登记 `note` 里有一句**与事实矛盾**
+
+逐字（`criterion_counterexamples.yaml:103` 末段）：
+```
+★ 该用例在**夹具副本**内自备 `rules/baseline.yaml`（§G.2 的阈值只从它读，G-06；**真仓库那份尚不存在**，
+  故不写它就只能测到'规则缺失 ⇒ 无法判定'这一条）。
+```
+**"真仓库那份尚不存在"是错的** —— `rules/baseline.yaml` 自 `bb32863`（13-R 安装）起就在真仓库里，`rules.lock.json` 列了它，且我在 §13.2(b) **刚刚从它读出真值**（`0.9` / `5` / `tbd`）。
+⇒ 判 ⚠ **不够**（属"声明与现实矛盾"家族；它是 `note` 而非绑定本身，绑定与反例都成立，故不改档为"错"）。
+⇒ 建议 13-A 把该句改成**真实理由**（同目录 `tests/valuelayer/_fixtures.py:11-27` 其实**写对了**：夹具副本自备是为了可写/可控，且**故意**保留一处"夹具 ≠ 真文件"对照 —— `min_nonnull_rate` 夹具 `0.8` vs 真文件 `0.9`）。两处口径应统一到 `_fixtures.py` 那份。
+
+### §13.5 §13 汇总
+
+| 项 | 判词 |
+|---|---|
+| `R8-1` 深度（`thresholds` 分组）+ 键名（`*_count`）**两处同时改** | ✅ **好**（真件实测 5 个键读通真值、1 个按 `tbd` 响亮拒用） |
+| `tbd` 处理（`UndecidedThreshold` + `scanned` 计数 + note + CLI 可见） | ✅ **好**（不静默、不恒红、不放行） |
+| `g_depth_violations(真件)` 可变判定 | ✅ **好**（性质从"读不到规则"变为"按真阈值判数据"）；★ 但阶段②**仍红**，因真数据六节为空 |
+| `R8-2` 三项（`valuelayer` 批次 / `chapter4_g_depth` 反例 / `stage_gate` 绑定） | ✅ **好**（含"没动 13-B 条目"的边界） |
+| `test_criterion_effectiveness.py` **冲突标记未解 ⇒ 语法非法 ⇒ 门禁 `exit=2`** | ❌ **错 / 阻塞** |
+| `completeness.py:542/:651` docstring 旧键名残留 | ⚠ **不够**（小尾巴，建议顺手改） |
+| 反例登记 `note` 的"真仓库那份尚不存在" | ⚠ **不够**（与事实矛盾，改口径） |
+| `verify.py` / `test_criterion_effectiveness.py` 冲突：**一个已解、一个未解** | 已上报 13-A |
+
+⇒ **`#69` 保持 `in_progress`**：13-A 面**首次有被测对象**（工作区态），但**尚未提交**；本节所有结论**须在 commit 后按 hash 重跑一次**（`§13` 已给出全部可复跑命令）。
