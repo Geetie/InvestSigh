@@ -143,15 +143,15 @@
 
 | # | 缺口 | 设计锚点 | 严重度 | 状态 |
 |---|---|---|---|---|
-| **G-14** | **★ 阻断级：`claim → graph` 跨流传播契约三层不匹配**。`transition.py:335` 调 `forward_closure(claim_id, max_depth=3, detect_cycle=True)`；真实签名 `forward_closure(code_root, start, *, max_depth, source, edges, known_refs, valid_asof)` —— ① `code_root` 才是第 1 位置参数；② `start` 必填；③ **无 `detect_cycle`**。实测 `TypeError: forward_closure() got an unexpected keyword argument 'detect_cycle'`。**且**返回 `ClosureResult`（`@dataclass`，**不可迭代**）其 `reached` 为**裸 ref 字符串**，而 `_normalize_ref` 要求 `.object_type`/`.object_id` → 永不成立。**后果**：任何 `superseded` 真跑都抛错，且因 `_append_claim`（`:403`）先于 `_propagate`（`:414`），**在真源留下 `status=superseded` 行 + 0 条 recheck 任务 = 半数据**，违反追加式一致性 | `Ch6 §E.4`（`superseded` 复用第九章传播）· `Ch9 §3.4.3` · `§3.4.2`（追加式） | **阻断** | `IN-FIX`（`fix/claim-propagation`） |
-| **G-15** | **重复实现同一传播（`G-06` 唯一真源）**：`scripts/graph/propagate.py::propagate_retraction` 已完整实现闭包+入队+深度回退（幂等键 `recheck::<ref>::<target>`）；`transition.py` 又自带一套（`_normalize_ref` + `_append_recheck_task`），用**第三种键格式** `recheck::<claim_id>::<type>::<id>` → 在**同一 `facts/tasks.jsonl`** 争用同段前缀，同逻辑任务得出两种键 → **重复建单**。违反 `纪律 11 复用优先` | `Ch9 §3.4.3` · `§3.5` 阶段④幂等键 · `G-06` | 高 | `IN-FIX`（同上，一并消除） |
-| **G-16** | **测试桩吞掉参数 → 真实路径零覆盖**（`G-14` 长期潜伏的**元凶**）：`tests/claim/test_transition.py:92` 的 `_closure_fn(*_args, **_kwargs)` 接受一切参数，签名错位**永远测不出来**；唯一另一处（`:276`）用 `monkeypatch` 把 resolver 换成 `lambda: None`，同样**绕过**真实路径 | `§5.1 AC-04`（真跑真实脚本）· `§一 底线 3` | 高 | `IN-FIX`（删桩 + 补真实路径用例） |
+| **G-14** | **★ 阻断级：`claim → graph` 跨流传播契约三层不匹配**。`transition.py:335` 调 `forward_closure(claim_id, max_depth=3, detect_cycle=True)`；真实签名 `forward_closure(code_root, start, *, max_depth, source, edges, known_refs, valid_asof)` —— ① `code_root` 才是第 1 位置参数；② `start` 必填；③ **无 `detect_cycle`**。实测 `TypeError: forward_closure() got an unexpected keyword argument 'detect_cycle'`。**且**返回 `ClosureResult`（`@dataclass`，**不可迭代**）其 `reached` 为**裸 ref 字符串**，而 `_normalize_ref` 要求 `.object_type`/`.object_id` → 永不成立。**后果**：任何 `superseded` 真跑都抛错，且因 `_append_claim`（`:403`）先于 `_propagate`（`:414`），**在真源留下 `status=superseded` 行 + 0 条 recheck 任务 = 半数据**，违反追加式一致性 | `Ch6 §E.4`（`superseded` 复用第九章传播）· `Ch9 §3.4.3` · `§3.4.2`（追加式） | **阻断** | `✅ **DONE**`（`fix/claim-propagation`） |
+| **G-15** | **重复实现同一传播（`G-06` 唯一真源）**：`scripts/graph/propagate.py::propagate_retraction` 已完整实现闭包+入队+深度回退（幂等键 `recheck::<ref>::<target>`）；`transition.py` 又自带一套（`_normalize_ref` + `_append_recheck_task`），用**第三种键格式** `recheck::<claim_id>::<type>::<id>` → 在**同一 `facts/tasks.jsonl`** 争用同段前缀，同逻辑任务得出两种键 → **重复建单**。违反 `纪律 11 复用优先` | `Ch9 §3.4.3` · `§3.5` 阶段④幂等键 · `G-06` | 高 | `✅ **DONE**`（同上，一并消除） |
+| **G-16** | **测试桩吞掉参数 → 真实路径零覆盖**（`G-14` 长期潜伏的**元凶**）：`tests/claim/test_transition.py:92` 的 `_closure_fn(*_args, **_kwargs)` 接受一切参数，签名错位**永远测不出来**；唯一另一处（`:276`）用 `monkeypatch` 把 resolver 换成 `lambda: None`，同样**绕过**真实路径 | `§5.1 AC-04`（真跑真实脚本）· `§一 底线 3` | 高 | `✅ **DONE**`（删桩 + 补真实路径用例） |
 | **G-17** | **`schema/store.py::read_records` 对缺失真源静默 `return []`** → 与"真源存在但 0 行"**不可区分**；守卫据此 `exit 0` 判 PASS。属"**无被检对象被当已验证**"的翻版 | `G-03` · `§一 底线 3` | 中 | `OPEN`（集成 `I-3`） |
-| **G-18** | **`ws/compute` 四条静默缺陷**（详见任务书 §2）：`C-01` `require_nonzero` 放过 `None` → 裸 `TypeError` 而非缺口对象（含 `rate=None` 缺汇率，DoD AC-05 明文要求缺口）· `C-02` 幂等键缺 `version` → 上游重述后**静默保留陈旧值并报 OK** · `C-03` `step.py:49` `produced` 语义错 → **击穿 `G1-05` 空执行守卫** · `C-05` `valuation.py` 双 `None` 静默跳过 `Ch5 §D.3` 顺序校验并注入 `now()` | `Ch9 §3.5` · `Ch5 §D.2/§D.3` · `Ch2 §B.4` G1-05 | 高 | `IN-FIX`（`fix/compute-silent-defects`） |
+| **G-18** | **`ws/compute` 四条静默缺陷**（详见任务书 §2）：`C-01` `require_nonzero` 放过 `None` → 裸 `TypeError` 而非缺口对象（含 `rate=None` 缺汇率，DoD AC-05 明文要求缺口）· `C-02` 幂等键缺 `version` → 上游重述后**静默保留陈旧值并报 OK** · `C-03` `step.py:49` `produced` 语义错 → **击穿 `G1-05` 空执行守卫** · `C-05` `valuation.py` 双 `None` 静默跳过 `Ch5 §D.3` 顺序校验并注入 `now()` | `Ch9 §3.5` · `Ch5 §D.2/§D.3` · `Ch2 §B.4` G1-05 | 高 | `✅ **DONE**`（`fix/compute-silent-defects`） |
 | **G-19** | **`ws/compute` 设计偏离 4 项**：`growth.py:104` `cash_threshold = 0.8` **硬编码阈值**（`纪律 1` 禁参数内置）· `Ch4 §D.3` 分档实现给 `medium`+标志位与 DoD"四档不压成分数"表述不一致 · `NumericClaim` 复用**零命中**（DoD AC-08 声称复用） · `share_count`/`compute_date` 从未落库（`Ch5 §D.2` 要求） | `Ch4 §D.3` · `Ch5 §D.2` · `纪律 1` · `纪律 11` | 中 | `OPEN`（修或如实登记，由 `fix/compute-silent-defects` 逐条判定） |
-| **G-20** | **`ws/graph` 无生产调用方（`AC-03` FAIL）**：全树 grep 穷尽，`scripts.graph` / `graph_integrity_guard` 在 `scripts/graph/**` 之外**零引用**；`run_all_gates.py`（20 项）与 `pre-commit.sh` 均未收录；`pipeline.py` 只注册 step 1 → **孤儿模块** | `Ch2 §B.3`（命中即 fail）· `§一 底线 2` | 高 | `OPEN`（集成 `I-2`） |
-| **G-21** | **`ws/claim` 孤儿调用孤儿（`A-AC-03` FAIL）**：`transition.py` 确实调 `claim_locator_problems(...)`（调用**真实存在**），但 `transition.py` **自身零生产调用方**，且 `locator_check` **未注册门禁** | `Ch6 §D` · `G-07` | 高 | `OPEN`（集成 `I-1` + `I-2`） |
-| **G-22** | **DoD 契约文本过期（`B-AC-01` FAIL）**：`ws_claim_dod.md` 的 AC-01 与迁移表基于"采集层写 `status='active'`"，但 `schema/models.py::Claim.status` 默认值**已改为 `ClaimStatus.pending_verification`**（封闭 `StrEnum`，`active` 非合法取值）→ DoD 迁移表 `(active, pending_verification)` 那格标 ✅ 而**代码无 `active` 键**。属"**DoD 写了、代码不认**"（`§六 假交付`）。另：`ws_claim_dod.md A-AC-08` 引用的 `Ch9 §3.4.6 措施①/②` **子锚点在设计区不存在**（`§3.4.6` = 注入防护，无 ①②）→ 违反 `纪律 6` | `Ch6 §E.1` · `Ch9 §3.4.6` · `纪律 6` | 中 | `OPEN`（集成 `I-5`；**根因是主理人改 schema 默认值后未同步 DoD，主理人自己的失误**） |
+| **G-20** | **`ws/graph` 无生产调用方（`AC-03` FAIL）**：全树 grep 穷尽，`scripts.graph` / `graph_integrity_guard` 在 `scripts/graph/**` 之外**零引用**；`run_all_gates.py`（20 项）与 `pre-commit.sh` 均未收录；`pipeline.py` 只注册 step 1 → **孤儿模块** | `Ch2 §B.3`（命中即 fail）· `§一 底线 2` | 高 | `✅ **DONE**`（集成 `I-2` 已落地：`run_all_gates` 20→23 + `pre-commit` 8→10，真仓库 `graph_integrity_guard` **`exit 0`** 且按 `G-03` 记 `NO_EDGE_DATA`/`NO_CACHE` note → DoD AC-03 的「CI/pre-commit 调用的检查器」这半条**已满足**。<br>★ 另半条（`propagate_retraction` 作为**阶段③ 传导步的库入口**）依赖 `pipeline.py` 接线 → 归 `I-1`，受张力 `T-08` 阻塞） |
+| **G-21** | **`ws/claim` 孤儿调用孤儿（`A-AC-03` FAIL）**：`transition.py` 确实调 `claim_locator_problems(...)`（调用**真实存在**），但 `transition.py` **自身零生产调用方**，且 `locator_check` **未注册门禁** | `Ch6 §D` · `G-07` | 高 | ⚠️ **PARTIAL**：`locator_check` 已注册进 `run_all_gates`（真仓库 `exit 0` + 按 `G-03` 记 `NO_CLAIMS` note）→ 有生产调用方；但 `transition.py` **自身**仍无生产调用方（依赖 `pipeline.py` 接线 → `I-1`，受 `T-08` 阻塞） |
+| **G-22** | **DoD 契约文本过期（`B-AC-01` FAIL）**：`ws_claim_dod.md` 的 AC-01 与迁移表基于"采集层写 `status='active'`"，但 `schema/models.py::Claim.status` 默认值**已改为 `ClaimStatus.pending_verification`**（封闭 `StrEnum`，`active` 非合法取值）→ DoD 迁移表 `(active, pending_verification)` 那格标 ✅ 而**代码无 `active` 键**。属"**DoD 写了、代码不认**"（`§六 假交付`）。另：`ws_claim_dod.md A-AC-08` 引用的 `Ch9 §3.4.6 措施①/②` **子锚点在设计区不存在**（`§3.4.6` = 注入防护，无 ①②）→ 违反 `纪律 6` | `Ch6 §E.1` · `Ch9 §3.4.6` · `纪律 6` | 中 | `✅ **DONE**`（`fix/claim-propagation` 已并入 `main`：`ws_claim_dod.md` 五态之外**无入口别名**，`active` 别名表被取代；新增 §D 登记 N-2 根因。★ 遗留一处陈旧表述：`§C` 表 `C-4` 行仍写「默认 `"active"` 的处置见报告 §四」→ 见 `G-23`） |
 
 ### ★ 批次 6 审计的三条方法论价值（必须记住）
 
@@ -161,4 +161,25 @@
    否则测的是桩、不是实现。这条应升格为通用规范。
 3. **`--no-verify` 的反向证实有效**：集成 worktree 未用 `--no-verify` 即通过 pre-commit
    → 反证三流的 `--no-verify` 属环境性（`V-06` 未预置批次），不是掩盖代码问题。
+
+---
+
+## 批次 6 收口后的新增缺口（`G-23` ~ `G-25`）
+
+| # | 缺口 | 设计锚点 | 严重度 | 状态 |
+|---|---|---|---|---|
+| **G-23** | **`ws_claim_dod.md §C` 表 `C-4` 行仍写「默认 `"active"` 的处置见报告 §四」**（`fix/claim-propagation` 已改掉主体，但漏了这一行） | `纪律 6` · `R-02` | nit | `OPEN`（主理人集成时顺手改） |
+| **G-24** | **`ws/decision` 未经 `§九` 独立审计**：已并入 `main`（`1bbdbc1`）且 86 用例全绿，但**判定仍全部来自作者自报** | `§九` · `§一 底线 3` | **高** | `OPEN`（批次 7） |
+| **G-25** | ★ **批次 6 的两条修复流本身也"只已合并、未独立验收"**：`fix/claim-propagation`（`69f485b`）与 `fix/compute-silent-defects`（`5034beb`/`e1e5bc3`）均由**主理人自行复核**（复现审计原始反例 + 跑测试 + 查改动面），**未换人做对抗性审计**。按 `§九` 与 `G-16` 的教训，这**不构成"已验收"** | `§九` · `§六 假交付` | **高** | `OPEN`（批次 7 与 `G-24` 一并审） |
+
+### 主理人已复核到什么程度（如实标注，不夸大）
+
+**已做**：复现审计原文的两类反例（`forward_closure(...detect_cycle=True)` → `TypeError`；
+四个 `None` 输入 → 此前裸 `TypeError`、现折叠为 `MissingInput`）· 反向对照（正常值照常算出 `710.0`）·
+真跑 `tests/claim`+`tests/graph`（60 passed）与 `tests/compute`（95 passed）· 逐条核改动面零禁改 ·
+核 `step.py` 已改用 `written_derived_ids` · 核 `pre-commit`/`run_all_gates` 真仓库 `exit 0`。
+
+**未做（= `G-25` 的实质）**：换人、新会话、对抗性的**逐条 AC 四态判定**与三项探测。
+**故批次 6 的验收结论是"主理人复核通过"，不是"独立审计通过"。**
+
 

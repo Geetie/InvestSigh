@@ -307,3 +307,46 @@ compute 82 · graph 36 · validators 20 · claim 20 · decision 86 · gates 20 �
 → 该 DoD 的 AC-01 与 5×5 迁移表仍写 `status="active"`，出现"DoD 写了、代码不认"（`G-22`）。
 **教训：改被多方引用的契约字段，必须把"引用它的文档"一并纳入改动面。**
 
+---
+
+## 十、批次 6 收口（两条修复流 + 集成主线）
+
+### 10.1 已并入 `main` 的修复
+
+| 提交 | 内容 | 主理人复核 |
+|---|---|---|
+| `436df2d` | merge `fix/claim-propagation`：根治阻断级跨流缺陷 `N-2` | 复现 `TypeError`；实读代码确认委托 `propagate_retraction` + 干跑前移；真跑 `tests/claim`+`tests/graph` **60 passed / 8.12s** |
+| `eb93caf` | `pre-commit.sh` 中止缺陷根治 + 门禁 **20→23** + 工作树 bootstrap | 复现乱码报错；反向对照注入 `$rc）` → `exit 1`；新守卫 **0.09s**（P-05 <0.5s） |
+| `993dd31` | merge `fix/compute-silent-defects`：根治四条静默缺陷 `C-01/C-02/C-03/C-05` | 复现审计原始四条表达式 → 全部折叠为 `MissingInput`；反向对照正常值算出 `710.0`；真跑 `tests/compute` **95 passed / 4.83s** |
+
+### 10.2 ★ 本轮新抓出的两个"守卫自身"缺陷（比业务缺陷更该记）
+
+| 缺陷 | 后果 | 处置 |
+|---|---|---|
+| **`pre-commit.sh:45` 的 `$rc` 紧跟全角 `）`** | shell 把 `）` 首字节并进变量名 → `set -u` 下**中止脚本**；崩点在 `FAILED=1` 之前 → **其后 4 道门禁（`conflict_scan`/`no_placeholder`/`injection`/`verification_policy`）根本没跑**，且从未走到"提交被拒"分支。**一个门禁失败竟让别的门禁不被检查**（假绿灯面） | ✅ 改 `${label}`/`${rc}`；新增 `shell_var_guard.py` 防复发（全仓库同模式仅此一处） |
+| **工作树 `rules/` 权限必掉** | git 只跟踪可执行位**不跟踪只读位** → 每个新 worktree 的 `rules_lock_guard` **必红**（实测两个工作树各被拦 10 条）。**天天误报的门禁一定会被关掉** | ✅ 新增 `bootstrap_worktree.sh`（只 `chmod 0444` + 自检，**不碰内容、不碰 `rules.lock.json`**）；写入 `CONVENTIONS.md::V-07` |
+
+同时把 `graph_integrity_guard` / `locator_check` 注册进 `run_all_gates`（`G-20`/`G-21` 的孤儿问题）；
+两者在真仓库 `exit 0` 且按 `G-03` 显式记 `NO_EDGE_DATA`/`NO_CLAIMS` note。
+
+### 10.3 当前验证基线（**12 批 / 475 用例 / 23 项门禁**）
+
+```
+unit 42 · conflict 6 · guards 56 · injection 119 · root 8
+compute 95 · graph 36 · validators 20 · claim 24 · decision 86 · gates 23 项 · stage 预期 exit=1
+```
+`verify.py --batch all` **12 批全部合格**；`run_all_gates.py` 23 项全绿；`pre-commit.sh` 10 项全绿。
+
+### 10.4 ★ 本批次仍是"主理人复核通过"，**不是"独立审计通过"**（`G-25`）
+
+已做：复现审计原始反例 · 反向对照 · 真跑相关批次 · 逐条核改动面零禁改。
+**未做**：换人、新会话、对抗性的逐条 AC 四态判定与三项探测。
+→ **`ws/decision` 独立审计（`G-24`）与批次 6 修复流的独立审计（`G-25`）合并到批次 7。**
+
+### 10.5 仍未做
+
+1. **`I-1` `pipeline.py` 接线**（受 `T-08` 阻塞，**等需求方裁定**）
+2. **`I-3` `store.read_records` 缺失真源静默 `return []`** → 改响亮失败（`G-17`）
+3. `G-23`：`ws_claim_dod.md §C` 表 `C-4` 行陈旧表述（nit）
+4. 批次 7：`G-24` + `G-25` 独立审计
+
