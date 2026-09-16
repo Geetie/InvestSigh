@@ -1,0 +1,74 @@
+# rules/baseline.yaml —— `baselines` 底稿的上限/阈值参数（**候选**，尚未安装进 `rules/`）
+#
+# 权威出处：`04_公司价值研究与深度标准/02_实现方案.md §D.2`（关键驱动上限 / 超限处理 / 可持续时长）
+#           `§G.2`（"不是六个空标题"的可程序校验：非空率 / 定位数 / 推导数）
+#           `§G.1`（六项深度 → 字段映射）/ `§G.4`（未盈利 vs 盈利的必填增量）
+#           `§B.2`（每段证据要求：待补证段的后果）
+#           阈值取值出处：`00_待拍板项清单.md` **B5 / B6 / D-03**（2026-09-15 已确认）
+# 落位复核：`00_交付施工图.md` §3.1 第 124 行 / §6 第 253 行（配置 · 阶段② · 出处 `Ch4 §B/§G`）
+#
+# ★ 本文件是**候选**（`system/registry/rule-candidates/`）：`rules/**` 是 0444 + SHA256 锁
+#   （`Ch9 §3.10 J9` / 纪律 9-10），**模型对 `rules/` 无写权**。
+#   安装 = 主理人执行 `chmod -R u+w system/rules` → 复制本文件 → `python system/scripts/ops/lock_rules.py` 重锁。
+#
+# ★ 逐字转写纪律：每个键都能指回**设计节号 + 原文片段**；设计未给值 ⇒ `tbd` + `basis`；
+#   设计没写的键**不新增**（未转写项在报告里单列）。逐键对照表见 `system/reports/ws_ch2_rules_report.md`。
+#
+# ★ 单一真源纪律（`Ch11 §D.2`）：本文件所载值**均不属** `rules/freeze.yaml` 的 11 项待冻结参数
+#   （逐项核过 p01–p11 的 `param` 名），故如实落值，**无 `param_ref` 指针**。
+#
+# ★ 例外说明（本文件内唯一一族的"键名为转写"）：`§B.2` / `§G.2` 的后果语义在设计中是**行文**而非 key，
+#   本节照其语义落布尔键并在行内标注"键名为转写"；**值本身是逐字的**，报告对照表已标出。
+#
+# 只读（安装后）：0444 + SHA256。
+
+version: 1
+spec_anchor: "Ch4 §D.2 / §B.2 / §G.2 / §G.4"
+install_target: "rules/baseline.yaml"
+install_note: "由主理人安装到 rules/baseline.yaml 并跑 system/scripts/ops/lock_rules.py 重锁"
+
+# ── 阈值（`§D.2` / `§G.2`）──────────────────────────────────────────────
+thresholds:
+  max_primary_drivers_per_business: 5      # §D.2：「`rules/baseline.yaml: max_primary_drivers_per_business`（默认 5，可配）」；§J.2：「3 / 5 → **5**（可配）」；清单 B6：「**5**（可配，超限分级）〔原建议〕」
+  min_nonnull_rate: 0.9                   # §G.2 代码 `nonnull_rate(baseline) >= cfg.min_nonnull_rate`；清单 B5：「**必填字段非空率 ≥ 90%**〔新给〕」（D-03 已确认）
+  min_locator_count: 1                    # §G.2 表格「≥1 原始材料定位（locator）」+ 代码 `has_locator(baseline) >= 1`；清单 B5：「**每条关键主张 ≥ 1 处原文定位**」
+  min_derivation_count: 1                 # §G.2 表格「≥1 推导（公式 + 操作数）」+ 代码 `has_derivation(baseline) >= 1`
+  min_fields_per_section: tbd             # §G.2 表格「六项 section 非空且达最小字段数」——**具体数设计未给**（清单 B5 只定 非空率 + 定位数）
+  basis:
+    min_fields_per_section: "§G.2 只写「达最小字段数」，未给数值；`§J.3` 说「形式完备性最低阈值 | 非空率/定位数/推导数 | 占位 + 参数化 `rules/baseline.yaml`」，占位值缺失 ⇒ 待需求方拍板"
+
+# ── 关键驱动超限处理（`§D.2`）────────────────────────────────────────────
+driver_overflow_policy:
+  reject_direct_insert: true               # §D.2：「超限处理 | 校验器**拒绝直接入库**」
+  required_tiering: [primary_drivers, secondary_watchlist]   # §D.2：「须先分级：`primary_drivers(≤5)` + `secondary_watchlist`」
+  alternative: "或按 `importance_class` 取 top-N，其余归档"    # §D.2 原文（「（或按 `importance_class` 取 top-N，其余归档）」）
+  validator_ref: validate_driver_count     # §D.2 代码块函数名逐字；`N4.1-05` 覆盖矩阵：`rules/baseline.yaml:max_primary_drivers_per_business` + `validate_driver_count`
+
+# ── 驱动可持续时长（`§D.2`）──────────────────────────────────────────────
+driver_duration:
+  mode_domain: [point, range]              # §D.2：「`duration.mode ∈ {point, range}`」（§D.1 同：`duration: {mode: point|range, value: "1-3Y"}`）
+  undisclosed_policy: "用 `mode=range` + 定性标注（**不给伪精确点值**）"   # §D.2 逐字
+  validator_ref: validate_driver_count     # §D.2 代码块（同一函数承载）
+
+# ── 形式完备性校验（`§G.2`，对应 `scripts/valuelayer/completeness.py`）────
+form_completeness:
+  entry: form_complete                     # §G.2 代码块函数名逐字
+  guard: scripts/valuelayer/completeness.py
+  sections: ["①业务与产业位置", "②增长驱动", "③增长确定性", "④护城河", "⑤财务与估值", "⑥价格与行动"]   # §G.1 六项深度名称逐字
+  require_locator_at_least: 1              # §G.2 代码 `has_locator(baseline) >= 1`
+  require_derivation_at_least: 1           # §G.2 代码 `has_derivation(baseline) >= 1`
+  require_cross_section_consistent: true   # §G.2 代码 `cross_section_consistent(baseline)`；表格「跨节引用一致（驱动出现在财务连接里）」
+  failed_items_reported: true              # §G.2 代码 `return CheckResult(passed=all(checks), failed=[...])`
+
+# ── 未盈利 vs 盈利公司的必填增量（`§G.4`）────────────────────────────────
+#   分支键 = `is_profitable`（§G.4：「校验器按 `is_profitable` 分支要求对应必填项非空（N4.2-04/05）」）
+required_extra_fields_by_profitability:
+  unprofitable: [business_model_note, path_to_profitability, cash_runway, funding_need, unit_economics]   # §G.4 逐字
+  profitable: [margin_persistence, fcf_persistence, reinvestment_return, share_dilution_impact]          # §G.4 逐字
+
+# ── 段证据要求（`§B.2`）──────────────────────────────────────────────────
+#   ★ `field` 为设计逐字给出的字段名；两个布尔语义逐字（键名为转写）。
+segment_evidence:
+  field: segment.pending_evidence          # §B.1 逐字：「否则该段标"待补证"（`segment.pending_evidence=true`）」
+  blocks_business_modeling: false          # §B.2 逐字：「**不阻止**业务建模」      ← 键名为转写（设计原文为行文）
+  blocks_financial_link: true              # §B.2 逐字：「但**阻止**该段进入财务连接（C）」← 键名为转写（设计原文为行文）

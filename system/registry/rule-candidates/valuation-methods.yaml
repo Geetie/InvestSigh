@@ -1,0 +1,66 @@
+# rules/valuation-methods.yaml —— 估值方法按 `model_class` 路由（**候选**，尚未安装进 `rules/`）
+#
+# 权威出处：`05_价格与市场预期研究/02_实现方案.md §D.1`（估值方法按商业模式路由）
+#           `§I.2`（反解搜索空间的控制手段：「限制每类假设的离散粒度 + 网格搜索上界（`rules/valuation-methods.yaml`）」）
+#           `§J.2`（每类假设离散粒度 → 「参数化 `rules/valuation-methods.yaml`」）
+#           `§B.4`（假设组合表：五类假设的字段名）
+#           粒度取值出处：`00_待拍板项清单.md` **B13 / D-03**（2026-09-15 已确认）
+# 落位复核：`00_交付施工图.md` §3.1 第 133 行 / §6 第 254 行（配置 · 阶段② · 出处 `Ch5 §D`）
+#
+# ★ 本文件是**候选**（`system/registry/rule-candidates/`）：`rules/**` 是 0444 + SHA256 锁
+#   （`Ch9 §3.10 J9` / 纪律 9-10），**模型对 `rules/` 无写权**。
+#   安装 = 主理人执行 `chmod -R u+w system/rules` → 复制本文件 → `python system/scripts/ops/lock_rules.py` 重锁。
+#
+# ★ 逐字转写纪律：每个键都能指回**设计节号 + 原文片段**；设计未给值 ⇒ `tbd` + `basis`；
+#   设计没写的键**不新增**。逐键对照表见 `system/reports/ws_ch2_rules_report.md`。
+#
+# ★ 单一真源纪律（`Ch11 §D.2`）：本文件所载值**均不属** `rules/freeze.yaml` 的 11 项待冻结参数
+#   （逐项核过 p01–p11 的 `param` 名；p05 是"**收益预测**方法"`return_forecast_method`，
+#    与本文件的"**估值**方法路由"是两件事，`§D.1` 也未把本文件挂到 p05 的 `blocking_targets`）
+#   ⇒ 如实落值，**无 `param_ref` 指针**。
+#
+# 只读（安装后）：0444 + SHA256。
+
+version: 1
+spec_anchor: "Ch5 §D.1"
+install_target: "rules/valuation-methods.yaml"
+install_note: "由主理人安装到 rules/valuation-methods.yaml 并跑 system/scripts/ops/lock_rules.py 重锁"
+
+# ── 方法路由（`§D.1` 表格逐字转写）──────────────────────────────────────
+#   §D.1 原文小标题：「`rules/valuation-methods.yaml`：`method_class → business.model_class` 绑定
+#   （复用第四章 C 的路由思路）」
+#   ★ 键名 `etf` 对应原文表格第一列 `ETF（基准）`（转小写以与 `metric-sets.yaml` 的 `model_class` token 同风格）。
+method_routing:
+  hardware: ["正常化利润", "含再投资现金流", "分部估值", "同行比较"]        # §D.1 逐字：`正常化利润 / 含再投资现金流 / 分部估值 / 同行比较`
+  cloud: ["含再投资现金流（订阅/用量）", "分部"]                            # §D.1 逐字：`含再投资现金流（订阅/用量） + 分部`
+  software: ["正常化利润", "现金流", "留存指标"]                            # §D.1 逐字：`正常化利润 / 现金流 + 留存指标`
+  etf: ["简化底稿"]                                                          # §D.1 逐字：`ETF（基准）` → `简化底稿（E）`（简化底稿的细节见 §E）
+
+registry_driven: true                      # §D.1：「方法注册表驱动」
+unregistered_fallback:
+  method_class: generic                    # §D.1 末句：「未注册类型归入 generic 并标注」
+  mark: unregistered                       # §D.1 末句逐字：「并标注」
+
+# ── 反解搜索空间控制（`§I.2` / `§J.2`）────────────────────────────────────
+assumption_grid:
+  # `§J.2`：「每类假设离散粒度 | 待定 | 参数化 `rules/valuation-methods.yaml`」
+  # 值 = `00_待拍板项清单.md` B13：「增长率 ±1 个百分点 / 利润率 ±0.5 / 折现率 ±0.5」〔新给〕（D-03 已确认）
+  # 字段名取自 `§B.4` 假设组合表（增长 g / 利润 m / 再投资 r / 风险 k / 持续时间 T）。
+  growth_assumption: "±1 个百分点"          # B13 逐字（增长率）
+  margin_assumption: "±0.5"                 # B13 逐字（利润率；原文未标单位 ⇒ 照抄不换算）
+  risk_assumption: "±0.5"                   # B13 逐字（折现率；同上）
+  reinvestment_assumption: tbd              # B13 未给（只给 增长率/利润率/折现率 三项）⇒ 设计未给值
+  duration_assumption: tbd                  # 同上：B13 未给；**设计未给，待需求方拍板**
+  basis:
+    reinvestment_assumption: "B13 只列「增长率 ±1 个百分点 / 利润率 ±0.5 / 折现率 ±0.5」三项，未给再投资假设的粒度"
+    duration_assumption: "同上：B13 未给持续时间假设的粒度；`§J.2` 只声明『参数化 `rules/valuation-methods.yaml`』，未给值"
+  grid_search_upper_bound: tbd              # §I.2 只写控制手段「网格搜索上界（`rules/valuation-methods.yaml`）」，**未给数值** ⇒ 待需求方/实现方拍板
+  basis_note: "§I.2 控制手段原文：「限制每类假设的离散粒度 + 网格搜索上界（`rules/valuation-methods.yaml`）」；另 §I.2 风险行「反解搜索空间…设网格上限告警；必要时用单调性剪枝/二分替代网格」"
+  solver_ref: scripts/pricelayer/solver.py  # §B.3：「求解 | **程序** | 固定 4 类解第 5 类；…迭代找可行解集（`scripts/pricelayer/solver.py`）」
+
+# ── 估值计算入口（`§D.2` / `§D.3`，供安装后接线核对）────────────────────
+valuation_compute:
+  guard: scripts/pricelayer/valuation.py    # §D.3 代码块路径逐字
+  entry: compute_valuation                  # §D.3 函数名逐字
+  order_constraint: "baseline_version.system_time.analyzed_at < compute_time"   # §D.3 断言逐字（禁止倒填）
+  method_version_field: method_version      # §D.2：「每个 price range → formula + operands + method_version + share_count + compute_date（N5.3-02 / N9.2-02）」
