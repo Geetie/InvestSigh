@@ -543,3 +543,42 @@ $ git status --short system/rules system/registry
 
 ★ **教训（建议入团队口径）**：**`bootstrap_worktree.sh` 必须在每次 `git merge` 之后再跑一次**，
 否则合并带来的 `rules/` 改动会让权限位退回 0644，`rules_lock_guard` / `injection_guard` 双双阻断。
+**本单后面又实测到一次**（`6f94a55` 之后再次 `git merge main` → 仍按此流程重跑 bootstrap ⇒ 才恢复绿）。
+
+### ⑥.1 定稿状态（**主干是移动靶，故记录最终一次核验**）
+
+```
+$ git merge main --no-edit                     # ★ 提交后又并了 2 次：main 在本单工作期间前移了 3 次
+$ sh system/scripts/ops/bootstrap_worktree.sh  # ★ 每次 merge 之后都要重跑（见上）
+$ git rev-list --count HEAD..main
+0                                              ← 最终与 main 齐平
+$ git diff --numstat main..HEAD
+545	0	system/reports/ws_daily_nochange_report.md
+ 65	7	system/scripts/tasks/gap_to_task.py
+228	0	system/tests/daily/test_no_change_day.py     ← ★ 净改动**只有**这 3 个文件
+$ git status --short
+（空）
+$ git rev-parse HEAD
+127d8a12f96a0e822719a55ec0b3652d1ef45bf2      ← 合并提交（HEAD）
+
+$ sh system/scripts/ops/pre-commit.sh
+pre-commit ✓ 全部门禁放行                        exit=0   阻断计数 0
+
+$ $PY system/scripts/ops/run_all_gates.py --timeout 30
+  gap_to_task.py                     exit=0        0.13s      ← 本单改的脚本
+  pipeline.py                        exit=0        0.16s
+  rules_lock_guard.py                exit=0        0.40s
+  criterion_effectiveness_guard.py   exit=0        0.87s
+  traceback.py                       exit=1        0.17s      ← 唯一非零（既有 design-red）
+  非零计数                               1
+
+$ $PY system/scripts/tasks/gap_to_task.py system/ --no-report
+  scanned done_empty_output_rows: 0
+  scanned no_change_day_exempt: 0
+  scanned tasks: 4
+RESULT: PASS（0 violations）                     exit=0
+```
+
+★ **代码 commit（评审对象）** = `f86542c`（`f86542cb0183ca5a3165bbb33ffcfe52b1e75713`，3 文件 +792/−7）。
+之后的 `258902f`（本报告 §⑥）与两次 `Merge branch 'main'` **不含任何代码改动**
+（`git diff f86542c..HEAD -- system/scripts system/tests` 为空即可核验）。
