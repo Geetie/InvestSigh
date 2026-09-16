@@ -194,11 +194,14 @@ def ingest_public_information(
     - 逐个 `process_raw_file(...)`（**复用**执行器，不另写一条写库路径）；
     - 每文件在**采集层**赋五类时间（`Ch9 §2.2`）：system_time 三元组显式传入（不得为 None），
       valid_time/backfill 按命名约定/比对派生（取不到保持 None）；
-    - 有文件被摄入 → `produced` = 各处置 claim 的 `claim_id`（**对象引用**）；
+    - 有文件被摄入 → `produced` = **本轮真正新写入**的各置 claim 的 `claim_id`（**对象引用**）；
     - **行幂等命中**（同源同 `quote_hash` 的 claim 已入库，`Ch9 §3.5` 阶段②）→ 执行器返回
       `status="skipped"`：**不是降级**（重跑同日不重复落库是**设计行为**，`Ch9 §N9.2-11`），
-      故不置 `degraded`；该对象引用在真源中**确实存在**，仍计入 `produced` ——
-      否则重跑会落进 `G1-05`「报 ok 但 produced 为空（空执行）」，把**正常的幂等重跑**误判成违例。
+      故不置 `degraded`；命中对象走**独立的 `skipped` 列表**（`StepOutcome.skipped`）——
+      `produced` **只记本轮新写入**，命中**不得**折进 `produced`（否则"幂等重跑"与"首跑"
+      的 `produced` 观测量相同，`G-B10-07` 要暴露的信号会被重新掩盖；`tests/compute/
+      test_step_wiring.py` 已把 `produced` 钉死为"本轮真正新写入"）。
+      `G1-05` 的「空执行」判据为 `produced` 与 `skipped` **双空**才违例，故命中不会误报。
     - 任一文件未落库（`blocked` / `degraded`）→ 本步 `degraded=True`（显式，不静默略过）；
     - 无待采集文件 → `produced=[]` + `degraded=True`（空样本，**不得**当成功）。
 
@@ -211,6 +214,7 @@ def ingest_public_information(
     root = Path(root) if root is not None else _code_root()
     candidates = _inbox_files(root)
     produced: list[str] = []
+    skipped: list[str] = []
     degraded = False
     processed_at = _process_now()
     for path in candidates:
@@ -243,14 +247,17 @@ def ingest_public_information(
             produced.append(result.claim_id)
         elif result.status == STATUS_SKIPPED and result.claim_id:
             # 行幂等命中（同源同 quote_hash 的 claim 已入库）：**跳过重复落库**（`Ch9 §3.5` 阶段②）。
-            # 这不是降级 —— 重跑同日不重复落库是设计行为（`Ch9 §N9.2-11`）；
-            # 该 claim 引用在真源中确实存在，仍计入 `produced`（避免正常的幂等重跑被
-            # `G1-05`「报 ok 但 produced 为空」误判成违例）。
-            produced.append(result.claim_id)
+            # 这不是降级 —— 重跑同日不重复落库是设计行为（`Ch9 §N9.2-11`）。
+            # ★ 命中对象走**独立的 `skipped` 列表**，**不得**折进 `produced`：
+            #   `produced` 的语义是"本轮真正新写入的集合"（`tests/compute/test_step_wiring.py`
+            #   已钉死）；若命中折进 `produced`，"首跑"与"幂等重跑"的 `produced` 相同
+            #   → `G-B10-07` 要暴露的信号被重新掩盖。`G1-05` 判据为 `produced`/`skipped`
+            #   双空才违例，故命中仍不会误报"空执行"。
+            skipped.append(result.claim_id)
         else:
             # 显式降级：该文件未落库（blocked / degraded）—— 不得静默略过。
             degraded = True
     if not candidates:
         # 空样本：投递口为空 → 显式降级，不得当成功。
         degraded = True
-    return StepOutcome(produced=produced, degraded=degraded, signals_emitted=0)
+    return StepOutcome(produced=produced, skipped=skipped, degraded=degraded, signals_emitted=0)
