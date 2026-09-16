@@ -155,6 +155,18 @@ BATCHES: Mapping[str, Batch] = {
         "transmit", "tests/transmit/（Ch7 传导编排引擎）",
         _pytest("tests/transmit"), 60.0, _exit_zero,
     ),
+    "evidence": Batch(
+        # 新增测试目录必须同时加批次，否则 `V-06` 会把新目录判成"未覆盖"（`CONVENTIONS.md::V-06`）。
+        # 由主理人在集成时加入（`reports/batch9_stage3_4_taskbook.md §3 I-1`）。
+        "evidence", "tests/evidence/（Ch6 证据层：去重/独立判定/预算闸门）",
+        _pytest("tests/evidence"), 60.0, _exit_zero,
+    ),
+    "daily": Batch(
+        # 新增测试目录必须同时加批次，否则 `V-06` 会把新目录判成"未覆盖"（`CONVENTIONS.md::V-06`）。
+        # 由主理人在集成时加入（`reports/batch9_stage3_4_taskbook.md §3 I-1`）。
+        "daily", "tests/daily/（阶段④每日运行：覆盖可核/降级/幂等/调度）",
+        _pytest("tests/daily"), 60.0, _exit_zero,
+    ),
     "gates": Batch(
         # ★ 不写"多少项"（批次 7 审计）：数字的真源在 `run_all_gates.GATES`，
         #   描述里重复它必然漂移（同一事实曾出现 18/19/20/23 四个值）。
@@ -171,7 +183,7 @@ BATCHES: Mapping[str, Batch] = {
 
 ORDER = (
     "unit", "conflict", "guards", "injection", "root",
-    "compute", "graph", "validators", "claim", "decision", "transmit",
+    "compute", "graph", "validators", "claim", "decision", "transmit", "evidence", "daily",
     "gates", "stage",
 )
 
