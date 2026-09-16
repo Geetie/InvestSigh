@@ -124,9 +124,15 @@ def load_recheck_trigger(root: str | Path | None = None) -> RecheckTrigger:
 
     ★ 比例口径归正：规则文件写的是**百分点**（`-7` / `-12`），本层内部用**小数**
       （`-0.07` / `-0.12`）。换算在**这一处**完成，避免两套口径并存。
-    - 文件/键缺失 → 回落**设计逐字值**（B2 + `Ch5 §F.5`）并标 `value_source="design_default"`
+    - 文件缺失 / **节**缺失 → 回落**设计逐字值**（B2 + `Ch5 §F.5`）并标 `value_source="design_default"`
       **且记一条写明缺失对象的 note**（主理人裁定 ③-1/③-2）。
-    - 取值非负或非数值 → `DailyExplainError`（**响亮失败**；阈值必须是负的下跌阈值）。
+    - `on_hit.keep_original_judgment_time` 缺键 → 同上（回落 + `NO_ON_HIT_KEY` note；`T08`）。
+    - **阈值键缺失 / 非数值 → `DailyExplainError`（响亮失败，`不静默兜底`）**：
+      ★ 实测（删 `single_day_drop_pct` ⇒ `阈值非数值（None / -12）—— 不静默兜底`）确认
+      **不走回落**。旧实现在此还留了一段 `NO_FORCED_RECHECK_KEY` note，声称"该阈值取设计
+      逐字回落值"，与真实行为**不符**且**永不可达**（上面先抛了）；第四轮已删
+      （声明与实现脱节 / 死代码）。
+    - 取值非负 → `DailyExplainError`（**响亮失败**；阈值必须是负的下跌阈值）。
     """
     from scripts._common import _cached_yaml  # `P-02`
 
@@ -178,12 +184,6 @@ def load_recheck_trigger(root: str | Path | None = None) -> RecheckTrigger:
             f"{DESIGN_KEEP_ORIGINAL_JUDGMENT_TIME}（Ch5 §F.5 / T08：涨跌只触发复查，保留原判断时间）"
             "（非'已核'）"
         )
-    for key in (RULE_KEY_SINGLE_DAY_DROP_PCT, RULE_KEY_THREE_DAY_CUMULATIVE_PCT):
-        if key not in node:
-            notes.append(
-                f"NO_FORCED_RECHECK_KEY: {REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK}.{key} "
-                "缺失 —— 该阈值取设计逐字回落值（B2）（非'已核'）"
-            )
     return RecheckTrigger(
         single_day_drop=one_day,
         three_day_cumulative=three_day,
@@ -498,6 +498,8 @@ def _rule_binding_violations(root: Path, trigger: RecheckTrigger) -> list[str]:
     | ② | 阈值与代码回落值（B2）**一致** | B2 / `Ch5 §F.5` |
     | ③ | `on_hit.keep_original_judgment_time` 为真 | `T08`（复查未完成显示原判断时间） |
 
+    ★ **"缺键"本身即违例**：①由键清单承担；③额外**单独判存在性** —— 该键缺失时加载器回落
+      设计值，而"设计值"恰好等于"应该有的值"，按值比较**判不出缺键**（`G-03`：跳过不是通过）。
     ★ 规则文件不存在 → 返回空（调用方另有 note 面，**不**当已核）。
     """
     from scripts._common import _cached_yaml
@@ -537,6 +539,19 @@ def _rule_binding_violations(root: Path, trigger: RecheckTrigger) -> list[str]:
             f"{RULE_KEY_KEEP_ORIGINAL_JUDGMENT_TIME}={trigger.keep_original_judgment_time} "
             f"与代码回落值 {DESIGN_KEEP_ORIGINAL_JUDGMENT_TIME} 不一致 —— `T08`：复查未完成时"
             "必须显示原判断时间（Ch5 §F.5）"
+        )
+    # ★ **`on_hit.keep_original_judgment_time` 缺键本身即违例**（第四轮补）：该键在真文件里
+    #   **存在**。缺它时加载器回落设计值 ⇒ 值与回落值恰好相等 ⇒ 上面那条比较**判不出来**
+    #   （`rules` 与"设计值"撞成同一个数），门禁就成了"缺键也不红"。故必须按**文档原文**
+    #   单独判存在性（`G-03`："跳过不是通过"）。
+    forced = doc.get(RULE_KEY_FORCED_RECHECK)
+    on_hit = forced.get(RULE_KEY_ON_HIT) if isinstance(forced, Mapping) else None
+    if not isinstance(on_hit, Mapping) or RULE_KEY_KEEP_ORIGINAL_JUDGMENT_TIME not in on_hit:
+        violations.append(
+            f"{REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK}.{RULE_KEY_ON_HIT}."
+            f"{RULE_KEY_KEEP_ORIGINAL_JUDGMENT_TIME} 缺失 —— 缺键本身即违例（Ch11 §D.2）："
+            f"回落值 {DESIGN_KEEP_ORIGINAL_JUDGMENT_TIME} 与设计值撞成同一个数，"
+            "按值比较判不出缺键（故按文档原文判存在性）"
         )
     return violations
 
