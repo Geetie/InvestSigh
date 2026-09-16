@@ -60,7 +60,7 @@ from scripts.decision.rules import build_recommendation, decide, persist_recomme
 DEFAULT_HORIZON = "2q"
 DEFAULT_RULE_VERSION = "decision-v1"
 
-# ── 真源相对路径（`Ch9 §3.3.3` 的 18 个 JSONL；**不**含任何 `tests/**` 路径）──
+# ── 真源相对路径（`Ch9 §3.3.3` 的事实表；**不**含任何 `tests/**` 路径）──
 TRUTH_PRICES_REL: str = "facts/prices.jsonl"
 TRUTH_BENCHMARKS_REL: str = "facts/benchmarks.jsonl"
 TRUTH_SECURITIES_REL: str = "facts/securities.jsonl"

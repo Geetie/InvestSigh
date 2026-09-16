@@ -1,7 +1,30 @@
-"""facts/ 18 个追加式 JSONL 的 8 类对象模型（唯一真源定义）。
+"""facts/ 22 个追加式 JSONL 的对象模型（唯一真源定义）。
+
+★ **表数由 18 扩至 22**（需求方 2026-09-16 裁定："如果扩表能更方便后续的开发，不留技术债…
+  那扩表也没关系"；登记见 `system/reports/phase1_open_tensions.md::T-13` **备选②**）。
+  新增 4 张表，**全部按各章 `02_实现方案.md` 的逐字声明**：
+
+  | 新表 | 出处（逐字） | 为什么不能折叠进既有表 |
+  |---|---|---|
+  | `businesses` | `Ch4 §B.1`（含 schema 块）+ `Ch4 §0` 表第 19 行 | §B.1 方案比选**否决**"挂 `baselines` 下"：baseline 是版本化研究结论，business 是公司结构信息 |
+  | `drivers` | `Ch4 §D.1`（schema 块）+ `§C.4`（三层映射）+ `Ch4 §0` 表第 20 行 | 驱动需 `financial_link`（`Ch5 §A.2`：估值经营假设 = `baseline.driver_refs[].financial_link`） |
+  | `implied_requirements` | `Ch5 §B.2`（多组解结构）+ `§B.1/§B.3` | 价格反解**必然多解**，需 `solution_set_id` 聚合解集 |
+  | `relation_flows` | `Ch7 §B.3`（三边字段表）+ `Ch7 §0` 表第 19 行 | §B.3 比选**否决**"同一 `relations` 表三行"：关系身份被复制三份；并以 MSFT↔NVDA 反例说明三方向无法压成一个 |
+
+  ⚠️ 设计区（`00_*` / `01_`~`11_`）仍写"18 个 JSONL"，其回改由需求方在文档侧执行 —— 见 `stems.py` 脚注。
+  ⚠️ `BusinessPosition`（既有 18 表之一）是「公司 × 产业节点的**多业务位置/覆盖维度**」，
+     与 `Business`（业务单元 + `mechanism`）**不是一回事**，**不得合并**。
 
 权威出处（逐字对齐，不得偏离）：
-- `Ch9 §3.3.3`   目录布局 / 18 JSONL → 8 类对象 / 版本表达方式
+- `Ch9 §3.3.3`   目录布局 / JSONL → 对象 / 版本表达方式（表数经需求方裁定由 18 → 22）
+- `Ch4 §B.1`     `business` schema（业务单元，`mechanism` 内嵌）
+- `Ch4 §C.4`     `driver.financial_link`（指标 → 财务科目 → 每股指标三层映射）
+- `Ch4 §D.1`     `driver` schema（`source_class` 7 类 + `mixed`；`duration` / `cost_of_growth` 五项）
+- `Ch4 §F.1`     `moat`（六保护对象 / `origin_class` / 代际生存）
+- `Ch4 §G.1/§G.4/§H.1/§H.3` `baselines` 六项深度 → 字段映射、未盈利/盈利必填分支、状态与增量
+- `Ch5 §B.2`     `implied_requirements` 多组解输出结构
+- `Ch5 §D.5/§D.6` 估值输入三类分开存（`input_source`）/ 区间宽度与 `probability` 默认空
+- `Ch7 §B.1/§B.3` `relations` 增量 + 三条并行边（`relation_flows`）
 - `Ch9 §2.1`     主键设计 / 公司-证券分离 / 多业务位置 / 8 类对象引用关系
 - `Ch9 §2.2`     五类时间（time mixin，双时间轴基元）
 - `Ch9 §2.3.2`   三类版本事件语义（version_kind）
@@ -34,6 +57,10 @@ from enum import Enum, StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
+
+from .stems import JSONL_STEMS
+
+from .stems import JSONL_STEMS
 
 
 # ─────────────────────────── 待定 token 规范（Ch2 §C.2 R-14） ───────────────────────────
@@ -277,13 +304,23 @@ class RelationProgressStage(str, Enum):
 
 
 class DriverRealizationStage(str, Enum):
-    """驱动的兑现阶段（`Ch4 §D`）。与 `relation_progress_stage` **不得互用**（`Ch2 §C.2 R-15 ②`）。"""
+    """驱动**三态**（`Ch4 §D.1` / `§E.2` / `N4.2-01`）。与 `relation_progress_stage` **不得互用**（`Ch2 §C.2 R-15 ②`）。
+
+    ★ **取值域已按设计原文纠正**（本批次修正一处**自创枚举**，两个独立处一致）：
+      - `Ch4 §D.1` 逐字：`realization_stage: occurred|planned_guidance_forecast|conditional`；
+      - `Ch4 §E.2` 逐字："驱动三态（已发生/计划指引预测/依赖条件） | `driver.realization_stage`"；
+      - `Ch4 §J.1`：`N4.2-01`「`drivers.realization_stage`（**三态**）+ `stage_derive.py`」。
+      初版写的是 `not_started / ramping / ramped / declining` —— **设计里不存在这四个值**，
+      且是**四态**而非三态（`stage_derive.py` 由 `claim_nature` 推导，不存在"爬坡中"这种阶段）。
+      该错误值经全仓检索**无任何产出方/消费方**，真仓库 `facts/baselines.jsonl` 的
+      `driver_model` 为空数组 ⇒ 纠正**零影响**（见 `tests/unit/test_schema_expand.py`）。
+      `tbd` 保留为"尚未推导"的待定 token（`纪律 7` / `Ch2 §C.2`，与 `MoatLevel` / `DirectionState` 同例）。
+    """
 
     tbd = TBD
-    not_started = "not_started"
-    ramping = "ramping"
-    ramped = "ramped"
-    declining = "declining"
+    occurred = "occurred"                                  # 已发生
+    planned_guidance_forecast = "planned_guidance_forecast"  # 计划 / 指引 / 预测
+    conditional = "conditional"                            # 依赖条件
 
 
 class EventType(str, Enum):
@@ -317,6 +354,152 @@ class DisclosureState(str, Enum):
 
     disclosed = "disclosed"
     undisclosed = "undisclosed"
+
+
+# ─────────────────── 枚举 · 本批次新增（`Ch4 §B/§D/§F` · `Ch5 §B/§D` · `Ch7 §B`） ───────────────────
+#
+# 纪律（与既有枚举同）：成员名英文小写 + 下划线；"待定 / 未判定" 统一 `tbd`
+# （`MoatLevel` / `DirectionState` / `EventType` / `RelationProgressStage` 同例）。
+# ★ 取值域**只从设计逐字取**，除 `tbd` 外不新增；凡设计写成 `...` 或"注册表驱动"的，
+#   一律**不用封闭枚举**（否则新增一类就要改代码，与各章声明的扩展机制冲突）。
+
+
+class RevenueModel(str, Enum):
+    """收入的实现方式（`Ch4 §B.1` yaml 块：`revenue_model: one_time|subscription|usage|license|hybrid`）。"""
+
+    one_time = "one_time"
+    subscription = "subscription"
+    usage = "usage"
+    license = "license"
+    hybrid = "hybrid"
+
+
+class FlowKind(str, Enum):
+    """关系流的三条并行边（`Ch7 §B.3`：`flow_kind ∈ {product, capital, demand_signal}`）。
+
+    ★ §B.3 的方案比选**否决**了"同一 `relations` 表三行"，理由：关系身份（证据/阶段/有效期）
+      被复制三份、去重与版本追踪困难。三条边的方向**互不相同**，无法压成一个。
+    """
+
+    product = "product"                # 产品流：供应商 → 客户
+    capital = "capital"                # 资金流：付款方 → 收款方（与产品流相反）
+    demand_signal = "demand_signal"    # 需求信号：需求方 → 供应方（与产品流相反）
+
+
+class PerShareMetric(str, Enum):
+    """每股指标（`Ch4 §C.4`：`per_share_metric: eps | fcf_per_share | value_per_share`）。"""
+
+    eps = "eps"
+    fcf_per_share = "fcf_per_share"
+    value_per_share = "value_per_share"
+
+
+class DurationMode(str, Enum):
+    """驱动可持续时长的表达（`Ch4 §D.1` / `§D.2`：`duration.mode ∈ {point, range}`）。
+
+    §D.2 逐字："未披露用 `mode=range` + 定性标注（**不给伪精确点值**）"。
+    """
+
+    point = "point"
+    range = "range"
+
+
+class ConfidenceLevel(str, Enum):
+    """判断置信度（`Ch4 §E.1`：`{high, medium, low}`，**不默认给数值概率**）。
+
+    `tbd` = 尚未判定（一律显式存，**不得**用 0.5 / 50% 之类的伪概率顶上，`Ch5 §D.6` / `C45-2`）。
+    """
+
+    tbd = TBD
+    high = "high"
+    medium = "medium"
+    low = "low"
+
+
+class ImportanceClass(str, Enum):
+    """驱动重要度分档（`Ch4 §D.1`：`importance_class: high|medium|low`）。
+
+    §D.2 用它做"少量关键驱动"超限时的分级（`primary_drivers(≤5)` + `secondary_watchlist`）。
+    """
+
+    high = "high"
+    medium = "medium"
+    low = "low"
+
+
+class MoatProtectedObjectKind(str, Enum):
+    """**六种保护对象**（`Ch4 §F.1`：`object: share|pricing|cost|customer_retention|capital_return|innovation_efficiency`）。
+
+    §F.1 逐字："多选"。故 `protected_objects` 是**数组**，一条护城河可同时保护多项。
+    """
+
+    share = "share"
+    pricing = "pricing"
+    cost = "cost"
+    customer_retention = "customer_retention"
+    capital_return = "capital_return"
+    innovation_efficiency = "innovation_efficiency"
+
+
+class MoatStrength(str, Enum):
+    """单项保护对象的强度（`Ch4 §F.1`：`strength: high|medium|low`）。"""
+
+    high = "high"
+    medium = "medium"
+    low = "low"
+
+
+class MoatOriginClass(str, Enum):
+    """护城河来源四类（`Ch4 §F.1` / `§F.2` 表：`origin_class`）。
+
+    §F.2 的判据：`supply_demand_cycle` **不得**判为持久护城河（供给恢复即消失）。
+    """
+
+    durable_advantage = "durable_advantage"            # 跨周期、跨代际仍保持
+    product_cycle = "product_cycle"                    # 单代领先，下一代可能丢失
+    supply_demand_cycle = "supply_demand_cycle"        # 紧缺时高毛利，供给恢复即消失
+    operational_efficiency = "operational_efficiency"  # 成本下降来自管理/规模
+
+
+class MoatWriter(str, Enum):
+    """`moat.writer` —— 写路径白名单（`Ch4 §F.3` 断言 A3，**可直接写单测**）。
+
+    §F.3 逐字：`moat.writer ∈ {research_skill, human}`，**不含** `price_ingest` ——
+    "股价上涨不自动证明护城河增强"在 **schema 层物理隔离**，而非靠自觉。
+    """
+
+    research_skill = "research_skill"
+    human = "human"
+
+
+class InputSource(str, Enum):
+    """估值输入的三类来源（`Ch5 §D.5`：`input_source ∈ {fact, model_estimate, manual}`）。
+
+    - `fact`         = 来自 `claim` 的原始数据；
+    - `model_estimate` = 模型产出的假设；
+    - `manual`       = 人工设定（**须留痕**：`author` + `modified_at`）。
+
+    §D.5 的冲突处理：**不用加权**（承第六章禁加权）——分别保留并**并列展示**。
+    """
+
+    fact = "fact"
+    model_estimate = "model_estimate"
+    manual = "manual"
+
+
+class SolvedVariable(str, Enum):
+    """反解时被解出的那一类变量（`Ch5 §B.2`：`"solved_variable":"reinvestment"` + `§B.4` 五因素表）。
+
+    §B.4 逐字："反解时固定 4 类、解第 5 类"，五类为
+    增长 / 利润 / 再投资 / 风险 / 持续时间。故取值域 = 这五类（与 `ImpliedAssumptions` 的键一一对应）。
+    """
+
+    growth = "growth"
+    margin = "margin"
+    reinvestment = "reinvestment"
+    risk = "risk"
+    duration = "duration"
+
 
 
 # ─────────────────────────── 时间 mixin（Ch9 §2.2 / §3.4.1） ───────────────────────────
@@ -516,6 +699,104 @@ class Relation(TimeMixin):
     evidence_claim_ids: list[str] = Field(default_factory=list)   # 证据 = 指向 claim_id 的外键，非独立实体
 
 
+# ─────────── ②b 关系流（`Ch7 §B.3`；本批次新增 1 张表 `facts/relation_flows.jsonl`） ───────────
+#
+# ★ 落位取舍（`Ch7 §B.3` 的表逐字）：**`relations` 主表 + `relation_flows` 子表（1 关系 → 0..3 流）**，
+#   而**不是**"同一张 `relations` 表三行"。否决理由逐字："关系身份（证据/阶段/有效期）被复制
+#   三份，去重与版本追踪困难"。
+# ★ 为什么不能合并（§B.3 用 **MSFT（云厂商）↔ NVDA** 的具体反例）：
+#   ① 方向不一致：产品流 `NVDA→MSFT`、资金流 `MSFT→NVDA`、需求信号 `MSFT→NVDA`，三方向压不成一个；
+#   ② 存在性解耦：可以有"MSFT capex 指引↑（需求信号↑）"但**尚无 GPU 订单**；
+#   ③ 误把信号当收入：需求信号↑ ≠ NVDA 收入↑（有库存/时滞/验收）；
+#   ④ 去重需要分开：同一终端需求可同时驱动多个供应商（`N7.2-09` 根终端需求归因）；
+#   ⑤ 证据/阶段不同：订单阶段证据 vs 回款阶段证据不同，合并无法分别记录。
+
+
+class ProductFlow(_Base):
+    """产品流（`Ch7 §B.3` 表：方向**供应商 → 客户**；关键字段 `product_id`、`volume/value`、`stage`）。
+
+    ★ `volume` 的命名取舍：§B.3 的关键字段列写作 "`volume/value`"（量**或**以值表达，二择一），
+      **未给**两个独立字段名。依 `Ch2 §C.2 R-15 ③`（一个概念只允许一个字段名）取 **`volume`**
+      一个字段承载该边的规模（单位与口径写在值里）；**对价支付**那一侧由 `CapitalFlow.amount`
+      承载 —— 它是**另一个域**（对价支付 ≠ 产品交付量），故分名（`R-15 ②`）。
+    ★ `stage` 是**自由字符串**：`Ch7 §B.3` 未给取值域；相邻的 `§B.4` 给的是 `relations` 侧
+      `relation_progress_stage` 的五者语义层级，而**该名字在本仓库已被既有枚举占用**（见
+      `RelationProgressStage` 的 docstring 与报告中的命名冲突登记）⇒ 本实现**不另造第二套枚举**
+      （`G-06` 唯一真源），保持字符串。
+    """
+
+    product_id: str = TBD
+    volume: str = TBD
+    stage: str = TBD
+
+
+class CapitalFlow(_Base):
+    """资金流（`Ch7 §B.3` 表：方向**付款方 → 收款方**，与产品流**相反**；关键字段 `amount`、`currency`、`period`）。"""
+
+    amount: str = TBD
+    currency: str = TBD
+    period: str = TBD
+
+
+class DemandSignal(_Base):
+    """需求信号（`Ch7 §B.3` 表：方向**需求方 → 供应方**；关键字段 `intensity`（定性/定量）、`basis`）。
+
+    ★ §B.3 反例③：需求信号↑ **≠** 收入↑（有库存/时滞/验收）—— 故它与产品流是两条边。
+    ★ `Ch7 §A.6`（回改 R-09）：环境层"**AI 投入与需求周期**"的承载方式就是
+      "`demand_signal` 边（`relation_flows.flow_kind=demand_signal`）+ 终端需求归因"。
+    """
+
+    intensity: str = TBD
+    basis: str = TBD
+
+
+class RelationFlow(TimeMixin):
+    """关系流（`Ch7 §B.3`，新表 `facts/relation_flows.jsonl`）。
+
+    1 关系 → 0..3 流（产品流 / 资金流 / 需求信号），三者**各自带方向与字段**。
+
+    ★ `flow_id` 与业务键：设计未给主键名；本实现沿用本项目对"边"对象的既有约定
+      （`DependencyEdge.edge_id` + `from_ref`/`to_ref`）取 `flow_id`，**业务键 = (`relation_id`, `flow_kind`)**
+      （§B.3："1 关系 → 0..3 流" ⇒ 一个关系的一种流至多一条）。
+    ★ `from_ref` / `to_ref`：§B.3 的"方向"列（"供应商 → 客户" / "付款方 → 收款方" / "需求方 → 供应方"）
+      **没有逐字字段名**。方向是**必须存**的（§B.3 反例①：三方向无法压成一个），故沿用
+      `DependencyEdge` 的 `from_ref`/`to_ref` 命名承载方向的实体两端。
+    ★ `flow_kind` 与对应子对象**必须一致在场**：与本项目 `ClaimPropagation.kind` / `alias_override`
+      的一致性校验同构（不允许"标了产品流却带资金流字段"的半截行）。
+    """
+
+    flow_id: str
+    relation_id: str
+    flow_kind: FlowKind
+    from_ref: str
+    to_ref: str
+    product_flow: ProductFlow | None = None
+    capital_flow: CapitalFlow | None = None
+    demand_signal: DemandSignal | None = None
+    evidence_claim_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_payload_matches_flow_kind(self) -> "RelationFlow":
+        expected = {
+            FlowKind.product: "product_flow",
+            FlowKind.capital: "capital_flow",
+            FlowKind.demand_signal: "demand_signal",
+        }[self.flow_kind]
+        payloads = {
+            "product_flow": self.product_flow,
+            "capital_flow": self.capital_flow,
+            "demand_signal": self.demand_signal,
+        }
+        if payloads[expected] is None:
+            raise ValueError(f"flow_kind={self.flow_kind.value} 必须携带 {expected}（Ch7 §B.3）")
+        extras = [name for name, val in payloads.items() if name != expected and val is not None]
+        if extras:
+            raise ValueError(
+                f"flow_kind={self.flow_kind.value} 不得携带 {extras}（Ch7 §B.3：三条边各自独立，不得混载）"
+            )
+        return self
+
+
 # ─────────────────────────── ③ 来源与主张 ───────────────────────────
 
 class Source(TimeMixin):
@@ -618,9 +899,11 @@ class PropagationKind(StrEnum):
     ★ 为什么需要它（T-11 契约变更，需求方 2026-09-16 裁定）：
       `Ch6 §C.3`（误判的纠正入口 / 人工 override）原设计把结果写独立的
       `facts/claim_alias.jsonl`（`{claim_id, is_independent, reason, operator, at}`）；
-      但 `Ch9 §3.3.3` 把 `facts/` 锁死在 **18 个 JSONL（不得增删改名）** ⇒ `claim_alias.jsonl`
+      但 `Ch9 §3.3.3` 把 `facts/` 的表集合锁死（**不得增删改名**）⇒ 「再开一张表」
+      同样不是实现方能随手做的动作（扩表是**需求方裁定**项：2026-09-16 已由 18 扩至 22，
+      见 `schema/stems.py` 脚注）⇒ `claim_alias.jsonl`
       **无落点**。裁定：**并入既有 `claim_propagation`**，以其 `kind` 取值
-      `manual_alias_override` 承载"人工确认这两条其实是同一事件" —— **绝不新增第 19 个 JSONL**。
+      `manual_alias_override` 承载"人工确认这两条其实是同一事件"。
 
     - `restatement`（**默认**）：自动去重判定的**转述**（`Ch6 §C.2` 步骤④）；
       ⚠️ **默认值必须使"旧行"合法**：既有 `claim_propagation` 行无 `kind` 字段
@@ -654,7 +937,7 @@ class ClaimPropagation(TimeMixin):
     转述者**不计独立证据**（`Ch6 §N6.2-11`）。
 
     ★ `kind` / `alias_override`（T-11）：承载 `Ch6 §C.3` 的人工去重覆盖，
-      同时**并入**既有表、**不新增**第 19 个 JSONL（`Ch9 §3.3.3`）。旧行无这两列 ⇒ 取默认（合法）。
+      同时**并入**既有表、**不为人工别名覆盖新开表**（`Ch9 §3.3.3`）。旧行无这两列 ⇒ 取默认（合法）。
     """
 
     propagation_id: str
@@ -727,6 +1010,237 @@ class Impact(TimeMixin):
     evidence_claim_ids: list[str] = Field(default_factory=list)
 
 
+# ─────────── ④b 业务单元与增长驱动（`Ch4 §B` / `§C.4` / `§D`；本批次新增 2 张表） ───────────
+#
+# ★ 为什么是**独立表**而不是挂 `baselines`（`Ch4 §B.1` 方案比选逐字）：
+#   "baseline 是**版本化研究结论**（随研究更新换代），business 是**公司结构信息**
+#    （相对稳定，状态对象）；混在一起会让'业务定义'随研究版本爆炸" ⇒ **否决**"挂 baselines"。
+# ★ 为什么 `Business` ≠ `BusinessPosition`（既有 18 表之一）：
+#   `business_positions` 是「公司 × 产业节点的**多业务位置/覆盖维度**」（`Ch9 §N9.1-02`，
+#   带 `research_depth` / `scan_frequency` / 收录依据），而 `business` 是**业务单元 + 赚钱机制**
+#   （谁付费 / 交付链路 / 成本与资本结构）。两者**不是一回事，不得合并**。
+
+
+class Payer(_Base):
+    """付费方（`Ch4 §B.1` yaml 块：`mechanism.payer: {party, segment, geographies}`）。
+
+    §B.1 把"谁付费"列为赚钱机制的第一要素（`N4.1-01` 验收："可读'谁付费+链路各段+每段证据'"）。
+    """
+
+    party: str                              # 付费主体（谁掏钱）
+    segment: str = TBD                      # 客户细分（未披露 → `tbd`，不猜）
+    geographies: list[str] = Field(default_factory=list)
+
+
+class ConversionSegment(_Base):
+    """转化链路的**一段**（`Ch4 §B.1`：`{stage, input, output, evidence: [claim_id...]}`）。
+
+    §B.1 的通用四段模型：**获取 → 交付 → 使用 → 变现**（按商业模式实例化：
+    硬件 = 订单→排产/出货→验收→收入/回款；云 = 签约→通电/上线→利用率→收费；
+    软件 = 使用→付费→续约/留存→增购）。
+
+    ★ `stage` **刻意是自由字符串**（不是封闭枚举）：段名由**注册表驱动**
+      （`Ch4 §C.1` `rules/metric-sets.yaml` 的 `stages:`；`§C.3` 明写"新增第 4 类**只改 yaml**、
+      **不改代码**"）。把它写成枚举会让 §C.3 的扩展机制失效。
+
+    ★ `pending_evidence` 与 `evidence` **必须一致**（§B.1 / §B.2 逐字）：
+      每段必有 `evidence`（`claim_id[]`，接第六章），否则该段**必须**显式标
+      `pending_evidence=true` —— 展示层据此呈现"证据未到位"，并**阻止该段进入财务连接**（§C）。
+      故本类**拒绝**"证据为空却不标注"的半截行 ——
+      这正是本项目最忌的"把没有证据包装成有证据"。
+    """
+
+    stage: str
+    input: str = TBD
+    output: str = TBD
+    evidence: list[str] = Field(default_factory=list)   # claim_id[]
+    pending_evidence: bool = False
+
+    @model_validator(mode="after")
+    def _check_pending_evidence_matches_evidence(self) -> "ConversionSegment":
+        if not self.evidence and not self.pending_evidence:
+            raise ValueError(
+                "该段无证据 (evidence 为空) 时必须显式标 pending_evidence=true —— "
+                "不得把'无证据'的段静默当作'有证据'（Ch4 §B.1/§B.2）"
+            )
+        if self.evidence and self.pending_evidence:
+            raise ValueError(
+                "evidence 非空时 pending_evidence 必须为 false —— 不得同时声称'有证据'与'证据未到位'"
+                "（Ch4 §B.2）"
+            )
+        return self
+
+
+class BusinessMechanism(_Base):
+    """赚钱机制（`Ch4 §B.1` yaml 块的 `mechanism:` 子树）。
+
+    ★ `cost_structure` / `capital_requirements` 用 `dict[str, Any]`：
+      §B.1 原文写作 `cost_structure: {main_cogs[], fixed[], ...}` —— 那个 `...` 表示
+      **科目集合开放**（随业务不同）。`extra="forbid"` 下无法表达"开放键"，故按本项目既有约定
+      （`Task.cost` / `Benchmark.coverage_profile`）用开放 dict，并把设计的键名写进字段说明 ——
+      **不伪造成封闭结构**。
+    ★ 二者**不在阶段①骨架内**：`04_公司价值研究与深度标准/01_需求拆解.md §4` 的
+      阶段①必填是"赚钱机制骨架（`payer`/`offering`/`conversion_chain`）"，
+      而 `N4.1-02`（`cost_structure` + `capital_requirements`）标的是**阶段②**。
+    """
+
+    payer: Payer
+    offering: list[str]                     # product_id / service_id 列表（§B.1）
+    revenue_model: RevenueModel
+    conversion_chain: list[ConversionSegment]
+    cost_structure: dict[str, Any] = Field(default_factory=dict)
+    """`{main_cogs[], fixed[], ...}`（`Ch4 §B.1`）——主要成本科目与固定成本，键集开放。"""
+
+    capital_requirements: dict[str, Any] = Field(default_factory=dict)
+    """`{capex, rnd, working_capital}`（`Ch4 §B.1`）——资本投入结构，键集开放。"""
+
+
+class Business(TimeMixin):
+    """业务单元 = **公司结构信息**（`Ch4 §B.1`，新表 `facts/businesses.jsonl`）。
+
+    状态对象（与 `Company` 同例：当前位置 + 独立 `change_log`），**相对稳定**，
+    故与版本化的 `baselines` 分表（§B.1 方案比选的否决理由）。
+
+    ★ `business_type` 的命名取舍（本项目"一个概念只允许一个字段名"，`Ch2 §C.2 R-15 ③`）：
+      设计里该概念有两个写法 —— `Ch4 §B.1` 的 **schema 块**写 `business_type: hardware`
+      （注释指明"`model_class`：见 C"）；`§C.1`/`§C.2` 的**行文与示例代码**写
+      `business.model_class`（路由键）。`04_.../01_需求拆解.md §4` 阶段①必填逐字写的是
+      "`business` 对象、**`business_type`** 路由" ⇒ **数据契约取 schema 块 / 需求拆解的
+      `business_type`**，`§C.2` 的 `business.model_class` 视为同一概念的行文漂移
+      （已登记，见报告「剩余不确定性与缺口」）。
+    ★ `business_type` **是自由字符串而非封闭枚举**：`§C.3` 明写扩展机制 ——
+      "新增第 4 类（广告/代工/游戏内购…）| **只改 `rules/metric-sets.yaml`** | **否**（注册表驱动）"，
+      并把未注册类型归入 `MS-GENERIC` 且**显式标注** `unregistered_model_class=true`。
+      写成枚举会让"扩展不改代码"这条声明失效。
+    """
+
+    business_id: str
+    company_id: str
+    business_type: str                                  # 路由键（model_class，见 §C）
+    metric_set_id: str                                  # → rules/metric-sets.yaml（§C.1）
+    mechanism: BusinessMechanism
+    unregistered_model_class: bool = False               # §C.3：未注册类型显式标注
+    change_log: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class Duration(_Base):
+    """驱动可持续时长（`Ch4 §D.1` / `§D.2`：`duration: {mode: point|range, value: "1-3Y"}`）。
+
+    §D.2 逐字："未披露用 `mode=range` + 定性标注（**不给伪精确点值**）" ⇒
+    `value` 是**自由字符串**（可写区间或定性描述），不强制数值 —— 强制数值会逼出伪精确。
+    """
+
+    mode: DurationMode
+    value: str = TBD
+
+
+class FinancialLink(_Base):
+    """**驱动 → 科目 → 每股指标**的三层映射（`Ch4 §C.4`，落 `facts/drivers.jsonl`）。
+
+    §C.4 原文块：
+
+    ```
+    driver.financial_link = {
+      accounts: [revenue_segment, gross_margin, opex, capex, working_capital, ...],
+      per_share_metric: eps | fcf_per_share | value_per_share,
+      formula_ref: <DerivedValue ref>        # 走 scripts/compute/
+    }
+    ```
+
+    ★ 为什么 `accounts` 是 `list[str]`：§C.4 的清单末位是 `...`（科目集合开放）。
+    ★ 为什么单独一个类而不是三个散字段：`Ch5 §A.2` 逐字把
+      "`baseline.driver_refs[].financial_link`" 当作**估值的经营假设来源** ——
+      它是一级契约面，不是可选装饰。
+    """
+
+    accounts: list[str] = Field(default_factory=list)
+    per_share_metric: PerShareMetric | None = None
+    formula_ref: str = TBD                    # → derived/ 的 DerivedValue（算术走 scripts/compute/）
+
+
+class CostOfGrowth(_Base):
+    """五项"增长的代价"（`Ch4 §D.3` 表 + `§D.4` 环境层承载）。
+
+    | 代价 | 财务科目 | 字段 |
+    |---|---|---|
+    | 降价 | 收入（单价↓）/ 毛利率 | `price_discount` |
+    | 增加资本开支 | 现金流量表投资活动 / CapEx | `capex_requirement` |
+    | 库存 | 资产负债表存货 | `inventory_buildup` |
+    | 应收 | 资产负债表应收账款 | `receivables_buildup` |
+    | 融资 | 筹资活动 / 净负债 | `financing_need` |
+
+    ★ 每项用开放 dict：§D.1 的 schema 块把每一项都写作 `{...}`（内部结构由各业务自定）；
+      **不伪造**一个设计未给的结构。
+    ★ `financing_need` 同时是 `Ch4 §D.4`（回改 R-09）环境层"融资条件"的**唯一承载**：
+      环境项**不得**独立成模块（`Ch3` 模块 denylist）。
+    ★ `growth_quality ∈ {high, medium, low}` **不在此**：`§D.3` 明写它由
+      `scripts/valuelayer/growth_quality.py` 的 "四项分项判定"（`ROIIC vs WACC` / 现金转化率 /
+      营运资金变动 / 融资依赖）算出，是**派生输出**（走 `derived/`），且 `§D.1` 的
+      driver schema 块**未**把它列为字段 ⇒ 不作为 `Driver` 的字段（`N4.1-14`
+      "收入增速不得作投资回报代理"的替代指标集同属派生层）。
+    """
+
+    price_discount: dict[str, Any] = Field(default_factory=dict)
+    capex_requirement: dict[str, Any] = Field(default_factory=dict)
+    inventory_buildup: dict[str, Any] = Field(default_factory=dict)
+    receivables_buildup: dict[str, Any] = Field(default_factory=dict)
+    financing_need: dict[str, Any] = Field(default_factory=dict)
+
+
+class Driver(TimeMixin):
+    """增长驱动（`Ch4 §D.1`，新表 `facts/drivers.jsonl`）。
+
+    ★ **本表是驱动对象的唯一真源**（`Ch4 §G.1②`：baseline 只持 `driver_refs[]`）；
+      `baseline.driver_model` 收窄为**可由本表派生的估值假设投影**，见 `DriverModel` /
+      `project_driver_model`。
+    ★ `source_class` 取值域逐字（`Ch4 §D.1` + 回改 **R-21**）：**7 类 + `mixed` 兜底**
+      （`N4.1-03` 验收："每驱动有来源标签，可统计分布"）。
+    ★ `dependencies` ：`Ch4 §G.1③`（"③ 增长确定性 | `drivers[].realization_stage/timeline/confidence`
+      + `dependencies[]`"）+ `N4.2-02`（"`drivers.dependencies[]`（条件类型枚举）"）。
+      设计在 `04_.../01_需求拆解.md N4.2-02` 给出的是**中文语义**枚举
+      （"依赖客户预算、供应认证、产能、能源、交付、商业化或竞争条件"），**未给 token**；
+      且其"扩展"列写着"枚举扩展" ⇒ 本实现取**自由字符串**（token 化待需求方确认，见报告），
+      以免"翻译出来的 token"被当成设计契约。
+    """
+
+    driver_id: str
+    business_id: str
+    source_class: Literal[
+        "demand_expansion", "share", "price", "product_mix",
+        "unit_usage", "penetration", "new_business", "mixed",
+    ]
+    duration: Duration
+    financial_link: FinancialLink
+    cost_of_growth: CostOfGrowth
+    realization_stage: DriverRealizationStage = DriverRealizationStage.tbd
+    timeline: str = TBD
+    """兑现时间（`Ch4 §E.1`）。取值域 = **具体日期/期间，或分档** `{≤1Q, 1–4Q, 1–3Y, >3Y}`。
+
+    ★ 分档 token 含 `≤` / `–` 等**非小写下划线**字符 ⇒ 若做成枚举会与
+      `纪律 7`（`enum token 英文小写 + 下划线`）冲突（同 `OpportunityType` 的 T-02 形态）。
+      故保持自由字符串并在此**逐字记下设计分档**，不擅自改写设计 token。
+    """
+    confidence: ConfidenceLevel = ConfidenceLevel.tbd
+    importance_class: ImportanceClass
+    dependencies: list[str] = Field(default_factory=list)
+    """依赖条件类型（`Ch4 §G.1③` / `N4.2-02`），见类 docstring 末条的取舍说明。"""
+    assumptions: list[str] = Field(default_factory=list)
+    """该驱动支撑的**经营假设**（自由文本）。
+
+    ★ 为什么这里需要它（`baseline.driver_model` 的收窄方案要求"可由对象派生"）：
+      - `Ch5 §A.1` 逐字：`baseline.driver_model` / `drivers` = "估值的**经营假设**来源"；
+      - `Ch4 §G.1②` 逐字：`driver_refs[]` "（含 `financial_link`、`duration`、`cost_of_growth`）"；
+      - `01_产品目标与核心闭环/01_需求拆解.md §2.4` 把四要素之一的"**假设**"的承载写成
+        `baseline.driver_model` / `valuation_inputs`；
+      - `scripts/trace/traceback.py::TraceabilityResult.assumptions` 的注释逐字写着
+        "`baseline.driver_model` / `valuation_inputs`(three-source)"，实现读的是
+        `baseline.driver_model[].assumptions`。
+      ⇒ 假设文本必须**在唯一真源（driver 对象）上**有位置，`driver_model` 才能是**投影**
+        而不是"唯一持有者"（否则 `driver_model` 必然是第二个真源）。
+      `Ch4 §D.1` 的 schema 块未列该字段 —— 此为本实现依上列四处设计的补齐，已登记。
+    """
+
+
 # ─────────────────────────── ⑤ 研究基线 ───────────────────────────
 
 class ValueStateRefs(_Base):
@@ -739,26 +1253,248 @@ class ValueStateRefs(_Base):
 
 
 class DriverModel(_Base):
-    """驱动模型（`Ch9 §N9.1-17` / `Ch4 §D`）。驱动 → 科目 → 每股指标三层映射。"""
+    """**估值所需的假设投影**（`Ch9 §N9.1-17` / `Ch4 §A.1` / `Ch5 §A.1`；本批次**语义收窄**）。
+
+    ★ 为什么收窄（本批次解决的**双真源**风险）：
+      驱动对象的唯一真源是新的 `facts/drivers.jsonl`（`Driver`）；而 `Ch5 §A.2` 又说
+      "估值经营假设 = `baseline.driver_refs[].financial_link`"。若 `baseline.driver_model`
+      继续自带 `driver_name` / `realization_stage` / `is_primary` / `linked_accounts`，
+      它就会与 `Driver` 的对应字段**各自演进** ⇒ 同一概念两个真源。
+      ⇒ **保留但收窄为投影**：只承载 `{driver_id, assumptions[]}`，
+      即**身份 + 可从 driver 对象取到的假设文本**（见 `project_driver_model`）。
+    ★ `assumptions` 的出处与"为什么 driver 上也要有该字段"：见 `Driver.assumptions` 的 docstring
+      （`Ch5 §A.1` / `01_产品目标与核心闭环/01_需求拆解.md §2.4` / `Ch4 §G.1②`）。
+    ★ 被移除的四个字段**不是丢信息**：`driver_name` / `realization_stage` / `is_primary` /
+      `linked_accounts` 全部可从 `drivers.jsonl` 的对象取到（`realization_stage` → `Driver.realization_stage`；
+      `linked_accounts` → `Driver.financial_link.accounts`；`is_primary` → `Driver.importance_class == high` 的
+      分类结果，由 §D.2 的"上限/分级"逻辑产出）。真仓库该字段为 `[]` ⇒ 零影响。
+    """
 
     driver_id: str
-    driver_name: str
-    realization_stage: DriverRealizationStage = DriverRealizationStage.tbd
-    is_primary: bool = False
-    linked_accounts: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
 
 
+def project_driver_model(
+    baseline: "Baseline", drivers: dict[str, "Driver"]
+) -> list[DriverModel]:
+    """由 `baseline.driver_refs[]` + `drivers.jsonl` **派生** `baseline.driver_model`（估值假设投影）。
+
+    ★ 为什么需要一个**代码里的**派生函数（而不是只在测试里比对）：
+      存在一条真实的派生路径，`driver_model` 才**不可能**变成第二个真源 ——
+      任何消费方想拿估值假设，都可以用本函数现算，无需相信落库的那份副本。
+      本函数是**纯函数**（不做 I/O）：`drivers` 由调用方从 `schema.store.read_models(root, "drivers")` 取。
+
+    ★ 缺失引用**响亮失败**（不静默跳过）：`driver_refs` 指向不存在的 driver ⇒ `KeyError`。
+      这与 `schema.store::jsonl_path` 对未知 stem 的态度一致（本项目禁静默兜底）。
+    """
+    out: list[DriverModel] = []
+    for ref in baseline.driver_refs:
+        driver = drivers[ref]
+        out.append(DriverModel(driver_id=driver.driver_id, assumptions=list(driver.assumptions)))
+    return out
+
+
+class MoatProtectedObject(_Base):
+    """单项保护对象（`Ch4 §F.1`：`protected_objects` 的元素 `{object, strength, evidence}`）。"""
+
+    object: MoatProtectedObjectKind          # 字段名逐字取 §F.1 的 `object`
+    strength: MoatStrength
+    evidence: list[str] = Field(default_factory=list)   # claim_id[]
+
+
+class RealSubstitute(_Base):
+    """**真实替代方案**（`Ch4 §J.1` 的 `N4.3-03` 实现载体逐字：
+    `moat.real_substitutes[{switch_trigger, switching_cost, actual_switch_evidence}]`）。
+
+    ★ `N4.3-03` 验收："替代方案含切换触发/成本/**真实实例**" —— 故
+      `actual_switch_evidence` 是"真实发生过切换"的证据引用，不是推测。
+    """
+
+    switch_trigger: str = TBD
+    switching_cost: str = TBD
+    actual_switch_evidence: list[str] = Field(default_factory=list)
+
+
+class Moat(_Base):
+    """护城河条目（`Ch4 §F.1` yaml 块 + `§F.2` 反误判 + `§F.3` 硬隔离）。
+
+    §F.1 原文块：
+
+    ```yaml
+    - moat_id: MOAT-NVDA-01
+      mechanism: "..."                       # 优势机制说明（必填）
+      protected_objects:                     # ⊆ 六类，多选
+        - {object: share|pricing|..., strength: high|medium|low, evidence: [claim_id...]}
+      origin_class: durable_advantage|product_cycle|supply_demand_cycle|operational_efficiency
+      cross_generation_survival: true|false|unknown
+      evidence_claims: [claim_id...]
+    ```
+
+    - `mechanism` **必填**（`N4.3-01` 验收："护城河条目含 mechanism"；`§F.2` 的
+      `is_durable_moat()` 也要求 `moat.mechanism_explained`）。
+    - `cross_generation_survival` 的 `unknown` 用 `None` 表达（三值：`True` / `False` / `None`）。
+    - `cross_generation_competitiveness` 来自 `N4.3-05`（"承 `N9.1-07` 代际"，验收："有代际维度竞争评估"）；
+      设计**未给**取值域 ⇒ 自由字符串 + `tbd`，不伪造枚举。
+    - `writer` 是 `§F.3` 断言 A3 的落点："写路径断言 `moat.writer ∈ {research_skill, human}`，
+      不含 `price_ingest`" —— **在 schema 层物理隔离**（对应 C45-5："股价上涨不自动证明护城河增强"）。
+    """
+
+    moat_id: str
+    mechanism: str
+    protected_objects: list[MoatProtectedObject] = Field(default_factory=list)
+    origin_class: MoatOriginClass | None = None
+    cross_generation_survival: bool | None = None       # None = `unknown`（§F.1 三值之一）
+    cross_generation_competitiveness: str = TBD
+    real_substitutes: list[RealSubstitute] = Field(default_factory=list)
+    evidence_claims: list[str] = Field(default_factory=list)
+    writer: MoatWriter = MoatWriter.research_skill
+
+
+class ValuationRange(_Base):
+    """区间表达（`Ch5 §D.6`："区间用 `range{low, high}` 表达宽度"）。"""
+
+    low: Decimal | None = None
+    high: Decimal | None = None
+
+    @field_serializer("low", "high")
+    def _ser_bounds(self, v: Decimal | None) -> str | None:
+        """Decimal 以字符串序列化落 JSONL（`Ch9 §3.4.5`，避免浮点误差）。"""
+        return None if v is None else str(v)
+
+
+class Valuation(_Base):
+    """估值对象（`Ch4 §A.1/§A.3/§G.1⑤` + `Ch5 §D.1/§D.2/§D.6`）。
+
+    `Ch4 §A.1` 逐字：`baseline.valuation` 用于"与反向估值对照，形成独立判断"，
+    并在建议里承载"收益比较"；`§G.1⑤` 把它与 `valuation_inputs` / `historicals` /
+    `DerivedValue` 引用并列为"⑤ 财务与估值"。
+
+    ★ **不重复 DerivedValue 的字段**（避免双真源）：`§D.2` 要求"每个 price range →
+      `formula` + `operands` + `method_version` + `share_count` + `compute_date`（N5.3-02 / N9.2-02）"，
+      而这些正是 `DerivedValue` 自身的字段 ⇒ 本对象只持 `formula_ref` 指向 `derived/` 的那条记录
+      （沿用 `Ch4 §C.4` 对"DerivedValue 引用"的既有命名 `formula_ref: <DerivedValue ref>`），
+      **不再落一份副本**。
+    ★ `probability` 默认 `None`（`§D.6` + `N5.3-07` + `C45-2`）：**不默认 50/50**，
+      "仅当有依据才填"；且 `§J` 的 `J9` 明写依据"须为 `DerivedValue` 且标注来源"。
+    """
+
+    method_class: str = TBD
+    """估值方法（`Ch5 §D.1`：`rules/valuation-methods.yaml` 的 `method_class → business.model_class` 路由）。
+    注册表驱动 ⇒ 自由字符串；未注册类型归入 `generic` 并标注（§D.1 末句）。"""
+    range: ValuationRange = Field(default_factory=ValuationRange)
+    probability: Decimal | None = None
+    formula_ref: str = TBD
+    forecast_assumptions: list[str] = Field(default_factory=list)
+    """`Ch5 §D.2` 的 `inputs.forecast_assumptions` —— 来自第四章 `drivers`。"""
+    valuation_params: list[str] = Field(default_factory=list)
+    """`Ch5 §D.2` 的 `inputs.valuation_params` —— 方法参数（模型估计 / 人工设定）。"""
+
+    @field_serializer("probability")
+    def _ser_probability(self, v: Decimal | None) -> str | None:
+        return None if v is None else str(v)
+
+
+class AssumptionInput(_Base):
+    """五因素之一的估值输入（`Ch5 §D.5`：**事实输入 / 模型估计 / 人工设定三类分开存**）。
+
+    - `input_source` **必填**：不声明来源的假设不得入库（"三类分开存"是 `N5.3-04` 的验收面）；
+    - `author` + `modified_at`：`§D.5` 逐字"谁有权写 `manual`：授权用户……须留痕（`author` + `modified_at`）"
+      ⇒ 当 `input_source=manual` 时二者**必须非空**（下面的校验器强制）；
+      同时这也是 `§D.4` "无历史假设"倒填检测的输入（`assumption_source=manual` 且无变更记录 → 标可疑）。
+    - `conflict_status`：`§D.5` 逐字"冲突时标 `conflict_status=\"unresolved\"`"（**不用加权**，并列展示）。
+    """
+
+    value: str = TBD
+    """点或区间（`Ch5 §B.4` 的"取值方式"列：收入 CAGR / 终值增长、利润率、capex/收入与 ROIIC、WACC、高增长年数）。"""
+    input_source: InputSource
+    author: str = ""
+    modified_at: datetime | None = None
+    conflict_status: str = ""
+
+    @model_validator(mode="after")
+    def _check_manual_needs_trace(self) -> "AssumptionInput":
+        if self.input_source is InputSource.manual and not (self.author and self.modified_at):
+            raise ValueError(
+                "input_source=manual 必须留痕（author + modified_at）—— Ch5 §D.5："
+                "人工设定须可复核；无留痕的 manual 亦是 §D.4 的倒填可疑项"
+            )
+        return self
+
+
+class ValuationInputs(_Base):
+    """估值假设的五因素（`Ch4 §A.3`："`valuation_inputs` | 三类输入（fact/model_estimate/manual）
+    | `N5.3-04`（第五章写，第四章承载）"；`Ch4 §G.1⑤`："`valuation_inputs`（五因素→每股价值）"）。
+
+    字段名逐字取 `Ch5 §B.4` 的假设组合表：
+    `growth_assumption` / `margin_assumption` / `reinvestment_assumption` /
+    `risk_assumption` / `duration_assumption`。
+    ★ `risk_assumption`（WACC / 折现率）另有一处逐字来源：`Ch5 §D.5` 的 **R-09**——
+      环境层"利率与折现要求"作为估值假设输入注入，且 `input_source ∈ {model_estimate, manual}`。
+    """
+
+    growth_assumption: AssumptionInput | None = None
+    margin_assumption: AssumptionInput | None = None
+    reinvestment_assumption: AssumptionInput | None = None
+    risk_assumption: AssumptionInput | None = None
+    duration_assumption: AssumptionInput | None = None
+
+
+class Increment(_Base):
+    """增量更新**六要素**（`Ch4 §H.3` / `N4.5-01`；`N4.5-04` 另有 `reason`）。
+
+    `Ch4 §H.3` 逐字的 increment 块：
+
+    ```json
+    "increment":{"old_judgment":"...","new_info":["CLM-x"],"new_judgment":"...",
+                 "affected_period":"FY2027Q1","supporting_evidence":["CLM-x"],
+                 "counter_evidence":[]}
+    ```
+
+    ★ `new_info` **必须非空**（`min_length=1`）：`§H.2` 逐字 ——
+      "状态变更函数**仅在 `new_info != ∅ AND affects_dimension` 时运行**；否则保持原值 + 记录核查"，
+      `N4.5-05` 亦要求"无新信息日不改变状态、不产新信号"。
+      ⇒ 一条 `new_info` 为空的 `increment` 就是"制造出来的变化"，**在 schema 层拒绝**。
+    ★ `reason` 来自 `N4.5-04`（"`increment.reason`（引用新信息）| 每次状态变更含原因"）。
+    """
+
+    old_judgment: str
+    new_info: list[str] = Field(min_length=1)
+    new_judgment: str
+    affected_period: str
+    supporting_evidence: list[str] = Field(default_factory=list)
+    counter_evidence: list[str] = Field(default_factory=list)
+    reason: str = ""
+
+
 class Baseline(TimeMixin):
-    """研究基线（`Ch9 §N9.1-17` / `§N9.1-18`）。主键 = (`company_id`, `version`)，**版本化**。"""
+    """研究基线（`Ch9 §N9.1-17` / `§N9.1-18`）。主键 = (`company_id`, `version`)，**版本化**。
+
+    本批次按 `Ch4 §G.1` 六项深度 → 字段映射、`§A.3`（第 22 行同一张表）"本章新增字段"、
+    `§G.4` 盈利/未盈利必填分支、`§H.3` 增量行 逐条补齐。**新增字段一律可选且带默认值**
+    （`Ch9 §3.4.2` 追加式不可变 ⇒ 契约变更不得让既有行失效）。
+
+    | 六项深度（`Ch4 §G.1`） | 字段 |
+    |---|---|
+    | ① 业务与产业位置 | `business_refs[]` + `relations`（既有表） |
+    | ② 增长驱动 | `driver_refs[]`（对象在 `drivers.jsonl`） |
+    | ③ 增长确定性 | `drivers[].realization_stage/timeline/confidence` + `dependencies[]`（在 `drivers.jsonl`） |
+    | ④ 护城河 | `moat[]` |
+    | ⑤ 财务与估值 | `valuation_inputs` + `historicals`（= 既有 `historical_numeric_claims`）+ `valuation.formula_ref` |
+    | ⑥ 价格与行动 | 引用第五章三份判断 + 第七章建议（**不落本表**，`Ch4 §A.1`） |
+    """
 
     baseline_id: str
     company_id: str
     version: int
     business_mechanism: str                                        # 经营机制（"谁付费 + 转换链路各段"）
-    historical_numeric_claims: list[str] = Field(default_factory=list)   # 历史基线数据（引用 NumericClaim）
+    historical_numeric_claims: list[str] = Field(default_factory=list)
+    """历史基线数据（引用 `NumericClaim`）。★ 即 `Ch4 §G.1⑤` 逐字写的 `historicals`
+    —— **沿用既有字段名**，不新增 `historicals` 造第二个名字（`R-15 ③` 一概念一字段名）。"""
     driver_model: list[DriverModel] = Field(default_factory=list)
+    """驱动模型（**估值假设投影**，见 `DriverModel`）。真源 = `drivers.jsonl`。"""
     value_state_refs: ValueStateRefs = Field(default_factory=ValueStateRefs)
+    """价值状态（`Ch4 §H.1` 的 `value_state`；`§H.4②` 的 `value_state_refs()` 输出四字段
+    `growth_momentum_state` / `certainty_state` / `moat_level` / `moat_state` —— 与 `ValueStateRefs` 逐一对应）。"""
     conclusion_version: int = 1
     evidence_claim_ids: list[str] = Field(default_factory=list)
     falsifiers: list[str] = Field(default_factory=list)            # 与结论**同版本写入**（`Ch1 §C.1` G1-01）
@@ -766,6 +1502,55 @@ class Baseline(TimeMixin):
     verification_conditions: list[str] = Field(default_factory=list)
     falsifier_written_seq: int | None = None
     expiry_review: date | None = None
+
+    # ── `Ch4 §A.3` / `§0` 表第 22 行：`baselines` 上的新增字段 ──
+    business_refs: list[str] = Field(default_factory=list)         # business_id[]（§B.1 引用；N4.1-01）
+    driver_refs: list[str] = Field(default_factory=list)           # driver_id[]（§D.1 引用；N4.1-03）
+    moat: list[Moat] = Field(default_factory=list)                 # 护城河条目（§F；N4.3）
+    valuation: Valuation = Field(default_factory=Valuation)        # 估值对象（§A.1；与反向估值对照）
+    valuation_inputs: ValuationInputs = Field(default_factory=ValuationInputs)
+    increment: Increment | None = None                             # 增量更新六要素（§H.3；N4.5-01）
+
+    # ── `Ch4 §H.3` 追加行里的另两个字段（同一代码块逐字）──
+    prev_version_id: int | None = None
+    """上一版本（`Ch4 §H.3` 的 `"prev_version_id":7`；`01_产品目标与核心闭环/01_需求拆解.md §2.4`
+    把"上一版本"列为结论可追溯四要素之一）。`None` = 首版（结构上不存在上一版本，与 `T-10` 同例）。"""
+    changed_by: str = ""
+    """`Ch4 §H.3` 的 `"changed_by":"research_skill"` —— 谁改的（供 `§H.2` "无新信息不产新版本"的复核）。"""
+
+    # ── `Ch4 §G.4` 未盈利 / 盈利公司的**必填增量**（`N4.2-04` / `N4.2-05`；阶段② 必填）──
+    #    ★ 设计把"按 `is_profitable` 分支要求非空"交给**校验器**（属阶段② 的
+    #      `scripts/valuelayer/`，不在本批次）⇒ 本表只提供**字段载体**，字段本身可选，
+    #      以免在 schema 层把"尚未研究"与"不适用"混为一谈。
+    is_profitable: bool | None = None                              # None = 未判定（不猜）
+    business_model_note: str = TBD                                 # 未盈利必填
+    path_to_profitability: list[str] = Field(default_factory=list)  # 未盈利必填（里程碑）
+    cash_runway: str = TBD                                         # 未盈利必填
+    funding_need: str = TBD                                        # 未盈利必填
+    unit_economics: str = TBD                                      # 未盈利必填
+    margin_persistence: str = TBD                                  # 盈利必填
+    fcf_persistence: str = TBD                                     # 盈利必填
+    reinvestment_return: str = TBD                                 # 盈利必填
+    share_dilution_impact: str = TBD                               # 盈利必填
+
+    @model_validator(mode="after")
+    def _check_driver_model_is_projection_of_driver_refs(self) -> "Baseline":
+        """`driver_model` 只能是 `driver_refs` 的**投影** ⇒ 其 `driver_id` 必须全部被引用。
+
+        ★ 这条断言就是"不留双真源"的**机器绑定**：任何"凭空写一条 driver_model 而
+         没有对应 driver 对象"的行都会被拒 —— 那种行正是第二个真源。
+        ★ 反向**不**强制（`driver_refs` 可以多于 `driver_model` 的条数）：估值只需要
+         一部分驱动做经营假设；但**多出来的引用不能凭空生成投影**（由 `project_driver_model` 决定取哪些）。
+          故这里只查"投影 ⊆ 引用"。
+        ★ 旧行兼容：既有行的 `driver_model` 为 `[]` ⇒ 恒通过（真仓库实测 `[]`）。
+        """
+        orphan = sorted({d.driver_id for d in self.driver_model} - set(self.driver_refs))
+        if orphan:
+            raise ValueError(
+                f"driver_model 引用了不在 driver_refs 中的 driver_id: {orphan} —— "
+                "driver_model 只能是 driver_refs + drivers.jsonl 的投影（不得成为第二个真源）"
+            )
+        return self
 
 
 # ─────────────────────────── ⑥ 价格与预期 ───────────────────────────
@@ -809,6 +1594,92 @@ class ExpectationSample(TimeMixin):
     #   而 P-07 禁的正是"无 source_id 的聚合预测"。由
     #   `tests/conflict/test_schema_no_aggregate.py` 抓出。
     source_id: str = Field(min_length=1)
+
+
+# ─────────── ⑥b 价格隐含要求（`Ch5 §B.2`；本批次新增 1 张表 `facts/implied_requirements.jsonl`） ───────────
+#
+# ★ 为什么必须是**多组解**（`Ch5 §B.1` 逐字）：价格 `P = f(g, m, r, k, T)` 是**欠定方程** ——
+#   一个 P 对应**无穷多组**解。"故**必须展示多组解**，否则会把某一解误当'市场的唯一真相'"。
+# ★ 反解**不得**回灌 baseline（`Ch5 §B.5` 裁决 C45-1："反解 = 诊断（不产建议），正估 = 定价"；
+#   禁令由 `FORBIDDEN_BASELINE_SOURCES = {"implied_solution", "implied_requirements"}` 承载，
+#   属阶段② 的 `scripts/pricelayer/order_guard.py`，**不在本批次**）。
+# ★ 时间语义：**不叠加 `TimeMixin`** —— `§B.2` 已逐字给出系统时间字段 `computed_at`；
+#   再叠一套 `analyzed_at`/`first_seen_at` 会为同一概念造第二个字段名（`Ch2 §C.2 R-15 ③`）。
+
+
+class ImpliedAssumptions(_Base):
+    """反解时**固定不动**的四类假设（`Ch5 §B.2` 的 `assumptions{growth, margin, reinvestment, risk, duration}`）。
+
+    键名逐字取 §B.2 的 JSON；每类的内部结构 §B.2 写作 `{...}`（由 §B.4 的"取值方式"决定：
+    点或区间、收入 CAGR / 终值增长、capex/收入 与 ROIIC、WACC、高增长年数）⇒ 用开放 dict，
+    **不伪造**一个设计未给的内层结构。
+    被解出的那一类（`solved_variable`）在同一份 JSON 里也保留其区间解（`range`）。
+    """
+
+    growth: dict[str, Any] = Field(default_factory=dict)
+    margin: dict[str, Any] = Field(default_factory=dict)
+    reinvestment: dict[str, Any] = Field(default_factory=dict)
+    risk: dict[str, Any] = Field(default_factory=dict)
+    duration: dict[str, Any] = Field(default_factory=dict)
+
+
+class ImpliedRange(_Base):
+    """区间表达（`Ch5 §B.2`：`"range":{"low":"...","high":"..."}`；`§D.6`："区间用 `range{low, high}`"）。
+
+    ★ 用 `Decimal` + 字符串序列化（`Ch9 §3.4.5`）：区间值要参与算术与比较，
+      用字符串会在下游被迫二次解析；`Ch9 §3.4.5` 明令"数值以字符串存储，避免浮点误差" ⇒
+      存的是 `Decimal`，落盘时序列化为字符串。
+    ★ 允许 `None`：反解在**参数不可行**时（`feasible=false`）可以只给出一侧边界；
+      用 `None` 表达"该侧无解"，**不得**用 0 冒充。
+    """
+
+    low: Decimal | None = None
+    high: Decimal | None = None
+
+    @field_serializer("low", "high")
+    def _ser_bounds(self, v: Decimal | None) -> str | None:
+        return None if v is None else str(v)
+
+
+class ImpliedRequirement(_Base):
+    """价格隐含要求（`Ch5 §B.2`，新表 `facts/implied_requirements.jsonl`）。
+
+    §B.2 的输出结构逐字（本类的字段与其一一对应）：
+
+    ```json
+    {"implied_id":"IMP-001","solution_set_id":"SET-nvda-2026-09-15",
+     "security_id":"sec_nvda","price_snapshot_id":"SNP-...","current_price":"...",
+     "assumptions":{"growth":{...},"margin":{...},"reinvestment":{...},
+                    "risk":{...},"duration":{...}},
+     "solved_variable":"reinvestment",                    // 固定其余 4 类，解第 5 类
+     "range":{"low":"...","high":"..."},                  // 区间表达
+     "alternative_explanations":["...","..."],            // 替代解释
+     "feasible":true,"method_version":"v1","computed_at":"..."}
+    ```
+
+    ★ `solution_set_id` 聚合一组解（§B.2："展示层呈现'使当前价格成立的**解集**'
+      （多组 + 每组区间 + 替代解释）"）⇒ 同一 `solution_set_id` 下会有多行。
+    ★ `price_snapshot_id` 必填：反解是**针对某个行情快照**做的；缺了它，"使当前价格成立"
+      这句话没有可核对的时点（`Ch9 §N9.1-19` 的行情必须绑定公司行动口径版本）。
+    ★ **本类不叠加 `TimeMixin`**（见本节顶部第 3 条注）：`computed_at` 已是设计给的系统时间。
+    """
+
+    implied_id: str
+    solution_set_id: str
+    security_id: str
+    price_snapshot_id: str
+    current_price: Decimal
+    assumptions: ImpliedAssumptions
+    solved_variable: SolvedVariable
+    range: ImpliedRange
+    alternative_explanations: list[str]
+    feasible: bool
+    method_version: str
+    computed_at: datetime
+
+    @field_serializer("current_price")
+    def _ser_current_price(self, v: Decimal) -> str:
+        return str(v)
 
 
 # ─────────────────────────── ⑦ 基准与建议 ───────────────────────────
@@ -973,7 +1844,7 @@ class Task(TimeMixin):
     eval_result: EvalResult | None = None
     eval_result_history: list[EvalResult] = Field(default_factory=list)   # append-only
     # ── 核查记录（`Ch1 §C.2`）── 控制面**子记录**，落 `facts/tasks.jsonl`
-    #      （不新增第 19 个 JSONL：`Ch9 §3.3.3` 的 18 个**不得增删改名**）
+    #      （不新增 JSONL：`facts/` 的表集合**不得增删改名**）
     check_record: "CheckRecord | None" = None
     # ── 模型规则修改记录（N9.1-30）──
     rule_change_records: list[dict[str, Any]] = Field(default_factory=list)
@@ -989,8 +1860,9 @@ class DependencyEdge(_Base):
     kind: str
 
 
-# ─────────────────────────── 18 JSONL → 模型映射（唯一真源） ───────────────────────────
-# `Ch9 §3.3.3` 表逐字对应；**不得增删改名**。
+# ─────────────────────────── JSONL → 模型映射（唯一真源） ───────────────────────────
+# `Ch9 §3.3.3` 表（**经需求方 2026-09-16 裁定由 18 扩至 22**，见文件头）逐字对应；
+# **不得增删改名**。stem 清单的唯一真源是 `schema/stems.py::JSONL_STEMS`（见其 docstring）。
 
 JSONL_MODELS: dict[str, type[BaseModel]] = {
     # 公司与证券
@@ -1001,6 +1873,7 @@ JSONL_MODELS: dict[str, type[BaseModel]] = {
     # 产品与关系
     "products": Product,
     "relations": Relation,
+    "relation_flows": RelationFlow,
     # 来源与主张
     "sources": Source,
     "claims": Claim,
@@ -1008,11 +1881,14 @@ JSONL_MODELS: dict[str, type[BaseModel]] = {
     # 事件与影响
     "events": Event,
     "impacts": Impact,
-    # 研究基线
+    # 研究基线（业务单元 + 增长驱动 + 版本化结论）
+    "businesses": Business,
+    "drivers": Driver,
     "baselines": Baseline,
     # 价格与预期
     "prices": PriceSnapshot,
     "expectations": ExpectationSample,
+    "implied_requirements": ImpliedRequirement,
     # 基准与建议
     "benchmarks": Benchmark,
     "recommendations": Recommendation,
@@ -1022,7 +1898,18 @@ JSONL_MODELS: dict[str, type[BaseModel]] = {
     "dependency_edges": DependencyEdge,
 }
 
-assert len(JSONL_MODELS) == 18, f"facts/ 必须恰好 18 个 JSONL（Ch9 §3.3.3），实为 {len(JSONL_MODELS)}"
+# ★★ 机器绑定：映射的**键集合**必须与 stem 注册表**逐一相等**。
+#    在**导入时**断言 ⇒ 漂移即 `AssertionError`（响亮失败），不会退化成
+#    "有人加了第 23 张表却忘了同步夹具清空清单"（那会让测试重新依赖"真仓库恰好有什么"）。
+assert set(JSONL_MODELS) == set(JSONL_STEMS), (
+    "JSONL_MODELS 与 stem 注册表不一致（唯一真源 = schema/stems.py::JSONL_STEMS）："
+    f"仅在 JSONL_MODELS: {sorted(set(JSONL_MODELS) - set(JSONL_STEMS))}；"
+    f"仅在 JSONL_STEMS: {sorted(set(JSONL_STEMS) - set(JSONL_MODELS))}"
+)
+assert len(JSONL_STEMS) == 22, (
+    f"facts/ 必须恰好 22 个 JSONL（需求方 2026-09-16 裁定：18 → 22，见 `T-13` 备选②），"
+    f"实为 {len(JSONL_STEMS)}"
+)
 
 
 def model_for(jsonl_stem: str) -> type[BaseModel]:

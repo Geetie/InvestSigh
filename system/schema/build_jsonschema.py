@@ -68,7 +68,7 @@ def build(include_inlined_recommendation: bool = True) -> dict[str, Any]:
     doc_out: dict[str, Any] = {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": "https://investsigh.local/schema/facts.schema.json",
-        "title": "AI 产业链研究 Agent · facts 8 类对象 schema（Ch9 §3.3.3）",
+        "title": "AI 产业链研究 Agent · facts 对象 schema（Ch9 §3.3.3；表数经需求方裁定由 18 扩至 22）",
         "description": (
             "唯一真源 = facts/*.jsonl。本文件由 system/schema/build_jsonschema.py 生成，"
             "生成物需与 system/schema/models.py 一致。"

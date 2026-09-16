@@ -74,17 +74,27 @@ _ENSURE_DIRS = ("views", "raw", "derived", "snapshots", "index")
 #
 # 正确契约 = **测试自己声明自己的数据**：夹具给空真源，需要的用例自行 `append_records` 写入。
 # 这样"仓库里有没有真实数据"与"测试是否通过"**彻底解耦**（这也是能让真实数据进主线的前提）。
-_TRUTH_STEMS = (
-    "industry_nodes", "companies", "securities", "business_positions", "products", "relations",
-    "sources", "claims", "claim_propagation", "events", "impacts", "baselines", "prices",
-    "expectations", "benchmarks", "recommendations", "dependency_edges", "tasks",
-)
+#
+# ★★ **这张清单不得手工维护**（`G-RC-02` / `G-RC-07` 的**同一族缺陷**，本项目已栽 4 次）：
+#   若将来有人加了第 23 张表而忘了改这里，夹具清空真源时就会**漏掉那张表** ⇒
+#   测试又会依赖"真仓库恰好有什么"。故本清单**直接派生**自 `schema/stems.py::JSONL_STEMS`
+#   （stem 的唯一真源）；而 `schema/models.py` 在导入时断言 `JSONL_MODELS` 的键集合
+#   与它**逐一相等** ⇒ 三处不可能漂移。
+#   `tests/unit/test_schema_expand.py` 另有显式断言（含 `JSONL_MODELS` 的集合相等），
+#   使"漂移"以**可读的失败**呈现，而不是只在某个夹具里安静地少清一个文件。
+#
+# ★ 为什么是 `schema.stems` 而**不是** `schema.models`：后者要构造 pydantic 模型，
+#   实测首次导入 ≈1.2s，而本文件**每个 pytest 批次都会加载**（最轻的 `conflict` 批仅 0.3s）。
+#   清单的**内容**与 pydantic 无关，故放进 `stems.py`（导入 ≈0ms）。
+from schema.stems import JSONL_STEMS  # noqa: E402
+
+_TRUTH_STEMS: tuple[str, ...] = tuple(JSONL_STEMS)
 
 
 def _reset_truth_source(target: Path) -> None:
     """把夹具副本的**真源**清空：`facts/*.jsonl` 归零、`raw/` 只留 `.gitkeep`。
 
-    只动**数据**，不动**结构**：18 个 JSONL 仍然全部存在（`Ch9 §3.3.3`「不得增删改名」的断言照旧可测），
+    只动**数据**，不动**结构**：22 个 JSONL 仍然全部存在（`Ch9 §3.3.3`「不得增删改名」的断言照旧可测），
     `raw/` 目录仍在（`full_text_read` 的路径可写）。
     """
     facts = target / "facts"

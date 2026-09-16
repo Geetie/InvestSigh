@@ -17,7 +17,13 @@ python system/scripts/checks/schema_sync_guard.py [code_root]
 三条断言：
 ① 生成物与"从当前 `models.py` 现算出来的"**逐字节等价**（规范化后）
 ② 每个对象都 `additionalProperties: false`（与 `ConfigDict(extra="forbid")` 对齐）
-③ `objects` 映射恰好覆盖 18 个 JSONL（不得多、不得少）
+③ `objects` 映射与**事实表注册表**（`schema/models.py::JSONL_MODELS`）**集合逐一相等**
+
+★ 第 ③ 条**不写字面表数**（原先写死 18）：
+  表数由需求方 2026-09-16 裁定从 18 扩至 22（见 `schema/stems.py` 脚注 / `T-13` 备选②），
+  而"写死一个数"意味着**每次表数变化都要来改这里** —— 那是手工台账，迟早漂移。
+  改为从**被检 `code_root` 的注册表**现取 ⇒ 表数只有一处真源（`stems.py` → `JSONL_MODELS`），
+  且"生成物多一张/少一张表"依然会被拦（集合不相等即违例）。
 
 ★ **必须加载「被检 `code_root`」的 schema 包**，不能加载本脚本自己那份 ——
   否则对副本做注入测试时，本守卫会永远看着真仓库的 models.py 而"通过"。
@@ -93,9 +99,14 @@ def check(root: Path) -> CheckReport:
     build = _load_builder(root)
     fresh = build()
 
+    # ★ 注册表 = **被检 code_root** 的 `JSONL_MODELS`（`build()` 的 `__globals__` 里已绑定，
+    #   见 `_load_builder` 的 docstring）。表数**不写字面量**，由此派生。
+    registry: dict[str, object] = build.__globals__["JSONL_MODELS"]
+
     report.scanned["committed_defs"] = len(committed.get("defs") or {})
     report.scanned["fresh_defs"] = len(fresh.get("defs") or {})
     report.scanned["objects"] = len(committed.get("objects") or {})
+    report.scanned["registry_stems"] = len(registry)
 
     if _normalized(committed) != _normalized(fresh):
         # 精确定位到哪个 def 漂了，便于直接修
@@ -125,9 +136,15 @@ def check(root: Path) -> CheckReport:
         )
 
     objects = committed.get("objects") or {}
-    if len(objects) != 18:
+    if set(objects) != set(registry):
         report.violations.append(
-            Violation("Ch9 §3.3.3", f"schema.objects 应为 18 项，实为 {len(objects)}", SCHEMA_RELPATH.as_posix())
+            Violation(
+                "Ch9 §3.3.3",
+                "schema.objects 与事实表注册表（JSONL_MODELS）不一致："
+                f"多出 {sorted(set(objects) - set(registry))}；"
+                f"缺少 {sorted(set(registry) - set(objects))}",
+                SCHEMA_RELPATH.as_posix(),
+            )
         )
 
     for name, definition in (committed.get("defs") or {}).items():

@@ -112,7 +112,8 @@ class IdempotencyRecord(_RegBase):
 # ───────────────────────── 登记层真源映射（**接线的关键**） ─────────────────────────
 #
 # ★ 分工（两者**不得混用**）：
-#   - `schema/models.py::JSONL_MODELS` = `facts/` 的**恰好 18 个**（不得增删改名）
+#   - `schema/models.py::JSONL_MODELS` = `facts/` 的事实表集合（**不得增删改名**；
+#     表数唯一真源 = `schema/stems.py::JSONL_STEMS`，这里**不写数字**以免漂移）
 #   - `REGISTRY_MODELS`                = `registry/` 与 `audit/` 的登记层真源
 #
 # ★ 为什么必须有这张表：这些模型曾被造出来但**无人导入**（孤儿模块）——

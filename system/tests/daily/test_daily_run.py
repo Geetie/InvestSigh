@@ -79,7 +79,7 @@ def _append_raw(root: Path, stem: str, rows: list[dict]) -> None:
 def _seed_step6_inputs(root: Path, *, company_end_price: str, benchmark_end_price: str) -> None:
     """播种**能走到 step 6（建议生成）的最小真源**（`G-RC-02`）。
 
-    最小集 = **2 张真源表**（均落在 `Ch9 §3.3.3` 的 18 个 JSONL 内，**不新增文件**）：
+    最小集 = **2 张真源表**（均落在 `facts/` 的事实表集合内，**不新增文件**）：
 
     | 表 | 行 | 为什么这些够 |
     |---|---|---|

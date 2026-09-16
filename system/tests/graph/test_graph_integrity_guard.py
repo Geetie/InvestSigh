@@ -40,7 +40,7 @@ def test_missing_edge_file_is_input_error(code_root: Path) -> None:
     """**反向对照（`G-05`）**：真源边表 **缺失** → 非零退出，输出可辨"缺失"（非"空"）。
 
     与上一条（空 → `exit 0` + `NO_EDGE_DATA`）成对；锚点 `Ch9 §3.3.3`
-    （`facts/` 的 18 个 JSONL 不得增删改名，缺失即结构性违例）。
+    （`facts/` 的 JSONL 不得增删改名，缺失即结构性违例）。
     """
     missing = code_root / "facts" / "dependency_edges.jsonl"
     missing.unlink()

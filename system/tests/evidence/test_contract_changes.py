@@ -1,7 +1,7 @@
 """T-11 / T-12 契约变更测试（`ws/evidence-fix` · 批次 10 收口）。
 
 - **T-11**：`ClaimPropagation.kind` 承载 `Ch6 §C.3` 人工别名覆盖（`manual_alias_override`），
-  且 **旧行（无 `kind` 字段）仍合法**；不新增第 19 个 JSONL（`Ch9 §3.3.3`）。
+  且 **旧行（无 `kind` 字段）仍合法**；不为它新开 JSONL（`Ch9 §3.3.3`）。
 - **T-12**：`Claim.independent_evidence_count` 可选字段（默认 `None` = 未计算），
   且 **真仓库既有 claim 行仍合法**（`Ch9 §3.4.2` 追加式不可变）。
 - **生成物一致**：`schema_sync_guard` 绿（改模型不改生成物会被逮）。
@@ -120,10 +120,19 @@ def test_t11_payload_forbidden_for_plain_restatement() -> None:
 
 
 def test_t11_no_19th_jsonl() -> None:
-    """★ T-11 硬约束：`facts/` 仍恰好 **18** 个 JSONL（`Ch9 §3.3.3` 不得增删改名）。"""
-    assert len(JSONL_MODELS) == 18
+    """★ T-11 硬约束：**`claim_alias` 仍然没有自己的 JSONL**（`Ch6 §C.3` 的人工覆盖并入 `claim_propagation`）。
+
+    ★ 表数**不写字面量**：需求方 2026-09-16 裁定 `facts/` 由 18 扩至 22
+      （`schema/stems.py` / `T-13` 备选②），但那条裁定**与本用例要守的命题无关** ——
+      这里证的是"人工别名覆盖**没有**新开表"，故改为断言映射与 stem 注册表**逐一相等**
+      （既不硬编码数字，也不会因为别人加表而假红）。
+    """
+    from schema.stems import JSONL_STEMS
+
+    assert len(JSONL_MODELS) == len(JSONL_STEMS)
+    assert set(JSONL_MODELS) == set(JSONL_STEMS)
     assert "claim_propagation" in JSONL_MODELS
-    assert "claim_alias" not in JSONL_MODELS, "不得新增第 19 个 JSONL（并入 claim_propagation）"
+    assert "claim_alias" not in JSONL_MODELS, "不得为人工别名覆盖新开 JSONL（并入 claim_propagation）"
 
 
 # ───────────────────────── T-12 · `Claim.independent_evidence_count` ─────────────────────────
@@ -175,4 +184,4 @@ def test_schema_generated_matches_models() -> None:
     """`schema_sync_guard` 绿：生成物 `facts.schema.json` == 由 `models.py` 现算（`Ch9 §3.3.3`）。"""
     result = run_gate("scripts/checks/schema_sync_guard.py", SYSTEM_ROOT)
     assert result.returncode == 0, result.stdout
-    assert "scanned objects: 18" in result.stdout
+    assert f"scanned objects: {len(JSONL_MODELS)}" in result.stdout

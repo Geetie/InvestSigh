@@ -1,6 +1,6 @@
 """数据契约单测（`Ch9 §2.1/§2.2/§3.3.3` · `Ch11 §C/§F` · 纪律 7/8）。
 
-这些断言对应"**唯一真源**"的硬约束：18 个 JSONL **不得增删改名**、
+这些断言对应"**唯一真源**"的硬约束：`facts/` 的 JSONL **不得增删改名**、
 枚举 token **英文小写 + 下划线**、五类时间齐备、`Recommendation` 上**不得**
 出现仓位/止损/共识类字段、追加式写入 + 索引可全量重建。
 """
@@ -28,27 +28,35 @@ from schema.store import (
     rebuild_index,
 )
 
-# ───────────────────────── 18 个 JSONL：唯一真源，不得增删改名 ─────────────────────────
+# ─────────────── `facts/` 的 JSONL：唯一真源，不得增删改名 ───────────────
+#
+# ★ 这张清单是**测试侧独立写下的设计契约**（22 个 stem，按设计分组）——
+#   刻意**不**从 `schema.stems` 现取：若测试只与注册表自身比较，就是同义反复（恒真）。
+#   "注册表 ↔ 夹具清空清单"那层绑定在 `tests/unit/test_schema_expand.py`。
+# ★ 扩表出处：需求方 2026-09-16 裁定 18 → 22（`businesses` / `drivers` /
+#   `implied_requirements` / `relation_flows`），见 `schema/stems.py` 脚注与 `T-13` 备选②。
 
 EXPECTED_JSONL = {
     "industry_nodes", "companies", "securities", "business_positions",
     "products", "relations",
+    "relation_flows",
     "sources", "claims", "claim_propagation",
     "events", "impacts",
-    "baselines",
+    "businesses", "drivers", "baselines",
     "prices", "expectations",
+    "implied_requirements",
     "benchmarks", "recommendations",
     "tasks",
     "dependency_edges",
 }
 
 
-def test_jsonl_set_is_exactly_18_and_named_as_designed() -> None:
-    assert len(M.JSONL_MODELS) == 18
+def test_jsonl_set_is_exactly_22_and_named_as_designed() -> None:
+    assert len(M.JSONL_MODELS) == 22
     assert set(M.JSONL_MODELS) == EXPECTED_JSONL
 
 
-def test_facts_dir_holds_exactly_the_18_files() -> None:
+def test_facts_dir_holds_exactly_the_22_files() -> None:
     facts = Path(__file__).resolve().parents[2] / "facts"
     stems = {p.stem for p in facts.glob("*.jsonl")}
     assert stems == EXPECTED_JSONL, f"facts/ 与设计不符，差异: {stems ^ EXPECTED_JSONL}"
