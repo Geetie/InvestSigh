@@ -698,3 +698,26 @@ note: 判据台账[nvidia_sample]：函数体内已绑定 2 条，声明为 auto
 2. 只有**确认无冲突**后，才在 main 工作树里**一次性**完成 `git merge --no-ff`（**不加 `--no-commit`**，与提交在**同一次工具调用**内完成）；
 3. ★ **不允许**把 main 工作树留在 `--no-commit` 的中间态**跨工具调用**（这正是 `G-61` 的成因）；
 4. 确有需要留窗口 ⇒ **显式声明**"main 正在合并，请勿提交"。
+
+### 口径 11 扩展 · ★★ 「缺口判定」的**三步联合**（`auditor-batch11` 提出，主理人采纳）
+`rev-list --count main..b > 0` **只作线索，不作结论**：它会**把一个"合并方向是 main→b"的 merge-only 提交也算进去** ⇒ 假阳性。
+⇒ **结论一律由内容差分决定**：
+1. `git diff --numstat main..b -- system/` —— **有输出** ⇒ 该分支有内容未入主干 ⇒ **真缺口**；
+2. 无输出且 `main..b` 只有 merge 提交 ⇒ **不算缺口，但记一条"待清理的 merge-only 提交"**；
+3. ★ **三者必须都做**：`main..b` 计数（线索）+ `git diff --numstat main..b -- system/`（**结论**）+ **`main:path` 是否存在**（存在性）。
+   ★ **`main:path` 的存在性判别必须用** `git cat-file -e main:<path>`：**`git rev-parse main:<path>` 在路径不存在时会把参数原样回显到 stdout**（非空）⇒ **"不存在"被判成"存在"**（`ws-degrade-contract` 实测）。
+   ⇒ 两条工具陷阱（`rev-parse` 回显 / `rev-list` 计 merge）**都表现为"整齐的假结论"**，与 `grep \|` 同族。
+
+### `G-61` 条文（`ws-step56-skipped` 拟稿，主理人采纳并入缺口登记）
+> **`G-61` 的强制意义：`main` 工作树在合并过程中处于"逐文件中间态"，此时共享钩子会让它树上的判据去检各工作树，
+> 造成"合法者被误判"** —— 这是真实假缺陷来源，必须修（改钩子为 `"$(dirname -- "$0")/../.."` 或去 `cd`），
+> **不能**依赖"主理人合并要快"这条流程纪律。
+
+### 环境口径 · zsh `nomatch` 会**中止整条命令**（`ws-criterion-effectiveness` 实测）
+```
+$ chmod -R u+w rules/*.yaml rules/*.yml    # zsh: no matches found: rules/*.yml
+```
+⇒ **zsh 默认 `nomatch`**：**任一 glob 无匹配 ⇒ 整条命令在展开阶段中止** ⇒ **`rules/*.yaml` 的 chmod 也没执行**
+（后续 `lock_rules.py` 可能因此报不明原因失败）。
+⇒ **规矩**：这类命令用 `chmod -R u+w rules/`（**目录**，无 glob）或 `setopt +o nomatch` 显式关闭。
+★ 与 `G-53`/`V-07` 同族：**`rules/` 的权限操作极易被"工具行为"静默降级**，且**症状指向别处**。
