@@ -249,15 +249,24 @@ BATCHES: Mapping[str, Batch] = {
     #     `tests/guards` 与 `injection-c` 的夹具残留 ⇒ **同一个工作树里有第二个 pytest 会话**
     #     （`V-05` 禁止的情形）。取上沿正是 `V-02` 说的"让偶发抖动不误报"。
     #     ⇒ 见到本批超时的**第一步**不是改断言，而是先确认有没有第二个会话在同一工作树里跑。
-    #   ★ 不取 300s：`V-02` 明说"设得过宽，卡死就退化成「跑得慢」"——
-    #     300s 对 6.85s 的片 = 44×，等于把故障探测器关掉。
+    #   ★ **最终取值 = 六片统一 300s**（`V-02` 允许的上限）；理由与上面那条相反方向的取舍：
+    #     ① 作为**故障探测器**，300s 对**工作树实测**是 2.7~4.7×：
+    #        实测（工作树内 `verify.py --batch <片>`）a 70.74~80.92s · b 63.72s · f 110.13s；
+    #     ② `V-02` 的"4~8×"对 f（110.13s × 4 = 440s）**越过了 300s 上限** ⇒ 与 `daily`
+    #        （43s 实测 → 180s，4.2×）同一处境：**取不超过上限的最大值**；
+    #     ③ 反过来，"取 8× 隔离副本实测（6.85s）"= 60s 会**必然误报**：f 的隔离实测 12.53s
+    #        对应工作树 110.13s（8.8×），60s 上限当场变红 ⇒ `G-01`「天天误报的门禁一定会被
+    #        关掉」。**故一律以工作树实测为标定基准，不用隔离副本的秒数**。
+    #     ★ 遗留风险（如实登记）：f 的余量只有 2.7×，若**同时**有第二个 pytest 会话在同一
+    #       工作树里跑（`V-05` 禁止的情形），f 仍可能被拖到 300s 以上而**假红**。
+    #       见到本批超时的**第一步不是改断言**，而是先确认有没有第二个会话在同一工作树里跑。
     "injection-a": Batch(
         "injection-a", "tests/injection/ 分片 A（审计回归 + 链路接线）",
         _pytest(
             "tests/injection/test_audit_regressions.py",
             "tests/injection/test_chain_steps_wiring.py",
         ),
-        90.0, _exit_zero,
+        300.0, _exit_zero,
     ),
     "injection-b": Batch(
         "injection-b", "tests/injection/ 分片 B（判据有效性 + 守卫防御性）",
@@ -265,7 +274,7 @@ BATCHES: Mapping[str, Batch] = {
             "tests/injection/test_criterion_effectiveness.py",
             "tests/injection/test_guards_defensive.py",
         ),
-        150.0, _exit_zero,
+        300.0, _exit_zero,
     ),
     "injection-c": Batch(
         # `test_guards_reject_a.py` 是原 `test_guards_reject.py`（41 例）的**前半 21 例**：
@@ -275,7 +284,7 @@ BATCHES: Mapping[str, Batch] = {
             "tests/injection/test_guards_reject_a.py",
             "tests/injection/test_append_only.py",
         ),
-        150.0, _exit_zero,
+        300.0, _exit_zero,
     ),
     "injection-d": Batch(
         "injection-d", "tests/injection/ 分片 D（守卫拦截 B 半 + 幂等 + 时间契约）",
@@ -284,7 +293,7 @@ BATCHES: Mapping[str, Batch] = {
             "tests/injection/test_idempotency_rows.py",
             "tests/injection/test_time_contract.py",
         ),
-        210.0, _exit_zero,
+        300.0, _exit_zero,
     ),
     "injection-e": Batch(
         "injection-e", "tests/injection/ 分片 E（提示注入 + rules 锁）",
@@ -292,7 +301,7 @@ BATCHES: Mapping[str, Batch] = {
             "tests/injection/test_prompt_injection.py",
             "tests/injection/test_rules_lock.py",
         ),
-        90.0, _exit_zero,
+        300.0, _exit_zero,
     ),
     "injection-f": Batch(
         "injection-f", "tests/injection/ 分片 F（阶段闸门 + 接线守卫 + 分片绑定）",
@@ -301,7 +310,7 @@ BATCHES: Mapping[str, Batch] = {
             "tests/injection/test_wiring_guards.py",
             "tests/injection/test_shard_coverage.py",
         ),
-        120.0, _exit_zero,
+        300.0, _exit_zero,
     ),
     "root": Batch(
         "root", "tests/test_ch11_invariants.py（Ch11 不变量）",
