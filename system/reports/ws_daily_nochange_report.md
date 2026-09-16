@@ -580,5 +580,24 @@ RESULT: PASS（0 violations）                     exit=0
 ```
 
 ★ **代码 commit（评审对象）** = `f86542c`（`f86542cb0183ca5a3165bbb33ffcfe52b1e75713`，3 文件 +792/−7）。
-之后的 `258902f`（本报告 §⑥）与两次 `Merge branch 'main'` **不含任何代码改动**
-（`git diff f86542c..HEAD -- system/scripts system/tests` 为空即可核验）。
+之后的 `258902f` / `14dc6ac`（本报告）与两次 `Merge branch 'main'` **不含本单的代码改动**。
+核验方式（**注意别用错命令**）：
+
+```
+$ git show --numstat --oneline f86542c | tail -4
+f86542c fix(g1-04): 无变化日不再误判空执行 —— 换成可判定正向标记
+499	0	system/reports/ws_daily_nochange_report.md
+ 65	7	system/scripts/tasks/gap_to_task.py
+228	0	system/tests/daily/test_no_change_day.py          ← 本单只碰这 3 个
+
+$ git diff --numstat main..HEAD
+545	0	system/reports/ws_daily_nochange_report.md
+ 65	7	system/scripts/tasks/gap_to_task.py
+228	0	system/tests/daily/test_no_change_day.py          ← 相对 main 的**净**改动，同样只有这 3 个
+```
+
+★ **一个容易写错的坑，如实记下**：`git diff f86542c..HEAD -- system/tests` **不是空的** ——
+它显示 `system/tests/unit/test_schema_expand.py | 164 +++…`。
+那**不是我的改动**，而是两次 `git merge main` 带进来的**别人的**提交。
+⇒ 判断"某单改了哪些代码"必须用 `git show <本单commit> --numstat` 或 `git diff main..HEAD --numstat`，
+**不能**用「本单 commit..HEAD」，否则会把合并进来的他人改动算到自己头上（或反过来漏看）。
