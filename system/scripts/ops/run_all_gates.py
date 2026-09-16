@@ -58,6 +58,11 @@ GATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     # 真实主张全部是 `full_text_read=false`，故这类此前**没有任何**引文↔原文机械校验。
     # 本守卫**只**管辖 `false` 那支（互补而非重复，G-06 唯一真源）。
     ("quote_provenance_guard.py", "scripts/checks/quote_provenance_guard.py", ()),
+    # ── 缺口 G-55：**同一语义、两种载体形态、零机器绑定** ──
+    # `rules/scenario.yaml::scenario_tags`（YAML 列表）↔ `scenario_guard.py::ScenarioTag`（枚举）
+    # 值相同、各自自洽，改一侧另一侧不会红 ⇒ 漂移可无限期存在。
+    # ★ 这是**合并的产物**（两条流各自自洽），单流自检不可能发现 —— 故必须有一道**跨载体**的门。
+    ("scenario_tag_binding_guard.py", "scripts/checks/scenario_tag_binding_guard.py", ()),
 )
 
 TIMEOUT_MARK = "TIMEOUT"

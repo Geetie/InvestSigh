@@ -301,12 +301,30 @@ step 4 的增长护城河判断、step 7/8 的 hook —— 均**不在本单范�
 只堵住"把 `produced` 原样抄进 `skipped`"这一种最偷懒的伪造。
 真正的兜底仍是**换人审计 + 读代码**。
 
-### 4.5 `tests/daily` 的间歇性 `error` 是宿主环境的
+### 4.5 `tests/daily` 的间歇性 `error` 是**宿主删除预算**耗尽的**早期阶段**（`G-60` 的实测数据点）
 
 见 §2.5 末行。两次整目录运行分别落在 `test_change_day_signal_is_counted` 与
 `test_param_ref_mismatch_is_loud` 上，均是**夹具 teardown** 期间由宿主
 `safe-delete` shim 抛出的 `OSError`（`SAFE_DELETE_FAIL_CLOSED` / `FSMoveObjectToTrashSync failed (-5000)`），
-两个用例**单独跑都通过**。与 `G-RC-10`（夹具非确定性）同族，**非本次引入**，我未处置。
+两个用例**单独跑都通过**。
+
+★ **归因更正（我在交付后据 `ws-ch2-rules` 的现场实测更正）**：我当时只写到"与 `G-RC-10` 同族、
+宿主环境现象"。现在有更硬的解释 —— 这是 **`G-60`（宿主删除预算是"宿主回合级 + 全流共享"的累计量）**
+的**未越顶阶段**：预算尚未被击穿时，表现为**零星、漂移的 teardown `ERROR`**；
+一旦累计数越过阈值（现场实测 `count=100267 > threshold=99999`），连"删 1 项"都被拒
+⇒ `pytest_sessionstart` 的 `_clear_work_dir()` 必失败 ⇒ **所有**需要夹具的用例集体 `ERROR`。
+
+⇒ **同一个根因的两个阶段**，观测量不同但性质相同。因此：
+
+- 本报告 §2.5 里 `tests/daily` 那条 `1 error` **不得**被读成本次改动的回归；
+- 同理，**任何**在删除预算耗尽之后跑出的 `E` / `INTERNALERROR` 也**不得**被读成缺陷 ——
+  先看输出里有没有 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`；
+- ★ **本报告 §2 的全部绿色证据，均采集于删除预算耗尽之前**（时间戳早于现场 `22:32` 的越顶实测）。
+  交付后我**没有**再重跑任何需要夹具的批次，故不对"此刻是否仍绿"作任何断言 ——
+  在 `G-60` 存在期间，"跑出绿"这件事本身不构成新证据。
+- **未越顶阶段**这一观测量是本条对 `G-60` 的**增量**：它说明该缺陷**不是**"只在配额彻底耗尽后
+  才发作"，而是**越顶前就已经在零星制造假红**（且落在随机用例上）—— 这正是"假缺陷淹没真违规"
+  的典型机理，也说明修 `_clear_work_dir()` 的**紧迫性高于**"等下一个宿主回合"。
 
 ### 4.6 我没有覆盖到的
 
@@ -323,6 +341,15 @@ step 4 的增长护城河判断、step 7/8 的 hook —— 均**不在本单范�
 
 ## 5. 复跑指引（审查者用）
 
+★ **前置条件（`G-60`）**：宿主对"每一轮删除操作"有**累计**配额（实测阈值 `99999`）。
+一旦某回合累计越顶，**连删 1 项都被拒** ⇒ `pytest_sessionstart` 的 `_clear_work_dir()` 失败
+⇒ 下面三条 pytest 命令会**集体 `ERROR`**（不是断言失败）。
+
+⇒ **不要把那种 `E` 当成本单的回归**：先看输出里有没有
+`SAFE_DELETE_BULK_CONFIRM_REQUIRED`。**也不要**用 `--no-report`、环境变量或改
+`_clear_work_dir()` 去绕过 —— 绕过安全机制得到的绿不算证据（本批次已立此纪律）。
+正确处置只有两条：**等下一个宿主回合**，或**用户授权批量删除**。
+
 ```bash
 cd /Users/gaza/Developer/InvestSigh/.worktrees/ws-step56-skipped
 
@@ -334,6 +361,7 @@ python -m pytest system/tests/compute  -q -p no:cacheprovider
 python -m pytest system/tests/decision -q -p no:cacheprovider
 
 # 门禁（提交时钩子会自动跑 pre-commit）
+# ★ 这条不建夹具、不删整目录，故**不受 G-60 影响**，可随时跑
 python system/scripts/ops/run_all_gates.py --timeout 30
 ```
 
