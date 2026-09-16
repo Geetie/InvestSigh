@@ -490,6 +490,23 @@ def stage_core_chain_passed(root: Path) -> tuple[bool, list[Violation], dict[str
     return (not v), v, {"relations": len(relations), "impacts": len(impacts)}
 
 
+def _holds_valid_result(task: Mapping[str, Any]) -> bool:
+    """该行是否**持有有效结果** —— 首日豁免（追加序判定）的谓词。
+
+    取**两载体并集**而非单选，避免"只看一个字段"造成的漏判：
+
+    - `last_valid_result_ref` 非空：降级链上的显式引用（一次降级后保留的成果）；
+    - `output_refs` 非空 **且** `status == "done"`：正常完成任务的产出引用。
+
+    ★ 为什么必须并集：若只看 `last_valid_result_ref`，则"某轮正常完成、下一轮失败"的场景
+      会被误判为首日（前一行是 `done`，它没有 `last_valid_result_ref`）→ **漏报真违规**。
+      这与本项目"allowlist > denylist、穷尽优于抽样"的口径一致（`R-06`）。
+    """
+    if task.get("last_valid_result_ref"):
+        return True
+    return task.get("status") == "done" and bool(task.get("output_refs"))
+
+
 def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str, int]]:
     """时点可核 + **覆盖可核** + 任务状态可核 + **降级保留上次有效结果**（`Ch11 §B`）。
 
@@ -509,25 +526,46 @@ def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
     v: list[Violation] = []
     # 「降级保留上次有效结果」（Ch8 §E.4）：失败任务必须保留上一次有效结果的引用，
     # **不得置 null、不得标最新**。
-    # ★ **首日豁免**（批次 10 审计 `G7`：口径冲突）：
-    #   `scripts/daily/degrade.py` 对**首日**降级行（`status=failed` 且 `last_valid_result_ref=None`）
+    #
+    # ★ **首日豁免** —— 判据 = 「**该失败行之前，没有任何行持有有效结果**」。
+    #
+    #   需求来源（批次 10 审计 `G7`：两个口径打架）：
+    #   `scripts/daily/degrade.py` 对首日降级行（`status=failed` 且 `last_valid_result_ref=None`）
     #   判 **0 违例**（依据 `G-03`：无上次有效结果时**如实为 None**，不得编一个）；
-    #   而本函数原先**无条件**判 FATAL → **同一批行两个口径打架**，且真仓库每次日更都会多一条红。
-    #   → 判据改为**可判定**：若该失败运行的 `run_date` 是**全部运行记录中最早的一次**，
-    #     则"上次有效结果"**结构上不可能存在** ⇒ 记显式 note、**不判违例**；
-    #     否则（存在更早的运行）仍判 FATAL —— **不放松对"真的丢了引用"的要求**。
-    _earliest = min(
-        ((_t.get("parent_context") or {}).get("run_date") or "") for _t in tasks
-    ) if tasks else ""
+    #   而本函数原先**无条件**判 FATAL → 同一批行两个口径打架，且真仓库每次日更都会多一条红。
+    #
+    #   ★★ 为什么**不**用"run_date 最早" —— 我第一版就是这么写的，**是死代码**，批次 11 自查抓到：
+    #     ① `_write_check_record()` 写的 `parent_context` 只有
+    #        `{"orchestrator": "pipeline.run_daily"}`，**不含 `run_date`**；run_date 真正落在
+    #        `check_record.run_date`。旧实现只取 `parent_context.run_date` → 每个任务都取到 `""`
+    #        → `min(...)` = `""` → `_earliest` 为**空串**（假值）→ 豁免分支**永不进入**
+    #        → `degrade_first_day_exempt` 恒为 0，红条一条没少（实测：2 条违例 / 0 条豁免）。
+    #        这正是本项目反复出现的形态：**"改了"但机器上不生效**（声明与实现脱节）。
+    #     ② 即便取对 run_date，"同一 run_date 内先成功后失败"的次序仍无法用它区分
+    #        —— 同日重跑 `_r1` 会被误判成首日。
+    #     → 改用**追加序**：`facts/tasks.jsonl` 是 append-only 真源，**行序即时序**
+    #       （与 `recorded_seq` 的版本语义同源）。判据于是变成：
+    #         "此前**无**任何行持有有效结果" ⇒ 结构上不可能保留 ⇒ **豁免**；
+    #         "此前**有**行持有有效结果"   ⇒ 引用本该在却丢了 ⇒ **仍判 FATAL**（强度未放松）。
+    #     ★ 该判据**可判定且穷尽**：每个 failed 行只落入"豁免"或"违例"之一（`R-06 ①`），
+    #       不存在第三态、不依赖任何关键词或名单。
+    #
+    #   ★ `degrade_first_day_exempt` **必须为可观测计数**（不是静默 `continue`）：
+    #     上一版正是"静默失效"—— 计数恒 0 而没人注意。计数走 `scanned`，
+    #     在门禁输出里逐字可见（`scanned daily_run.degrade_first_day_exempt: N`）。
     first_day_exempt = 0
-    for t in tasks:
+    for _idx, t in enumerate(tasks):
         if t.get("status") == "failed" and not t.get("last_valid_result_ref"):
-            _rd = (t.get("parent_context") or {}).get("run_date") or ""
-            if _rd and _earliest and _rd == _earliest:
+            if not any(_holds_valid_result(_prior) for _prior in tasks[:_idx]):
                 first_day_exempt += 1
                 continue
             v.append(
-                Violation("daily_run", f"{t.get('task_id')} 失败但未保留 last_valid_result_ref", "facts/tasks.jsonl")
+                Violation(
+                    "daily_run",
+                    f"{t.get('task_id')} 失败但未保留 last_valid_result_ref"
+                    "（此前已有行持有有效结果 ⇒ 引用本该在，不得置空）",
+                    "facts/tasks.jsonl",
+                )
             )
     # 时点可核（Ch9 §2.2）：每条 check_record 必须能被 run_date 定位
     for cr in check_records:
