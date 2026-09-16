@@ -319,13 +319,18 @@ ch11         exit=0  8 passed in 0.13s
 同轮在**真 worktree** 上的独立复验（`pre-commit` 与关键用例）：
 
 ```bash
-cd system && sh scripts/ops/pre-commit.sh          # exit=0，12 道门禁全 PASS
+cd system && sh scripts/ops/pre-commit.sh          # exit=0，11 道门禁全 PASS
 python scripts/ops/run_all_gates.py --timeout 30   # 非零计数 1（唯一红项 = traceback.py，见 G-2）
 python -m pytest tests/unit -q                     # 70 passed，exit=0
 python -m pytest tests/guards -q                   # 56 passed，exit=0
 python -m pytest tests/unit/test_schema_expand.py tests/injection/test_append_only.py -v
 #   → 38 passed，exit=0（28 + 10，逐条 PASSED；含 §1.4 的机器绑定用例与 §1.6/§1.8 的 glob 覆盖用例）
 ```
+
+> **订正（见 §6.9）**：本节初稿写「**12** 道门禁」系**笔误** —— 实测
+> `scripts/ops/pre-commit.sh` 里 `run_gate` 调用为 **11** 次
+> （`:54` `append_only_guard` … `:86` `criterion_effectiveness_guard`；`:40` 是函数**定义**，不计入）。
+> 计数以 `§6.7 G-8` 处为准。
 
 ```
 └─ schema_sync_guard：scanned objects: 22 / scanned registry_stems: 22   RESULT: PASS
@@ -865,3 +870,18 @@ for d in unit conflict guards injection compute graph validators claim decision 
 # ④ 收尾（隔离树用完即删）
 git -C /Users/gaza/Developer/InvestSigh worktree remove --force /tmp/wsse-git
 ```
+
+### 6.9 订正登记：`§2.2.1` 的「12 道门禁」应为「**11** 道」
+
+- **原文**（`§2.2.1` 的复现块注释）：`# exit=0，12 道门禁全 PASS`
+- **实测**：`scripts/ops/pre-commit.sh` 里 `run_gate` 调用**共 11 次**
+  —— `:54 append_only_guard`、`:57 rules_lock_guard`、`:60 registry_schema_guard`、
+  `:63 schema_sync_guard`、`:66 conflict_scan(L1-L5)`、`:69 no_placeholder_guard`、
+  `:72 injection_guard`、`:75 verification_policy_guard`、`:79 shell_var_guard`、
+  `:82 graph_integrity_guard`、`:86 criterion_effectiveness_guard`。
+  （`:40` 是 `run_gate()` 的**函数定义**，数它就会多算 1 —— 即 "12" 的来源。）
+- **已改**：`§2.2.1` 的该行改为「11 道门禁全 PASS」，并在其后加了一条指向本节的订正说明。
+- **为什么留着这条**：同一份文档里两个数字不一致（`§6.7` 写 11、`§2.2.1` 写 12）
+  比一个错数字更糟 —— 复核者无法判断哪个可信。**如实订正并留痕**，而不是静默改掉。
+- **不受影响**：`pre-commit` 的实际行为（`exit=0`、全部门禁放行）与门禁**集合**均未变，
+  仅计数陈述有误；本报告其余以该次 `pre-commit` 为前提的结论**不变**。
