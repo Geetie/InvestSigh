@@ -151,9 +151,31 @@ f 片 31 ⇒ **33 > 32**。**我在自己的卡里破了自己那条授权上限
 
 ### 6.5 自我更正与登记（★ 逐条推翻/修正我自己先前写下的东西）
 
-① **`grep` 在本会话是坏的**：`which grep` → `…/shim/brokered-bin/grep`（broker 包装器，**静默返回空**），
-   `/usr/bin/grep` 才正常。⇒ 我先前所有"grep 无匹配"的结论**一律不可信**，本轮全部改用
-   Grep 工具 / `/usr/bin/grep` / Python 复算。**这是我这条证据链上最危险的一个缺陷。**
+① ★★ **`grep` 这条我改口两次，最终机制如下（有决定性实验，别再传我中间那版）**：
+   我在本轮广播里说"裸 `grep` 是 broker 包装器、**静默返回空**"——**这个因果是错的**。
+   受控实验（同一文件、同一模式，交替做）：
+
+   | 命令 | 结果 | Python 真值 |
+   |---|---|---|
+   | `grep -c "def \|import" verify.py`（裸） | **0**（exit=1） | 20 |
+   | `/usr/bin/grep -c "def \|import" verify.py` | **20** | 20 |
+   | `grep -c "def " verify.py`（裸，**无** `\|`） | **8** ✓ | 8 |
+   | `grep -c "倍数" 报告.md`（裸） | **12** ✓ | 12 |
+   | `grep -c 'aaa\|ccc' /tmp/fx_pipe.txt`（裸 / 绝对路径） | **0** / **2** | 2 |
+
+   身份对拍：裸 `grep` = `…/shim/brokered-bin/grep` → 软链到 **`codebuddy-toybox-dispatch`**，
+   `grep --version` 自报 **`toybox 0.8.13 (is not GNU grep 9.0)`**；
+   `/usr/bin/grep` = **`BSD grep, GNU compatible 2.6.0-FreeBSD`**。
+   ⇒ **真因是"两个不同的正则引擎"**：toybox 的极简 grep **不支持 `\|` 交替**（GNU BRE 扩展），
+   遇到它就**当成匹配不到**，**返回 0 命中 + exit 1 且无任何诊断** ⇒ 与"真的没有"**观测上不可区分**
+   （`G-62` 的正题）。**不是"包装器把输出吃掉了"**。
+   ⇒ **主理人最初的解释（"该 grep 的 BRE 不支持 `\|`"）在机制上是对的**，错只错在"是 BSD grep"这半句
+   —— 本机 `/usr/bin/grep` 反而**支持** `\|`；越界的是 **toybox**。**是我用一个错误机制把主理人从正确解释上劝退的**，
+   已单独更正（`口径`/`G-62` 若已按错机制落纸，须一并改）。
+   ⇒ **正确的操作口径**：裸 `grep` **只在不含 GNU 扩展语法时可信**；凡用 `\|`（或其它 GNU BRE 扩展），
+   改用 **`-E` 写 `a|b`**、**多个 `-e`**、**Grep 工具**、或 **`/usr/bin/grep`**。
+   ⇒ 我先前两条"零命中"（本报告那条 `3-4\|实测耗时\|…`、`sitecustomize.py` 那条）**都是 `\|` 模式** ⇒
+   本条机制**完整解释**了它们，与"包装器吃输出"无关。本轮所有结论已用 Python / Grep 工具复算。
 ② **配额是按会话累积、且不随轮次恢复** —— 本轮开新轮次后仍报 `count: 100218~100224`
    （= 上轮冻住的 `99998` + 本次目标项数），同一个 `conversationRequestId`。
    ⇒ **更正我 Phase-A 写下的"恢复边界是新的一轮用户消息"**：真实边界是**新会话**（或宿主解除）。
@@ -162,9 +184,15 @@ f 片 31 ⇒ **33 > 32**。**我在自己的卡里破了自己那条授权上限
    于是 pytest 报 `INTERNALERROR` ⇒ `exit=1`。**这就是"门禁不可信"的完整链条。**
 ③ **我"主干只删了我的注释"是错的**：那是基于 `| head -60` **被截断的 diff** 得出的。
    无截断后是 **4 个 hunk / 35 行**，第 4 个 hunk 正是主干**新增**的 `PYTEST_MISSING_MARKER` 归因分支。
-④ **`pricelayer` "0 个夹具用例"是我 grep 漏了**：`tests/pricelayer/conftest.py:46` 有
-   `shutil.rmtree(root.parent, ignore_errors=True)` —— **它自带夹具**（所以 `E` 对它有效，
+④ **`pricelayer` "0 个夹具用例"是我算错的 —— 但★不是 `grep` 的错**（这条归因我第一版也写错了）：
+   我当时用的是 **Python 扫描**（`\bcode_root\b|\bwork_dir\b|conftest|_guard_common`），
+   它只看 `tests/pricelayer/*.py` **文件内部**，而夹具定义在**同级的 `tests/pricelayer/conftest.py`**
+   这个文件**自身**里（其内容并不含字面词 `conftest`）⇒ **扫描设计**漏了，与 grep 方言无关。
+   复算（Python）：该 conftest 有 **6 个 `@pytest.fixture`**、第 46 行有
+   `shutil.rmtree(root.parent, ignore_errors=True)` ⇒ **它自带夹具**（所以 `E` 对它有效，
    而 `D′` 对它**无效**）。`verify.py` 里那句"本批 0 个夹具用例 ⇒ 13-F 不会改善它"**只对 `D′` 成立**。
+   ★ **教训**：把失败一律推给"工具坏了"很容易**掩盖真正的缺陷**（这一次真因是我的**判据设计**）；
+   归因要到"哪个判据、哪个文件被漏掉"为止，不能停在"工具"。
 ⑤ **微基准探针的读数互相矛盾，未解，不用它推任何结论**：同一进程内
    `rmtree(250 项目录)=0.031s 且被阻断`、`rmtree(5 项目录)=0.449s 且**未**被阻断`、
    `unlink` 在 `/tmp` 下 0.000s（该路径被 shim 明确豁免 `_should_under_os_tmp_dir`，**我的探针设计有 bug**）。
@@ -674,7 +702,7 @@ PY="${HOME}/.workbuddy/binaries/python/envs/default/bin/python"   # 必须有 py
 | 倍数 < 4× | 上调超时，**上限 300s**；若已顶到 300s，**登记为薄余量**并写清"见到超时先查有没有第二个会话"（`V-05`） |
 | `exit=124` | **不合格**（`V-03`），当"该批坏了"处理；**不要**先加超时 |
 | 报 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` | **不是失败**：`count` 与上轮相近 ⇒ 配额已耗尽且**不会恢复** ⇒ **换会话**（★ 本轮更正：换轮次**无效**）；**不要**重试、**不要**调 `CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD`（那是把闸门抬高骗过它，属绕过） |
-| 报 `INTERNALERROR ... SystemExit: 1` + `SAFE_DELETE_BULK_CONFIRM_REQUIRED` | 同上，**且**该批可能留下 `tests/.work/<用例名>-<hash>/` 残骸；残骸会让**之后每一个** pytest 会话一开场就再撞一次（`grep` 不到的批次也会）⇒ 清干净再跑 |
+| 报 `INTERNALERROR ... SystemExit: 1` + `SAFE_DELETE_BULK_CONFIRM_REQUIRED` | 同上，**且**该批可能留下 `tests/.work/<用例名>-<hash>/` 残骸；残骸会让**之后每一个** pytest 会话一开场就再撞一次（**零夹具**的批次也会，实测 `conflict` 即如此）⇒ 清干净再跑 |
 | `unit` 若复测明显低于 15.79s | 可按 `最慢 × 4~8` 收紧 270s（参考值 ≈120s），**但要有两次相近的读数**才动 |
 
 #### ⑤-补（本轮新增）两条可直接用的命令
