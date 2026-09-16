@@ -272,8 +272,157 @@ def test_nvidia_sample_derivation_reviewable_blocks_on_missing_computation(code_
     assert _fatal_lines(out) - _fatal_lines(base_out), "不合规输入未改变违例集合（无判别力）"
 
 
-# ═════════════════════ 阶段③ core_chain：1 条判据的反例 ═════════════════════
+# ── ★ 批次 13-A 新增：`chapter4_g_depth`（`Ch4 §G` 形式完备性）的反例 ─────────────
+#
+# 该判据此前**未绑定**（`Ch4 §G` 的校验器不存在），故本表原无条目；绑定后必须补反例
+# （`criterion_effectiveness_guard` 的义务：已绑定 ⊆ 已登记）。
+#
+# ★ 为什么需要一个**自备规则文件**的合规输入（本文件其它反例都不需要）：
+#   `rules/baseline.yaml` 在真仓库**尚不存在**（由 13-R + 主理人安装），
+#   而 `Ch4 §G.2` 的四项阈值**只从它读**（`G-06`：不得内置默认阈值）⇒ 不写它的话，
+#   本判据只会输出"规则文件缺失 ⇒ 无法判定"，**判别力无从证明**
+#   （合规与不合规输入下都是同一句）。故这里在**夹具副本**内写一份候选规则
+#   （`rules/**` 在真仓库是 0444 锁，副本可写 —— 与 `test_prep_*` 的 `_patch_yaml` 同一手法）。
 
+# ★ 阈值**不再由本文件自备**：13-R 已把 `rules/baseline.yaml` + `rules/metric-sets.yaml`
+#   安装进仓库并被 `code_root` 夹具原样复制 ⇒ 本用例直接吃**真文件**（比自备候选更强：
+#   它同时验证"真文件的结构与代码的读口对得上"——初版曾因深度/键名不合而在这里暴露）。
+#   ★ 真文件的 `thresholds.min_fields_per_section` 是 `tbd`（设计未给数值）⇒
+#   §G.2 项①的『达最小字段数』半项不可核，只有『非空』半项在强制（`G-03`）；
+#   故本用例的合规 baseline 必须让**六项 section 都非空**，而不是"凑够某个字段数"。
+
+#: ★ 判据**专属**标记：只在 `scripts/valuelayer/completeness.py::g_depth_violations()` 的
+#:   违例文案里出现（`registry/criterion_counterexamples.yaml` 登记的 `blocked_hint`）。
+_CH4_HINT = "Ch4 §G 形式完备性未过"
+
+_CH4_BASELINE_OK: dict = {
+    "baseline_id": "baseline-nvda-001",
+    "company_id": "co_1",
+    "version": 1,
+    "business_mechanism": "卖加速计算平台",
+    "historical_numeric_claims": ["claim-1"],
+    "driver_model": [{"driver_id": "drv-1", "assumptions": ["数据中心 capex 增速维持"]}],
+    "value_state_refs": ["vs-1"],
+    "business_refs": ["biz-1"],
+    "driver_refs": ["drv-1"],
+    "moat": [
+        {
+            "moat_id": "moat-1",
+            "mechanism": "CUDA 生态带来的迁移成本",
+            "protected_objects": [{"object": "cost", "strength": "high"}],
+            "origin_class": "durable_advantage",
+            "cross_generation_survival": True,
+            "evidence_claims": ["claim-1"],
+            "writer": "research_skill",
+        }
+    ],
+    "valuation_inputs": {"growth_assumption": {"value": "0.25", "input_source": "model_estimate"}},
+    "valuation": {"method_class": "dcf", "formula_ref": "dv-1"},
+    "evidence_claim_ids": ["claim-1"],
+    "is_profitable": True,
+    "margin_persistence": "云厂商 capex 周期内维持",
+    "fcf_persistence": "经营现金流覆盖 capex",
+    "reinvestment_return": "ROIIC > WACC",
+    "share_dilution_impact": "回购抵消 SBC",
+}
+
+_CH4_DRIVER_OK: dict = {
+    "driver_id": "drv-1",
+    "business_id": "biz-1",
+    "source_class": "demand_expansion",
+    "importance_class": "high",
+    "financial_link": {"accounts": ["revenue_segment"], "per_share_metric": "eps", "formula_ref": "dv-1"},
+    "realization_stage": "occurred",
+    "timeline": "1-3Y",
+    "confidence": "medium",
+    "dependencies": ["customer_budget"],
+    "assumptions": ["数据中心 capex 增速维持"],
+}
+
+
+def _nvidia_ch4_compliant(root: Path) -> None:
+    """阶段② 的 `chapter4_g_depth` **合规**输入：`Ch4 §G.2` 五项 + `§G.4` 盈利分支全过。
+
+    ★ 这一份与 `tests/valuelayer/_fixtures.py::seed_compliant()` **同义**（同一判据的两层证据：
+      那里是单元层、这里是经 `stage_gate` 的端到端层）。此处不外引那份夹具，
+      因为注入层刻意自备最小输入（本文件其它 `_*_compliant` 都如此），
+      且跨目录导入会把两个批次的夹具绑在一起。
+    """
+    _write_jsonl(root, "baselines", [_CH4_BASELINE_OK])
+    _write_jsonl(root, "recommendations", [_RECOMMENDATION_OK])
+    _write_jsonl(
+        root,
+        "implied_requirements",
+        [{"requirement_id": "ir-1", "company_id": "co_1", "solved_variable": "growth"}],
+    )
+    _write_jsonl(
+        root,
+        "claims",
+        [
+            {
+                "claim_id": "claim-1",
+                "locator": "p.12 para.3",
+                "status": "verified",
+                "moat_evidence_kinds": ["persistent_share"],
+            }
+        ],
+    )
+    _write_jsonl(
+        root,
+        "businesses",
+        [{"business_id": "biz-1", "company_id": "co_1", "business_type": "hardware", "metric_set_id": "MS-HW-6STAGE"}],
+    )
+    _write_jsonl(root, "drivers", [_CH4_DRIVER_OK])
+    _write_jsonl(
+        root,
+        "relations",
+        [{"relation_id": "rel-1", "subject_id": "co_1", "object_id": "co_2", "relation_progress_stage": "tbd"}],
+    )
+    # ★ `operands` 必须是**非空数组**（`§G.2` 项④逐字："推导（**公式 + 操作数**）"）；
+    #   本文件上面那份 `_DERIVED_OK` 的 `operands: {}` 会被判成"不合格推导"。
+    #
+    # ★ 路径必须是 `derived/derived_values.jsonl`：`Ch9 §3.3.3` 的 `DerivedValue` 真源
+    #   由 `scripts.compute.store.values_path()` 定义，`iter_all_values()` 只读它。
+    #   初版本条写成 `derived/trace.jsonl`（那是上面 ② 阶段那条 `_nvidia_compliant`
+    #   顺手写的、**无任何消费者**的文件），结果是"引用了 `dv-1` 但上下文里 0 条推导" ⇒
+    #   合规输入也报 `has_derivation` 不合格 —— 一个**假红**，被本测试自己的
+    #   `_assert_hint_absent` 抓住（正是该断言存在的意义）。
+    (root / "derived" / "derived_values.jsonl").write_text(
+        json.dumps(
+            {"derived_id": "dv-1", "formula": "rev*margin", "operands": ["rev", "margin"], "method_version": "v1"},
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def test_nvidia_sample_chapter4_g_depth_blocks_on_incomplete_form(code_root: Path) -> None:
+    """`chapter4_g_depth` 反例：baseline 的六项深度**形式上**不全 → 阶段② 必须红。
+
+    ★ 本反例把 `moat`（④）与 `valuation_inputs`（⑤）两个 section 的载体清空 ——
+      这正是 `§G` 要拦的"**形式上齐了、实质是空标题**"的同族形态：
+      文件里字段在、值也有（`moat: []` 是合法空数组），但**实质没有内容**。
+
+    ★ 判别力归因：合规输入下 `_CH4_HINT` **不出现** —— 证明确实是本判据拦下的，
+      不是别的判据顺带变红（阶段② 因未绑定判据台账本就结构性 `exit≠0`，故不靠"红/绿"归因）。
+    """
+    _nvidia_ch4_compliant(code_root)
+    base_out = _gate(code_root, "nvidia_sample")[1]
+    _assert_hint_absent(base_out, _CH4_HINT)
+
+    row = dict(_CH4_BASELINE_OK)
+    row["moat"] = []
+    row["valuation_inputs"] = {}
+    _write_jsonl(code_root, "baselines", [row])
+
+    code, out = _gate(code_root, "nvidia_sample")
+    assert code == 1, out
+    assert _CH4_HINT in out, out
+    assert _fatal_lines(out) - _fatal_lines(base_out), "不合规输入未改变违例集合（无判别力）"
+
+
+# ═════════════════════ 阶段③ core_chain：1 条判据的反例 ═════════════════════
 
 def test_core_chain_multi_company_transmission_blocks_on_single_company(code_root: Path) -> None:
     """`multi_company_transmission` 反例：关系图只涉及 1 家公司 → 必须红。"""
@@ -739,9 +888,14 @@ def test_criterion_effectiveness_guard_passes_on_pristine_tree(code_root: Path) 
     code, out = _guard(code_root)
     assert code == 0, f"登记完整时门禁不应阻断\n{out}"
     assert "scanned " in out, f"未上报 scanned 计数（无法区分「没扫」与「扫了没问题」）\n{out}"
-    assert "criteria_bound: 12" in out, out
-    assert "criteria_registry_entries: 15" in out, out
-    assert "counterexample_entries: 14" in out, out
+    # ★ 批次 13-A 的增量（合并 main 后实测）：`criteria_bound` 12→13、
+    #   `criteria_registry_entries` 15→16、`counterexample_entries` 14→15
+    #   （绑了 `nvidia_sample::chapter4_g_depth` 并登记其反例）；
+    #   `ineffective_entries` / `criteria_without_counterexample` 未变。
+    #   这几个数字是**故意写死**的绊线：判据台账一变，先来核这里，再决定改数还是改登记。
+    assert "criteria_bound: 13" in out, out
+    assert "criteria_registry_entries: 16" in out, out
+    assert "counterexample_entries: 15" in out, out
     assert "ineffective_entries: 1" in out, out
     assert "criteria_without_counterexample: 0" in out, out
     assert "review_append_only" in out, "语义错位的判据必须逐条可见（G-03）"
@@ -761,7 +915,7 @@ def test_removing_any_registry_entry_makes_guard_fail(code_root: Path) -> None:
     path = code_root / REGISTRY
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     entries = list(doc["counterexamples"])
-    assert len(entries) == 15, "登记条数变了 —— 请同步本用例的期望值"
+    assert len(entries) == 16, "登记条数变了 —— 请同步本用例的期望值"
     for idx, row in enumerate(entries):
         doc["counterexamples"] = entries[:idx] + entries[idx + 1 :]
         path.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")

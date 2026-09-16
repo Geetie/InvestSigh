@@ -18,7 +18,7 @@
 |---|---|---|---|---|
 | 2 | 追源去重与核验 | `Ch6 §6.3`（七步）+ `Ch9 N9.1-10~14`；产物 `claims` / `claim_propagation` | **定位核验**（复用 `scripts/validators/locator_check.py`：`full_text_read` 定位机械复查） | `Ch6 §6.3` **七步判定**（追源 / 交叉验证 / 采纳与否） |
 | 3 | 更新公司及产业关系 | `Ch7 §7.1` + `Ch9 N9.1-06~09`；产物 `relations` / `business_positions` / `impacts` | ⚠️ **无** —— 本步**没有任何**被证成的确定性部分；原把"图结构守卫"当成本步实现属**归属错误**，已更正（详见 `make_relation_handler` 的 docstring） | `Ch7 §7.1` **关系抽取**（从证据推出公司间关系 → 三张表的生产） |
-| 4 | 修订增长和护城河判断 | `Ch4 §4.1~4.3` + `Ch9 N9.1-17/18`；产物 `baselines`（`drivers` / `moat`） | —（其输入 `baselines` 本身是模型侧产物，无输入即无可算） | `Ch4 §4.1~4.3` **判断**（增长驱动 / 护城河评估） |
+| 4 | 修订增长和护城河判断 | `Ch4 §4.1~4.3` + `Ch9 N9.1-17/18`；产物 `baselines`（`drivers` / `moat`） | ✅ **价值层守卫已接**（批次 13-A）：`scripts/valuelayer/` 的 `route_guard`（`§C`）/ `growth_quality`（`§D`）/ `moat_guard`（`§F`）/ `completeness`（`§G`）对**已存在的** Ch4 真源跑确定性校验（**只核不产**，故 `produced` 恒空） | `Ch4 §4.1~4.3` **判断**（增长驱动 / 护城河评估，属模型侧） |
 | 5 | 更新财务与估值假设 | `Ch4 §4.4 + Ch5 §5.3`；产物 `valuation` / `DerivedValue` | ✅ **真实实现**：复用 `scripts/compute/step.py::make_derived_handler`（确定性计算层） | 模型侧假设生成（属阶段③） |
 | 6 | 比较个股与基准预期收益 | `Ch5 §5.4 + Ch7 §7.3`；产物 `benchmarks` / `recommendations` | ⚠️ **接缝已通，但当时不可用**：复用 `scripts/decision/step.py::make_decision_handler` —— 审计实测其默认输入是**测试夹具**、会在空仓库上**伪造建议**（`P7-1`），故**不得**称"真实实现" | 基准选取与价格抓取（属阶段③） |
 
@@ -207,34 +207,82 @@ def make_relation_handler(root: str | Path, *, step_no: int = 3) -> Callable[[da
 
 
 def make_growth_handler(root: str | Path, *, step_no: int = 4) -> Callable[[date, str], Any]:
-    """step 4 处理器：**如实声明未实现**（本步当前**没有**可复用的确定性实现）。
+    """step 4 处理器：对**已存在的** Ch4 真源跑**价值层确定性守卫**，其余如实声明未完成。
 
-    ★ 为什么这一步与 2/3 不同、**不能**硬凑一个"确定性部分"：
-      `Ch4 §4.1~4.3` 的产物是 `baselines`（含 `driver_model` / `moat`）。增长质量分档
-      （`scripts/compute/growth.py::assess_growth_quality`，`Ch4 §D.3`）**需要 baseline 作为输入**，
-      而 baseline 本身就是本步的**模型侧产出** → **没有输入就算不了**。
-      硬跑只会产出"输入缺失"的缺口对象，把 `produced` 塞成空表却又报 `ok` —— 那正是
-      `G1-05` 要拦的**空执行**。故本处理器**只用 `incomplete_reason` 如实声明**，
-      `produced` 恒为空 → 编排器记 `gap` + 置 `blocked`（**绝不报成功**）。
+    ## ★ 接线（批次 13-A）：`Ch4 §C/§D/§F/§G` 的确定性部分接进本步
+
+    `00_交付施工图.md` 的类别表把「价值层（C）」归到**阶段②**，其落位就是
+    `scripts/valuelayer/` 的各个入口。本步是它们在**编排侧**的落点：
+
+    | 入口 | 设计锚点 | 读的真源 |
+    |---|---|---|
+    | `route_guard.check()` | `Ch4 §C`（指标集防串味 / 段序不跳级） | `facts/businesses.jsonl` |
+    | `growth_quality.check()` | `Ch4 §D`（驱动上限 / 代价五类 / 来源标签） | `facts/drivers.jsonl` |
+    | `moat_guard.check()` | `Ch4 §F`（反误判 + `§F.3` A2/A3 硬隔离） | `facts/baselines.jsonl` |
+    | `completeness.g_depth_violations()` | `Ch4 §G`（形式完备性五项 + gap 衔接） | `facts/baselines.jsonl` |
+
+    ## 为什么 `produced` 恒为空 —— 这不是"空执行"
+
+    本步声明的产物是 `baselines`，它由**模型侧**写入；价值层**只核不产**
+    （`纪律 7` / `P-09`：价值层不排序、不打分、不写对象）。故：
+
+    - `produced` 恒空 —— 拿"考察过的 baseline id"充 `produced` 与 `C-03` 是**同一族**缺陷
+      （该集合与"本次是否真的产出"无关）；
+    - `degraded=True` + `incomplete_reason` 恒非空 ⇒ 编排器记 `gap` + 置 `blocked`
+      （**绝不报 ok**），与 `T-08` 的 A 方案一致；
+    - 守卫的**违例逐条进 `incomplete_reason`**（不静默）⇒ "价值层红了"是本步 gap 的**可读原因**，
+      而不是一个只在跑门禁时才看得见的另一个数。
+
+    ## 输入不可核时怎么办（`G-03`）
+
+    真源或规则文件未装（`FileNotFoundError`；`MissingRuleInput` 是 `ValueError` 子类；
+    注册表缺必填键是 `KeyError`）⇒ 记"不可核 / 无被检对象"，**不**判违例、也**不**让本步崩 ——
+    "不可核"与"已核且无违例"必须可区分，故它照样进 `incomplete_reason`。
     """
     root_path = Path(root)
 
     def handler(_run_date: date, _scope: str) -> Any:
         from scripts.orchestrate.pipeline import StepOutcome
+        from scripts.valuelayer import growth_quality, moat_guard, route_guard
+        from scripts.valuelayer.completeness import g_depth_violations
+
+        findings: list[str] = []
+        for name, entry in (
+            ("route_guard", route_guard.check),
+            ("growth_quality", growth_quality.check),
+            ("moat_guard", moat_guard.check),
+        ):
+            try:
+                report = entry(root_path)
+            except (FileNotFoundError, ValueError, KeyError) as exc:
+                findings.append(f"{name}: 不可核（{exc}）")
+                continue
+            if report.violations:
+                findings.append(f"{name}: {len(report.violations)} 条违例；{report.violations[0].render()}")
+            else:
+                findings.append(f"{name}: 无违例")
+        depth = g_depth_violations(root_path)
+        if depth:
+            findings.append(f"completeness: {len(depth)} 条 §G 深度违例；{depth[0].render()}")
+        else:
+            findings.append("completeness: §G.2 五项全过")
 
         return StepOutcome(
             produced=[],
             degraded=True,
             incomplete_reason=(
-                "`Ch4 §4.1~4.3` 增长驱动与护城河判断（产物 `baselines`）属模型侧、阶段②③，本批次未交付；"
-                "其确定性下游（`scripts/compute/growth.py::assess_growth_quality`，`Ch4 §D.3`）"
-                "以 baseline 为输入，而 baseline 正是本步缺的产出 → **无输入可算，故本步无产出**。"
+                "`Ch4 §4.1~4.3` 增长驱动与护城河判断（产物 `baselines`）属模型侧、阶段②③，"
+                "本批次未交付；其**确定性价值层**（`Ch4 §C/§D/§F/§G`）本次已对**已存在的** "
+                f"Ch4 真源跑过：{'；'.join(findings)}。"
+                "价值层只核不产（`纪律 7`）⇒ 本步仍无产出，记 gap + blocked。"
                 f"{_T08}"
             ),
         )
 
     handler.__name__ = f"revise_growth_and_moat_step_{step_no}"
-    handler.__doc__ = "step 4 修订增长和护城河判断（`Ch4 §4.1~4.3`）—— 模型侧属阶段②③，显式 gap，无产出"
+    handler.__doc__ = (
+        "step 4 修订增长和护城河判断（`Ch4 §4.1~4.3`）—— 价值层确定性守卫已接，模型侧判断显式 gap"
+    )
     return handler
 
 
