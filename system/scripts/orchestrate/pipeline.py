@@ -58,6 +58,10 @@ class StepResult:
     produced: list[str] = field(default_factory=list)
     gap: str | None = None
     error: str | None = None
+    # ★ 本轮**行幂等命中**的对象引用（`Ch9 §3.5`）：存在、但**本轮未新写入**。
+    #   与 `status == STATUS_SKIPPED`（**整步**被 `resume` 跳过）是**两个不同粒度**的
+    #   概念，勿混：这里是**对象粒度**、且**整步确实执行了**。
+    skipped: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -87,7 +91,12 @@ StepHandler = Callable[[date, str], "StepOutcome"]
 
 @dataclass
 class StepOutcome:
-    """步进处理器的返回值。`produced` = 本次产出的**对象引用**（非文件名）。"""
+    """步进处理器的返回值。
+
+    - `produced` = **本轮真正新写入**的对象引用（非文件名）。
+    - `skipped` = 本轮**行幂等命中**、确认已存在故未重复写入的对象引用。
+    两者互斥、不得混同（详见 `skipped` 字段的注释）。
+    """
 
     produced: list[str] = field(default_factory=list)
     judgment_change: dict[str, bool] = field(default_factory=dict)
@@ -105,6 +114,22 @@ class StepOutcome:
     #
     #   缺省 `None` = 本步自认完成（既有行为不变，向后兼容）。
     incomplete_reason: str | None = None
+    # ★ 本轮**行幂等命中**的对象引用（`Ch9 §3.5`）——存在、但**本轮未新写入**。
+    #
+    #   为什么必须有这个字段（批次 10 独立审计 `C-03` 的**同一问题**在 step 1 上重现）：
+    #   把幂等命中折进 `produced` 会**同时**破坏两件事 ——
+    #     ① `produced` 的语义：`tests/compute/test_step_wiring.py:48`
+    #        （`幂等重跑未新增落库 → produced 必须为空`）已把 `produced` 钉死为
+    #        **「本轮真正新增落库的集合」**。同一字段两套语义 ⇒ `G1-05` 在各步之间
+    #        **不可比**，守卫台账失去意义。
+    #     ② **恰好重新掩盖** `G-B10-07` 要暴露的信号：重跑与首跑的差别正是
+    #        `produced` 由 N 变 0，若把命中折进 `produced` 则两轮观测量**完全相同**，
+    #        "非幂等"与"幂等"在输出上再度不可区分。
+    #   → `produced` 保持严格（只记本轮新写入）；幂等命中另走本字段。
+    #   → `G1-05` 的「空执行」判据相应改为 `not produced and not skipped`：
+    #      "读了 N 个对象、判定均无需追加"**不是**空执行，而是**已完成的检查**。
+    #   缺省空列表 = 既有行为逐字不变（向后兼容）。
+    skipped: list[str] = field(default_factory=list)
 
 
 # ───────────────────────── 注册表（1–6 步实现 + 7/8 步 hook 预留） ─────────────────────────
@@ -212,6 +237,11 @@ class Pipeline:
                     status,
                     produced=list(outcome.produced),
                     gap=outcome.incomplete_reason,
+                    # 直接属性访问（**不**用 `getattr(..., ())` 兜底）：`skipped` 是
+                    # `StepOutcome` 的**声明字段**，缺失即"处理器返回了非本类型对象"，
+                    # 属程序错误 → 必须响亮 `AttributeError`（铁律：静默兜底会把
+                    # 参数写反的 bug 藏很久）。
+                    skipped=list(outcome.skipped),
                 )
             )
             if outcome.incomplete_reason:
@@ -286,6 +316,7 @@ class Pipeline:
                     status,
                     produced=list(outcome.produced),
                     gap=outcome.incomplete_reason,
+                    skipped=list(outcome.skipped),
                 )
             )
             if outcome.incomplete_reason:
@@ -393,11 +424,24 @@ def assert_steps_complete(result: RunResult, registered_hooks: Mapping[str, bool
                         "scripts/orchestrate/pipeline.py",
                     )
                 )
-            elif not step.produced:
+            # ★ 「空执行」判据 = **既没有新写入、也没有幂等命中**。
+            #
+            #   为什么把 `skipped` 一并算作"非空"（批次 10 审计 `C-03` 裁定的推论）：
+            #   `produced` 已被钉死为「本轮**新写入**的集合」（`tests/compute/test_step_wiring.py:48`），
+            #   于是"同源同 quote_hash 重跑"必然 `produced=[]`。若此处仍只看 `produced`，
+            #   则**正常的幂等重跑会被判成空执行违例** —— 一条天天误报的门禁，
+            #   结局一定是被人关掉（`CONVENTIONS.md` 守卫铁律 1：降噪就是有效性）。
+            #   而"读了 N 个对象、逐个判定均已存在、故无需追加"**不是**空执行，
+            #   它是**已完成的检查**，其证据就是 `skipped` 非空。
+            #
+            #   ★ 判据强度**未削弱**：`produced` 与 `skipped` **双空**才判违例 ——
+            #     一个"什么都不做"的桩处理器两者皆空，仍然被拦（反向对照见
+            #     `tests/injection/test_idempotency_rows.py`）。
+            elif not step.produced and not step.skipped:
                 v.append(
                     Violation(
                         "G1-05",
-                        f"第 {step.step} 步（{step.name}）报 ok 但 produced 为空（空执行）",
+                        f"第 {step.step} 步（{step.name}）报 ok 但 produced 与 skipped 均为空（空执行）",
                         "scripts/orchestrate/pipeline.py",
                     )
                 )

@@ -223,12 +223,17 @@ def _declare_incomplete_when_empty(
 
     ★ 适配器只做一件事：把"无产出"翻译成"未完成 + 原因"，**不改**底层处理器
       （`G-06` 唯一真源：口径仍由 `scripts/compute` / `scripts/decision` 决定）。
+
+    ★ `skipped` 参与判定（`pipeline.StepOutcome.skipped`）：**行幂等命中**（`Ch9 §3.5`）
+      时 `produced` 为空但本步**确实完成了**（"读了 N 个对象、均已存在、无需追加"）。
+      若不排除它，正常的幂等重跑会被本适配器**误标成 `incomplete_reason`** → 记 `STATUS_GAP`
+      → 阻塞整轮。判定顺序：**有产出** ∨ **有幂等命中** ∨ **已自述未完成** → 三种都算"本步已交代清楚"。
     """
     import dataclasses
 
     def handler(run_date: date, scope: str) -> Any:
         outcome = fn(run_date, scope)
-        if not outcome.produced and outcome.incomplete_reason is None:
+        if not outcome.produced and not outcome.skipped and outcome.incomplete_reason is None:
             outcome = dataclasses.replace(
                 outcome,
                 incomplete_reason=(

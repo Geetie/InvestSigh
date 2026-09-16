@@ -32,8 +32,11 @@ def make_derived_handler(root: str | Path, *, step_no: int = 5) -> Any:
 
     - `produced` = **本次真正新增落库**的 `DerivedValue.derived_id`（对象引用，非文件名）。
       ★ 不是"本次重算的全部 id"：幂等重跑（`values_written=0`）时 `produced` **必须为空**，
-      否则 `pipeline.py` 的 G1-05 空执行守卫（`elif not step.produced`）会被击穿——
-      一个什么都没落库的运行会被当成"这一步真干了活"。
+      否则 `pipeline.py` 的 G1-05 空执行守卫（`elif not step.produced and not step.skipped`）
+      会被击穿——一个什么都没落库的运行会被当成"这一步真干了活"。
+      ★ 本步的这条语义是**全字段的锚**：`pipeline.StepOutcome.produced` 的对外契约由它钉死
+      （`tests/compute/test_step_wiring.py:48`），其余各步**不得**另立一套 `produced` 语义
+      （否则 G1-05 在步与步之间不可比）；幂等命中改走 `StepOutcome.skipped`。
     - `degraded` = 是否存在缺口对象（缺口是正常态，但**显式**标记，不静默）；
     - `signals_emitted` 恒为 `0`（计算不产交易信号，信号由 step 6 的建议产生）。
 

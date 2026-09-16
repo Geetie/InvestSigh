@@ -43,8 +43,9 @@ def make_decision_handler(root: str | Path, *, step_no: int = 6) -> Any:
     """构造 step ⑥ 的处理器：跑 `run_decide.run_default(root, run_date=..., scope=...)`。
 
     - `produced` = 本次**真正新增落库**的 `recommendation_id`（**对象引用**，非文件名）。
-      ★ 不是"本会产出的 id"：**幂等命中**（同窗口 + 同规则版本重跑）时为空，
-      否则 `pipeline.py` 的 G1-05 空执行守卫会被击穿。
+      ★ 不是"本会产出的 id"：**幂等命中**（同窗口 + 同规则版本重跑）时为空 ——
+      命中对象改走 `StepOutcome.skipped`（`pipeline.py` 的 G1-05 空执行守卫现为
+      `not step.produced and not step.skipped`，双空才判违例）。
     - `signals_emitted` = 新交易信号数（`buy` / `sell`）；
     - `degraded` = 门拒绝 / **真源输入缺失** / 未出建议 → **显式**标记，不静默。
 

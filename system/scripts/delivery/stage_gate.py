@@ -616,11 +616,23 @@ def check(root: Path, stage: str = "prep") -> CheckReport:
         missing = criteria_not_implemented(root, key)
         report.scanned[f"{key}.criteria_bound"] = len(bound.get(key, set()))
         report.scanned[f"{key}.criteria_not_implemented"] = len(missing)
+        # ★ **无条件发射**（不写 `if missing:`）。理由：若只在有缺口时打印，
+        #   "该阶段无未实现判据"与"台账代码路径根本没执行"在输出上**不可区分** ——
+        #   前者是好事、后者是守卫静默失效，而两者的观测量完全相同。
+        #   五阶段输出形状一致后，任何一条 `判据台账[key]` 缺失都成为真信号。
+        #   这也是 `tests/injection/test_wiring_guards.py::test_unimplemented_criteria_are_listed_as_notes`
+        #   要求"逐条列出、不得藏起来"的**加强版**：0 缺口也要显式声明为 0，
+        #   而不是靠沉默表达。
         if missing:
             report.notes.append(
                 f"判据台账[{key}]：函数体内已绑定 {len(bound.get(key, set()))} 条，"
                 f"**声明为 automated 但未绑定 {len(missing)} 条 → {missing}**"
                 "（前置产物齐备时这些缺口会直接阻断该阶段；不得据声明判 PASS）"
+            )
+        else:
+            report.notes.append(
+                f"判据台账[{key}]：函数体内已绑定 {len(bound.get(key, set()))} 条，"
+                "**声明为 automated 但未绑定 0 条**（该阶段判据已全部绑定）"
             )
     return report
 
