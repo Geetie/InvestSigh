@@ -523,6 +523,16 @@ blocked = True
 | **`G-54`** | `unit` 测试批 **高方差且逼近/越过超时**：同一套件（76 例）两次实测 **48.73s** 与 **66.72s**，而原超时 **60s** ⇒ **会随机被判 TIMEOUT** | **高** | 超时已上调（安全网）；**根因待修** → 卡 13-F |
 | **`G-55`** | **同一语义、两种载体形态、零机器绑定**：`rules/scenario.yaml::scenario_tags`（YAML 列表）↔ `schema/models.py::ScenarioTag`（Python 枚举）—— 值相同、**无任何绑定断言**，改一侧另一侧不会红 | 中 | `OPEN` · 已派 `ws-schema-expand`（与其双向键对齐守卫合卡） |
 | **`G-56`** | `Valuation.scenario_tag` **零生产消费者**（`T-18` / `G-50` 同族） | 低 | `OPEN` · **暂不修**（等 13-B 的 `scenario_guard` 修完自然产生消费点），作方向 2 的**显式白名单条目**登记 |
+| **`G-57`** | ★ **分组级零消费者**：`rules/metric-sets.yaml` **11 个顶层键里 9 个全仓零消费者**（`binding_guard` / `metric_item_fields` / `segment_evidence` / `conversion_chain_per_model_class` / `conversion_chain_generic_stages` / `extension_policy` / `routing.key` / `routing.binding_field` / `routing.metric_owner_field`） | 中 | `OPEN` · **已立卡 13-G**（逐键三分类定性） |
+
+**`G-57` 是 `G-50` / `T-18` / `G-55` 之后「声明 ≠ 有效力」的第四次，也是规模最大的一次**（前三次是单点，这次一个文件的分组面）。
+★ **不直接判缺陷**（`ws-ch2-rules` 的处置，主理人确认）：这些键名**转写自设计节号、非代码自造**；
+且 `binding_guard` 的两条 `rule_*` **恰好就是 `rollup.py` 真正实现的规则** ⇒ 更像「**声明面，由门禁核**」。
+⇒ 但**必须定性**（`G-03`：不许静默留着）⇒ 卡 13-G 逐键落三分类：**(a) 运行时消费者** / **(b) 门禁·schema·测试消费者** / **(c) 三者皆无（补消费者 或 显式登记"首版不消费"）**。
+
+★ **本条的副产品是一条门禁设计要求**（已发给 `ws-schema-expand` 的 13-pre 方向 2）：
+「零消费者 ⇒ 红」**必须把 (b) 类（门禁/测试）算进消费者**，否则会把合法的声明面全判红 ⇒ **噪音 ⇒ 门禁被关掉**。
+正确形态是**三态输出 + 三类各自计数**。
 
 **`G-55` 的形态说明（第三种"声明≠有效力"，与 `G-50` / `T-18` 并列）**：
 
