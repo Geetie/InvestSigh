@@ -226,3 +226,89 @@
   （`status=done` + `output_refs=["rec-nvda-001"]`）换成唯一写入方。
 ★ 教训留痕：**我一度把"改了相邻测试文件"当成越界**，实际是"修复必须改到那个测试"。判越界前先看
 **改动内容的因果方向**（是"顺手改"还是"不改就修不干净"），不要只看文件名。
+
+### R7 · 阶段② 第 4 条判据 `evidence_locatable` **此前无人认领** ⇒ 立卡 13-C
+
+任务卡原只把 `chapter4_g_depth` 派给 13-A（卡 13-A「接线要求」只写了那一条），
+`evidence_locatable` **没有 owner**。实测门禁把它如实暴露成 FATAL：
+
+```
+note: 判据台账[nvidia_sample]：函数体内已绑定 2 条，声明为 automated 但未绑定 2 条 → ['chapter4_g_depth', 'evidence_locatable']
+[FATAL] G11-04[nvidia_sample] @ scripts/delivery/stage_gate.py::stage_nvidia_sample_passed:0
+        — 阶段 nvidia_sample 的判据 'evidence_locatable' 已在 registry/delivery.yaml 声明为 automated，
+          但 stage_nvidia_sample_passed() 函数体内无对应 criterion() 声明 → 不得据此判 PASS（静默漏判据）
+```
+
+★ **为什么这条必须单独立卡**：`scripts/validators/locator_check.py`（`Ch6 §D`）**早就建好、测过、且已注册进
+`run_all_gates` + `pre-commit`**，甚至已被 `chain_steps.py:92` 调用 —— 但**阶段②门禁的 `criterion()` 绑定**
+这一行从未写。这正是铁律 1「只建模块、不接线 = 未完成」的教科书形态：**实现齐备而判据空绑**，
+前置产物齐备时该阶段会直接 FATAL。
+
+（`ws-schema-expand` 的 13-pre「键对齐守卫」只覆盖"代码读的键 ↔ `rules/` 有的键"，
+**不覆盖"判据是否绑定"** —— 两条检查口径不同，不能互相顶替。）
+
+---
+
+## 卡 13-C · 阶段② `evidence_locatable` 接线（**新立**）
+
+**工作树**：`.worktrees/ws-evidence-locatable` · 分支 `ws/evidence-locatable`（主理人已建 + 已 `bootstrap_worktree.sh`）
+
+**目标**：把阶段② 第 4 条判据 `evidence_locatable`（`registry/delivery.yaml:56-58` · statement「证据可定位（Ch6 §D）」·
+`check_kind: automated`）**真正绑进** `stage_nvidia_sample_passed()`，消灭 `G11-04` FATAL。
+
+**现状（实测，不是推测）**：
+
+| 事实 | 证据 |
+|---|---|
+| 阶段② 现绑 2 条，缺 2 条 | `criteria_bound` 台账：`['chapter4_g_depth', 'evidence_locatable']` 未绑 |
+| `chapter4_g_depth` 归 **13-A**（另一分支） | 卡 13-A「接线要求」第 1 条 ⇒ **本卡不碰** |
+| `evidence_locatable` 的实现**已存在** | `scripts/validators/locator_check.py`（8 条可判定判据 · `run_checker` CLI `0/1/2`） |
+| 已被门禁注册 | `run_all_gates.py` + `ops/pre-commit.sh` 均有 |
+| 已有生产调用方 | `scripts/orchestrate/chain_steps.py:92` `from scripts.validators.locator_check import check as locator_check` |
+| 已有 18 例测试 | `tests/validators/test_locator_check.py` |
+
+★ **`G-06` 唯一真源：一律复用，禁重建第二套定位校验。** 本卡**不新增任何校验逻辑**，
+只做「接线 + 反例登记 + 拆一颗测试雷」。
+
+**交付物**：
+
+1. `scripts/delivery/stage_gate.py::stage_nvidia_sample_passed()` 函数体内，加
+   `from scripts.validators.locator_check import check as locator_check`（**就地导入**，与既有
+   `from scripts.trace.traceback import check as trace_check` 同款）+ `report = locator_check(root)`
+   + `v += report.violations` + `criterion("nvidia_sample", "evidence_locatable", v)`。
+   - ★ **只准改这一个函数体**。别处要改 → **先报主理人**。
+   - ★ **插入位置**：放在 `criterion("nvidia_sample", "derivation_reviewable", v)` **之后**、
+     `v += assert_criteria_implemented(root, "nvidia_sample")` **之前**。
+     理由：13-A 在同一函数体加 `chapter4_g_depth`，锚点在 `six_step_chain_complete` **之前**；
+     两侧错开放置可让 git 的 hunk 尽量不重叠。**若仍冲突，由主理人手工收，不用你处理**。
+2. `registry/criterion_counterexamples.yaml` 加 `stage: nvidia_sample` / `criterion_id: evidence_locatable`
+   的 `kind: counterexample` 条目：`blocked_hint` 取 `locator_check` 里该判据的**专属**字样
+   （如 `LOCATOR_MISSING`），`test` 指向一个**真实存在**且函数名**含 `evidence_locatable`** 的测试。
+3. 该测试（建议落 `tests/injection/test_criterion_effectiveness.py`）：
+   - **违约输入** ⇒ 阶段② `exit != 0` **且** 输出含 `blocked_hint`（`§5.1 AC-04`）；
+   - **反向对照** ⇒ 合规输入下该阶段 `exit 0` **且该字样不出现**（证明红是这条判据干的，
+     不是别的判据顺带变红）。
+4. ★★ **顺手拆一颗雷（本卡独有，最容易漏）**：
+   `tests/injection/test_criterion_effectiveness.py::test_registry_entry_for_unbound_criterion_makes_guard_fail`
+   （约 L602-623）**把 `evidence_locatable` 硬编码成"未绑定判据"的样本**（它 append 一条该 id 的登记，
+   断言守卫报 `未被绑定`）。**你一绑上它，这个前提就消失了** ⇒ 该用例会红（或退化成空转）。
+   **必须一并改**：把探针改成**不依赖任何具体判据名**的形式 ——
+   要么从守卫**自己的诊断输出**里取一个当前确实未绑定的 id，要么用一个只存在于夹具
+   `delivery.yaml` 里的**假 id**。
+   ★ 这正是 `R-06`「禁关键词/名单式判据」在**测试**上的同款毛病：**硬编码一个会变化的名单成员**。
+   改完请在该用例 docstring 写清"为什么不写死判据名"。
+5. 提交前 `git merge main`（拿排他会话锁 + `facts/` 22 表 + `append_only_guard` 修复）。
+
+**DoD**：
+
+- [ ] `evidence_locatable` 已在 `stage_nvidia_sample_passed()` 函数体内绑定，且**真的调用** `locator_check`
+- [ ] `criterion_counterexamples.yaml` 有对应条目，指向真实测试、函数名含判据 id
+- [ ] 违约输入 ⇒ 阶段② 非零 + 专属 `blocked_hint`；合规输入 ⇒ 阶段② 零 + 无该字样（**两次真实输出**）
+- [ ] `criterion_effectiveness_guard`：`criteria_without_counterexample` 由 **1 → 0**
+- [ ] `stage_gate` 台账：`nvidia_sample` 未绑定判据由 **2 → 1**（只剩 13-A 的 `chapter4_g_depth`）
+- [ ] `test_registry_entry_for_unbound_criterion_makes_guard_fail` 已去硬编码，且仍**真能拦**（贴改后实测）
+- [ ] 报告四段式：改了什么 / 真实命令输出 + 退出码 / 每条 DoD 证据 / 剩余不确定性
+- [ ] 提交只 `add` 自己改的文件（**禁 `git add -A`**），`pre-commit` 全绿（**禁 `--no-verify`**）
+
+★ **不要跑 `verify.py --batch <整目录>`**（`V-08` 删除配额）；单文件、分次。注入测试在 `injection-a..f` 分片里，
+跑单文件即可。
