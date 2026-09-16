@@ -51,6 +51,8 @@ GATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     # 由主理人集成时注册（各 WS 按纪律不得自行改本文件）。
     ("graph_integrity_guard.py", "scripts/graph/graph_integrity_guard.py", ()),
     ("locator_check.py", "scripts/validators/locator_check.py", ()),
+    # ── 缺口 G9：绑定 ≠ 会拦 —— "每条已绑定判据必须有可执行反例"这项义务的机器绑定 ──
+    ("criterion_effectiveness_guard.py", "scripts/checks/criterion_effectiveness_guard.py", ()),
 )
 
 TIMEOUT_MARK = "TIMEOUT"

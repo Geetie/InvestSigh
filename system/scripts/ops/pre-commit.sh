@@ -81,6 +81,10 @@ run_gate "shell_var_guard" "$CODE_ROOT/scripts/checks/shell_var_guard.py" "$CODE
 # ⑩ 图结构完整性（命中即 fail）：自环 / 重复边 / 陈旧缓存（`Ch2 §B.3`）
 run_gate "graph_integrity_guard" "$CODE_ROOT/scripts/graph/graph_integrity_guard.py" "$CODE_ROOT"
 
+# ⑪ 判据有效性（缺口 G9）：**每条已绑定判据必须有可执行反例** ——
+#    绑定只证明"接了"，不证明"真的在查"（把 coverage_check 换成空实现，绑定数不变而门禁变绿）。
+run_gate "criterion_effectiveness_guard" "$CODE_ROOT/scripts/checks/criterion_effectiveness_guard.py" "$CODE_ROOT"
+
 if [ "$FAILED" -ne 0 ]; then
   echo "pre-commit: 有门禁阻断，提交被拒。" >&2
   exit 1
