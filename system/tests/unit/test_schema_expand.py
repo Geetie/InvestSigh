@@ -15,17 +15,22 @@
    已在；而 `input_source` **明确不进** —— 它按 `§D.5`「三类分开存」落在估值输入层
    `AssumptionInput`，在 `Valuation` 上再落一份即**双真源**（`G-06`）。含精确字段集断言
    与 `input_source` 的双向对照。
+6. **批次 13-E：AGIX（ETF）5 个字段进 `Benchmark`**（`Ch5 §E.1` / `§E.5` 裁定"正式并入"）。
+   ★ 其中 **4 个是设计逐字字段名**，第 5 个 `claims_complete_forecast` 设计**只给禁令、未给字段名**
+   ⇒ 两类**分开断言**，不混成一个"5 个都有出处"的印象。另钉死"默认值不得等于静默声称覆盖完整"、
+   "`None` 与 `[]` 必须可区分"、"`Decimal` 落库为字符串"、"旧行仍可读"（只增不改）。
 
 设计锚点（逐字）：`Ch4 §B.1`（business）/`§C.4`（financial_link）/`§D.1`（driver）/
 `§F.1·§F.3`（moat 与写路径白名单）/`§G.1·§G.4·§H.3`（baselines 补齐）/
 `Ch5 §A.1`（`baselines.valuation` 新字段清单）/`§B.2`（implied_requirements）/
-`§C.1`（三份判断表）/`§D.5·§D.6`（估值输入与区间）/`§E.3`（`scenario_tag` 一致性）/
-`Ch7 §B.3`（relation_flows 三边）。
+`§C.1`（三份判断表）/`§D.5·§D.6`（估值输入与区间）/`§E.1·§E.5`（AGIX 基准字段）/
+`§E.3`（`scenario_tag` 一致性）/`Ch7 §B.3`（relation_flows 三边）。
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -491,3 +496,158 @@ def test_new_valuation_fields_survive_a_baseline_roundtrip() -> None:
     assert again.valuation.independent_judgment == "per-share-range-2026-09"
     # 旧字段不受影响（契约变更只增不改）
     assert again.valuation.probability is None
+
+
+# ═════════════════════ 6. 批次 13-E：AGIX（ETF）5 个字段进 `Benchmark` ═════════════════════
+
+_CH5_E_ANCHOR_FIELDS = (
+    "holdings_disclosure_lag",
+    "unverifiable_forecasts",
+    "modeled_coverage",
+    "unmodeled_parts",
+)
+"""`Ch5 §E.1` / `§E.5` **逐字给出字段名**的 4 个（批次 13-E 裁定"正式并入 `Benchmark`"）。
+
+★ 第 5 个 `claims_complete_forecast` **不在本元组**：设计只给禁令、未给字段名
+  （见 `Benchmark.claims_complete_forecast` 的 docstring）⇒ 它属于"载体命名"，
+  与这 4 个的**出处强度不同**，故**分开断言**，不混成一个"5 个都有出处"的印象。
+"""
+
+
+def _benchmark() -> M.Benchmark:
+    """最小合法基准行（`Ch9 §N9.1-22`）。"""
+    return M.Benchmark(benchmark_id="benchmark_agix")
+
+
+def test_benchmark_carries_the_four_ch5_e_anchor_fields() -> None:
+    """正向：`Ch5 §E.1`（表头逐字"字段（`benchmarks` **新增**）"）+ `§E.5` 的 4 个字段名落到本对象。
+
+    出处逐字：`05_价格与市场预期研究/02_实现方案.md:22`（`benchmarks` 上…）、
+    `:222`（`holdings_disclosure_lag`）、`:223`（`unverifiable_forecasts[]`）、
+    `:264`（`benchmarks.modeled_coverage` + `unmodeled_parts[]`）。
+    """
+    fields = M.Benchmark.model_fields
+    for name in _CH5_E_ANCHOR_FIELDS:
+        assert name in fields, f"`Ch5 §E.1/§E.5` 逐字点名的 {name} 未落进 Benchmark"
+
+
+def test_benchmark_carries_the_b4_prohibition_carrier_field() -> None:
+    """第 5 个字段（`claims_complete_forecast`）**单独断言** —— 它的出处强度不同。
+
+    `§E.5` / `N5.4-05` / `B4` 三处都只给**禁令**（"不得声称完成整个基金预测"），
+    **没有一处给出字段名**；而判据要成立必须知道"有没有声称" ⇒ 需要载体。
+    本断言把"这个字段是载体命名、不是设计逐字"这件事**留在测试里**，
+    免得日后有人把 5 个字段一律当成"设计逐字"（那就是过度声称）。
+    """
+    assert "claims_complete_forecast" in M.Benchmark.model_fields
+
+
+def test_benchmark_field_set_is_exactly_the_designed_twentyfive() -> None:
+    """★ 钉死 `Benchmark` 的**精确字段集**：7 个时间基元 + 18 个业务字段。
+
+    既防"顺手多塞一个"造成双真源，也防将来有人悄悄删字段而无人发现。
+    """
+    assert set(M.Benchmark.model_fields) == {
+        # `Ch9 §2.2` 五类时间（TimeMixin 双时间轴基元）
+        "occurred_at", "published_at", "effective_from",
+        "first_seen_at", "analyzed_at", "recorded_seq", "backfilled_at",
+        # `Ch3 §C.3` / `Ch9 §N9.1-22/23` 基准身份与收益口径
+        "benchmark_id", "benchmark_role", "coverage_profile",
+        "includes_non_listed_assets", "non_listed_assets", "sensitivity",
+        # `Ch5 §E.1` / `§E.5`（批次 13-E）
+        "holdings_disclosure_lag", "unverifiable_forecasts",
+        "modeled_coverage", "unmodeled_parts", "claims_complete_forecast",
+        # 冻结 / 语义 / 收益来源 / 变更记录
+        "freeze_status", "return_basis", "return_basis_version",
+        "benchmark_semantics", "return_source", "proxy_index_used", "change_records",
+    }
+
+
+def test_benchmark_new_fields_do_not_silently_claim_full_coverage() -> None:
+    """★ **默认值不得等于"静默声称覆盖完整"**（`§E.5` + `B4` 的规范性要点）。
+
+    `modeled_coverage` 默认 `None`（未给）而**不是 `1.0`**：`1.0` 会读成"全部建模完毕"，
+    恰好是 `B4`（"已建模业务覆盖 ≥ 80%，否则不得称'完整预测'"）与 `N5.4-05`
+    要禁的那件事。同理 `claims_complete_forecast` 默认 `False`（未声称）。
+    """
+    b = _benchmark()
+    assert b.modeled_coverage is None
+    assert b.claims_complete_forecast is False
+    assert b.unmodeled_parts == []
+    assert b.holdings_disclosure_lag is None
+
+
+def test_unverifiable_forecasts_absent_and_explicitly_empty_are_distinguishable() -> None:
+    """★ `None`（字段缺席）与 `[]`（显式"无此类预测"）**必须可区分** —— 判据成立的前提。
+
+    `§E.1` 要求这类预测"单列"⇒ 字段缺席即"没单列"（违例）；而 `[]` 是"显式给出没有"（合规）。
+    消费方 `history_guard` 判据⑤ 逐字写着「未给出 `unverifiable_forecasts` 字段（`None`）」。
+    ⇒ 若把默认值定成 `[]`，两种状态就会被压成一个，判据**静默失去判别力**。
+    """
+    absent = _benchmark()
+    explicit_empty = M.Benchmark(benchmark_id="benchmark_agix", unverifiable_forecasts=[])
+    assert absent.unverifiable_forecasts is None
+    assert explicit_empty.unverifiable_forecasts == []
+    assert absent.model_dump(mode="json")["unverifiable_forecasts"] is None
+    assert explicit_empty.model_dump(mode="json")["unverifiable_forecasts"] == []
+
+
+def test_modeled_coverage_leaves_as_a_string_not_a_float() -> None:
+    """`Decimal` 落 JSONL 一律**字符串**（`Ch9 §3.4.5`：避免浮点误差；同 `ValuationRange`）。
+
+    阈值比较（`B4` 的 `≥ 0.80`）在消费方用 `Decimal` 做 ⇒ 序列化结果必须是可精确还原的字符串。
+    """
+    b = M.Benchmark(benchmark_id="benchmark_agix", modeled_coverage="0.85")
+    assert b.modeled_coverage == Decimal("0.85")
+    dumped = b.model_dump(mode="json")
+    assert dumped["modeled_coverage"] == "0.85"
+    assert isinstance(dumped["modeled_coverage"], str)
+    assert M.Benchmark.model_validate(dumped).modeled_coverage == Decimal("0.85")
+
+
+def test_benchmark_still_rejects_unknown_fields() -> None:
+    """反向：`extra="forbid"` 对新字段一样生效 —— 加字段时**没有**顺手关掉 forbid 的旁路。"""
+    with pytest.raises(ValidationError):
+        M.Benchmark.model_validate(
+            {"benchmark_id": "benchmark_agix", "coverage_profiled": 1}
+        )
+
+
+def test_benchmark_new_fields_survive_a_store_roundtrip(code_root: Path) -> None:
+    """正向：5 个新字段走**真实落库路径**（`append_records` + `read_models`）可写可读。"""
+    row = M.Benchmark(
+        benchmark_id="benchmark_agix",
+        includes_non_listed_assets=True,
+        holdings_disclosure_lag="13F 滞后一个季度",
+        unverifiable_forecasts=["管理层对非上市持股的口径无法独立核验"],
+        modeled_coverage="0.85",
+        unmodeled_parts=["非上市持股的私募估值"],
+        claims_complete_forecast=False,
+    )
+    assert append_records(code_root, "benchmarks", [row]) == 1
+    back = read_models(code_root, "benchmarks")
+    assert len(back) == 1
+    assert back[0].model_dump(mode="json") == row.model_dump(mode="json")
+
+
+def test_benchmark_old_rows_without_the_new_keys_still_validate() -> None:
+    """向后兼容：既有 `facts/benchmarks.jsonl` 的行**没有**这 5 个键 ⇒ 必须仍可读（只增不改）。
+
+    ★ 这条不是客套：真源当下有行、且它们是在本批次**之前**写的。
+    若新字段是必填，全部旧行会当场失效（`G-06` 之外还会造成"改契约即毁数据"）。
+    """
+    old_row = {
+        "benchmark_id": "benchmark_agix",
+        "benchmark_role": "primary",
+        "includes_non_listed_assets": True,
+        "freeze_status": "unfrozen",
+        "return_source": "fund_market_price",
+        "proxy_index_used": False,
+    }
+    b = M.Benchmark.model_validate(old_row)
+    assert b.holdings_disclosure_lag is None
+    assert b.unverifiable_forecasts is None
+    assert b.modeled_coverage is None
+    assert b.unmodeled_parts == []
+    assert b.claims_complete_forecast is False
+
