@@ -488,5 +488,32 @@ blocked = True
 ⇒ 已按此重写：卡 13-C 单独立卡（`batch13_taskbook.md` · commit `29933fa`），
 并规定其余阶段的未绑判据（`core_chain` 2 条 / `expansion` 2 条）**在对应阶段开工时逐条配 owner**。
 
+### 13.4 批次 13 执行期新增（`G-51` / `G-52`）
+
+| # | 缺口 | 严重度 | 状态 |
+|---|---|---|---|
+| **`G-51`** | `施工图 §2 阶段⑤` 的**退出物**与**通过判据**不对齐：退出物含「三层复盘记录」，通过判据不含齐备性 | 中 | `OPEN` · 归 **`T-15`**（待需求方） |
+| **`G-52`** | 排他会话锁 `_acquire_session_lock()` 是 **`O_EXCL` 检查 + 写入**两步，**非原子** ⇒ 两个进程理论上可同时"检查通过再各自写入" | 低 | `OPEN`（**记下不改**） |
+
+**`G-51` 的一手事实**（主理人实测，取代原先"全设计区检索不到"的穷举式否定）：
+
+| 来源 | 实测内容 |
+|---|---|
+| `registry/delivery.yaml` → `delivery_stages` → `key: expansion` → `pass_criteria_testable` | **正好 3 条**：`research_standard_consistent` / `investment_result_verifiable` / `review_append_only` |
+| 同条目 `exit_artifacts` | `['三层复盘记录']` |
+
+⇒ 「三层齐备」**只在退出物里，没有通过判据身份**。
+★ **不能自行补一个 id**：`stage_gate` 的判据绑定是双向机器绑定（`assert_criteria_implemented` +
+`criterion_effectiveness_guard` 的"登记 ⊆ 已绑定 ⊆ 已声明"），绑一个 `delivery.yaml` 未声明的 id
+**当场就红**；而 `delivery.yaml` 的 `pass_criteria_testable` 是 **`施工图 §2` 通过判据列表的转写**
+⇒ 给它加一条 = **改需求面**（`施工图 §0` 第 1 条）。
+⇒ 故本时点的正确处置 = **检查保留、仍挂 `review_append_only` 名下、登记里显式标「★ 待裁定」**
+（不静默、不新增 id、判别力不丢），并归 `T-15` 交需求方。
+
+**`G-52` 的处置理由**：`ws-degrade-contract` 本单发现，主理人裁定 **记下不改** ——
+① 它超出该卡授权；② 当前使用是**单机串行**，`pid + 存活` 检查已能"响亮失败"（不是静默）；
+③ **顺手改共享的会话锁，恰恰会引入同类静默风险**（该锁本身刚因 `G-RC-10` 被修过）。
+⇒ 登记为低优先 `OPEN`，**不顺手改**。
+
 
 
