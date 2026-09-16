@@ -1,0 +1,268 @@
+"""`solver` 单测（`Ch5 §B.1` 多解 / `§B.2` 输出结构 / `§B.3` 分工 / `§B.5` 写目标）。
+
+覆盖 DoD：「`solver` 产出**多组解**（不是单解）、含**区间**与**替代解释**」
++ 「每个守卫**注入违例 → exit 非零**」+ 反向对照。
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import datetime, timezone
+from decimal import Decimal
+from pathlib import Path
+
+import pytest
+from schema.models import SolvedVariable
+
+from scripts.pricelayer import SingleSolutionError
+from scripts.pricelayer.solver import (
+    DEFAULT_DISPLAY_CAP,
+    MAX_DISPLAY_CAP,
+    CandidateCombination,
+    SearchBound,
+    SolverError,
+    assert_multi_solution,
+    solve_implied_requirements,
+    write_solution_set,
+)
+
+NOW = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+#: 测试用的正算函数（`Ch5 §B.3`：具体形式设计未给 ⇒ 由调用方注入；此处只求**单调**可测）。
+FORWARD = lambda point: point["growth"] * Decimal(100) + point["margin"] * Decimal(10)  # noqa: E731
+
+
+def _combination(
+    combination_id: str,
+    solved: SolvedVariable,
+    *,
+    fixed_growth: str,
+    fixed_margin: str,
+    bound: tuple[str, str],
+    alternatives: list[str] | None = None,
+    monotonic_increasing: bool = True,
+) -> CandidateCombination:
+    fixed = {
+        "growth": Decimal(fixed_growth),
+        "margin": Decimal(fixed_margin),
+        "reinvestment": Decimal("0.25"),
+        "risk": Decimal("0.09"),
+        "duration": Decimal("5"),
+    }
+    fixed.pop(solved.value)
+    return CandidateCombination(
+        combination_id=combination_id,
+        solved_variable=solved,
+        fixed=fixed,
+        solved_bound=SearchBound(Decimal(bound[0]), Decimal(bound[1])),
+        alternative_explanations=(
+            alternatives if alternatives is not None else ["替代解释甲", "替代解释乙"]
+        ),
+        monotonic_increasing=monotonic_increasing,
+    )
+
+
+def _candidates() -> list[CandidateCombination]:
+    return [
+        _combination("C-growth", SolvedVariable.growth, fixed_growth="0", fixed_margin="0.30", bound=("0.10", "0.30")),
+        _combination("C-margin", SolvedVariable.margin, fixed_growth="0.20", fixed_margin="0", bound=("0.25", "0.35")),
+    ]
+
+
+def _solve(candidates: list[CandidateCombination] | None = None, **overrides: object):
+    kwargs: dict[str, object] = {
+        "security_id": "sec_nvda",
+        "price_snapshot_id": "SNP-1",
+        "current_price": Decimal("23"),
+        "candidates": candidates if candidates is not None else _candidates(),
+        "forward_price": FORWARD,
+        "grid_step": Decimal("0.01"),
+        "tolerance": Decimal("1.5"),
+        "solution_set_id": "SET-nvda-2026-09-15",
+        "computed_at": NOW,
+    }
+    kwargs.update(overrides)
+    return solve_implied_requirements(**kwargs)  # type: ignore[arg-type]
+
+
+def test_underdetermined_equation_yields_multiple_solutions() -> None:
+    """`Ch5 §B.1`：欠定方程 ⇒ **多组解**（本用例断言 `>= 2`，不是"有一组即可"）。"""
+    result = _solve()
+    assert result.feasible_count == 2, f"应有 2 组可行解，实得 {result.feasible_count}"
+    assert len(result.solutions) == 2
+    solved_vars = {s.combination.solved_variable for s in result.solutions}
+    assert solved_vars == {SolvedVariable.growth, SolvedVariable.margin}, "两组解解的是不同的第 5 类"
+    assert_multi_solution(result)  # 不抛即通过
+    for solution in result.solutions:
+        assert solution.solved_low is not None and solution.solved_high is not None, "每组解都必须带区间"
+        assert solution.combination.alternative_explanations, "每组解都必须带替代解释"
+    assert result.notes == [] or all("GRID_CAP" not in n for n in result.notes)
+
+
+def test_range_reflects_tolerance_band_not_a_fake_point() -> None:
+    """`Ch5 §B.2` 的 `range{low,high}`：区间**来自容差带**（不是把点值包装成区间）。
+
+    容差 ±1.5（价格单位）在增长率上 = ±0.015 ⇒ 网格 `0.19/0.20/0.21` 三个点可行 ⇒ `[0.19, 0.21]`。
+    """
+    result = _solve()
+    growth_solution = next(s for s in result.solutions if s.combination.solved_variable is SolvedVariable.growth)
+    assert growth_solution.solved_low == Decimal("0.19")
+    assert growth_solution.solved_high == Decimal("0.21")
+    assert growth_solution.solved_low < growth_solution.solved_high, "区间必须是**真区间**，不是点值"
+
+    margin_solution = next(s for s in result.solutions if s.combination.solved_variable is SolvedVariable.margin)
+    assert margin_solution.solved_low == Decimal("0.25")
+    assert margin_solution.solved_high == Decimal("0.35")
+
+
+def test_alternative_explanations_are_required_at_construction() -> None:
+    """`Ch5 §B.2` 的 `alternative_explanations` 是**必填**：候选组合缺它 → 响亮失败。"""
+    with pytest.raises(SolverError):
+        _combination(
+            "C-bad", SolvedVariable.growth, fixed_growth="0", fixed_margin="0.30",
+            bound=("0.10", "0.30"), alternatives=[],
+        )
+
+
+def test_fixed_classes_must_be_exactly_the_other_four() -> None:
+    """`Ch5 §B.4`："固定其余 4 类，解第 5 类" —— 固定类不合法即拒绝。"""
+    with pytest.raises(SolverError):
+        CandidateCombination(
+            combination_id="C-bad",
+            solved_variable=SolvedVariable.growth,
+            fixed={"margin": Decimal("0.3")},          # 只有 1 类，缺 3 类
+            solved_bound=SearchBound(Decimal("0"), Decimal("1")),
+            alternative_explanations=["x"],
+        )
+
+
+def test_single_solution_is_rejected_at_presentation() -> None:
+    """★ `Ch5 §B.1` 的核心：只有 1 组可行解 → **拒绝呈现**（`SingleSolutionError`）。"""
+    only_one = [
+        _combination("C-growth", SolvedVariable.growth, fixed_growth="0", fixed_margin="0.30", bound=("0.10", "0.30")),
+        _combination("C-margin", SolvedVariable.margin, fixed_growth="0.20", fixed_margin="0", bound=("0.90", "1.00")),
+    ]
+    result = _solve(only_one)
+    assert result.feasible_count == 1
+    assert result.degraded is True, "可行解不足下限 ⇒ degraded（不静默）"
+    assert any("SINGLE_SOLUTION_RISK" in n for n in result.notes)
+    with pytest.raises(SingleSolutionError):
+        assert_multi_solution(result)
+
+
+def test_reverse_control_two_solutions_pass_presentation_gate() -> None:
+    """反向对照：两组解时 `assert_multi_solution` **放行**（守卫不是恒红）。"""
+    assert_multi_solution(_solve())
+
+
+def test_display_cap_folds_extra_solutions_and_records_note() -> None:
+    """`Ch5 §I.2` / B18：超出展示上限 → 折叠 + 显式 note（不静默丢弃）。"""
+    result = _solve(display_cap=1)
+    assert len(result.solutions) == 1
+    assert len(result.folded) == 1
+    assert any("SOLUTION_SET_FOLDED" in n for n in result.notes)
+
+
+def test_display_cap_upper_bound_is_enforced() -> None:
+    """B18："最多 5 组" —— 越界即拒绝（不把上限当建议）。"""
+    with pytest.raises(SolverError):
+        _solve(display_cap=MAX_DISPLAY_CAP + 1)
+    assert DEFAULT_DISPLAY_CAP == 3, "B18 已确认：默认展示 3 组"
+
+
+def test_grid_cap_exceeded_is_noted_not_silent() -> None:
+    """`Ch5 §I.2`："设网格上限告警" —— 网格超限必须留痕（不得静默截断）。"""
+    result = _solve(max_grid_points=3)
+    assert any("GRID_CAP_EXCEEDED" in n for n in result.notes)
+
+
+def test_non_positive_price_is_rejected() -> None:
+    with pytest.raises(SolverError):
+        _solve(current_price=Decimal("0"))
+
+
+def test_to_implied_requirements_matches_ch5_b2_structure() -> None:
+    """`Ch5 §B.2` 输出结构逐字：字段齐备 + `solved_variable` + `range` + `feasible`。"""
+    result = _solve()
+    rows = result.to_implied_requirements()
+    assert len(rows) == 2
+    dumped = [json.loads(row.model_dump_json()) for row in rows]
+    for row in dumped:
+        assert row["solution_set_id"] == "SET-nvda-2026-09-15"
+        assert row["security_id"] == "sec_nvda"
+        assert row["price_snapshot_id"] == "SNP-1"
+        assert row["solved_variable"] in {v.value for v in SolvedVariable}
+        assert row["feasible"] is True
+        assert row["method_version"]
+        assert row["computed_at"]
+        assert set(row["range"]) == {"low", "high"}
+        assert row["assumptions"], "五类假设载荷不得为空"
+        assert any(v.get("solved") for v in row["assumptions"].values())
+
+
+def test_write_solution_set_appends_to_implied_requirements(scratch: Path) -> None:
+    """落地：`facts/implied_requirements.jsonl` 追加写入（唯一写入口 = `schema.store`）。"""
+    written = write_solution_set(scratch, _solve())
+    assert written == 2
+    rows = [
+        json.loads(line)
+        for line in (scratch / "facts" / "implied_requirements.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(rows) == 2
+    assert {row["solution_set_id"] for row in rows} == {"SET-nvda-2026-09-15"}
+
+
+# ───────────────────── CLI：注入违例 → exit 非零 + 反向对照 ─────────────────────
+
+
+def _row(solution_set_id: str, implied_id: str, *, feasible: bool = True) -> dict[str, object]:
+    return {
+        "implied_id": implied_id,
+        "solution_set_id": solution_set_id,
+        "security_id": "sec_nvda",
+        "price_snapshot_id": "SNP-1",
+        "current_price": "23",
+        "assumptions": {"growth": {"value": "0.2"}},
+        "solved_variable": "growth",
+        "range": {"low": "0.19", "high": "0.21"},
+        "alternative_explanations": ["替代解释甲"],
+        "feasible": feasible,
+        "method_version": "v1",
+        "computed_at": "2026-09-15T12:00:00+00:00",
+    }
+
+
+def test_cli_rejects_single_solution_set(
+    scratch: Path, write_jsonl, run_script
+) -> None:
+    """★ 注入违例：解集只有 1 组 → CLI **exit 1**（不是 warn）。"""
+    write_jsonl(scratch, "implied_requirements", [_row("SET-one", "IMP-1")])
+    proc = run_script("scripts/pricelayer/solver.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "IMPLIED-SINGLE-SOLUTION" in proc.stdout
+
+
+def test_cli_passes_with_multi_solution_and_no_violation(
+    scratch: Path, write_jsonl, run_script
+) -> None:
+    """反向对照：两组解 + 字段齐备 → CLI **exit 0**（守卫不是恒红）。"""
+    write_jsonl(
+        scratch,
+        "implied_requirements",
+        [_row("SET-two", "IMP-1"), _row("SET-two", "IMP-2")],
+    )
+    proc = run_script("scripts/pricelayer/solver.py", scratch, "--no-report")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "RESULT: PASS" in proc.stdout
+
+
+def test_cli_rejects_missing_alternative_explanations(
+    scratch: Path, write_jsonl, run_script
+) -> None:
+    """注入违例：某行无替代解释 → exit 1（`Ch5 §B.2`）。"""
+    bad = _row("SET-two", "IMP-1")
+    bad["alternative_explanations"] = []
+    write_jsonl(scratch, "implied_requirements", [bad, _row("SET-two", "IMP-2")])
+    proc = run_script("scripts/pricelayer/solver.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "IMPLIED-NO-ALTERNATIVE" in proc.stdout

@@ -398,3 +398,53 @@ blocked = True
 | 审计 A | `ws/compute` 修复（`C-01`~`C-05`）+ `I-1` | 🔄 已派（含**复原对照**要求） |
 | 审计 B | `fix/claim-propagation` + `ws/decision` 首审 | 🔄 已派 |
 
+---
+
+## 十二、批次 13-B · Ch5 价格层（`scripts/pricelayer/**`）
+
+> 工作树 `.worktrees/ws-ch5-pricelayer` · 分支 `ws/ch5-pricelayer` · 基点 `main`
+> 完整证据见 `reports/ws_ch5_pricelayer_report.md`（四段式：改了什么 / 真实输出+退出码 / DoD 逐条证据 / 剩余不确定性与缺口）。
+
+**交付**：6 个模块 + 1 个接线接缝 + 1 个包 `__init__`（异常族 + PEP 562 惰性子模块）
+
+| 文件 | 职责 | 设计锚点 |
+|---|---|---|
+| `scripts/pricelayer/solver.py` | 反向求解：固定 4 类解第 5 类，产出**多解集 + 区间 + 替代解释** | `Ch5 §B.1~§B.4` |
+| `scripts/pricelayer/valuation.py` | 估值计算 + 方法按 `model_class` 路由 + `DerivedValue` 追溯链 | `Ch5 §D.1~§D.3/§D.6` |
+| `scripts/pricelayer/order_guard.py` | 顺序约束 + **倒填四规则** + 反解不得回灌 baseline | `Ch5 §D.3/§D.4/§B.5` |
+| `scripts/pricelayer/scenario_guard.py` | 情景一致 + **`probability` 默认 `null`** + `scenario_method_status` | `Ch5 §D.6/§E.3/§E.4` |
+| `scripts/pricelayer/history_guard.py` | AGIX 底稿 + 非上市资产 + **历史外推检测** | `Ch5 §E.1/§E.2/§E.5` |
+| `scripts/pricelayer/daily_explain.py` | 行情口径校验 + 三分类 + 因果链可达 + 硬隔离 + 异常下跌复查 | `Ch5 §F.1~§F.5` |
+| `scripts/pricelayer/step.py` | 接线接缝（`run_price_guards` / `StepHandler` / `register_into`） | `Ch9 §3.5` 阶段④/⑤ |
+
+**实测（本轮，工作树内）**
+
+```bash
+cd system && python scripts/ops/verify.py --batch pricelayer
+# → ✓ [pricelayer] exit=0  39.18s/180s ；127 passed in 38.82s
+
+sh system/scripts/ops/pre-commit.sh
+# → pre-commit ✓ 全部门禁放行（exit=0）
+
+python scripts/ops/run_all_gates.py . --timeout 30
+# → 非零计数 1（`traceback.py`：`facts/recommendations.jsonl` 的 `rec-nvda-001` 缺
+#    `assumptions`/`computation` —— **既有数据问题，与本次改动无关**；本次只动
+#    `verify.py` 批次表 + 新增两个目录，见 `git status --short`）
+```
+
+**接线（如实）**：`chain_steps.py` 是**多方共享文件**，本卡**不改**；接缝以
+`scripts/pricelayer/step.py::run_price_guards(root)`（一行调用）与 `register_into(pipeline)` 两种方式提供，
+生产调用方 = 该模块的处理器 + 5 个守卫 CLI。**注册动作留待主理人集成时二选一**（详见报告 §4 接缝与缺口）。
+
+**登记进 `verify.py::BATCHES`**：新增批次 `pricelayer`（`tests/pricelayer/`，超时 180s = 实测 4.6×）。
+`verification_policy_guard` 实测 `test_files 67 / uncovered 0` ⇒ `V-06` 已闭合。
+
+**六门禁反例有效性**：6/6 门禁均有**可执行反例（exit=1）+ 反向对照（exit=0）**（真机演示，脚本与输出见报告 §② V-1）。
+
+**待裁定 / 缺口（已上报，不自行裁决）**：两个规则文件 `rules/valuation-methods.yaml`（**文件有名、YAML 键名无名**）与
+`rules/scenario.yaml`（文件与 `scenario_method_status` / `method_version` 键名均已逐字实现）当前**均不存在**、
+`§E.2` 子串判据 vs `R-06 ①`、`§D.4` 的 `assumption_source` vs `§D.5` 的 `input_source`、
+`RecommendationStatus` 缺 `rechecking`、`Benchmark` 缺 `holdings_disclosure_lag`/`unverifiable_forecasts`/`modeled_coverage`/`unmodeled_parts`/`claims_complete_forecast`
+（本流按"行内优先 → `coverage_profile` 回落"实现，落点待裁定）、`Ch5 §B.1` 未给 `f` 的具体形式 —— 逐条见报告 §④。
+
+

@@ -345,6 +345,14 @@ BATCHES: Mapping[str, Batch] = {
         "compute", "tests/compute/（确定性计算层）",
         _pytest("tests/compute"), 60.0, _exit_zero,
     ),
+    "pricelayer": Batch(
+        # 新增测试目录必须同时加批次，否则 `V-06` 会把新目录判成"未覆盖"（`CONVENTIONS.md::V-06`）。
+        # 由**批次 13-B**（Ch5 价格层）随 `tests/pricelayer/` 一并加入（任务卡 13-B 明令）。
+        # 超时：工作树内实测 39.18s（127 例）→ **180s（≈4.6×）**：
+        # `V-02` 允许 4~8×，且不越 300s 上限；余量足以区分"慢"与"卡死"。
+        "pricelayer", "tests/pricelayer/（Ch5 价格层：反解多解/估值路由/倒填/情景/历史外推/每日解释）",
+        _pytest("tests/pricelayer"), 180.0, _exit_zero,
+    ),
     "graph": Batch(
         "graph", "tests/graph/（依赖图与 T12 传播）",
         _pytest("tests/graph"), 60.0, _exit_zero,
@@ -409,6 +417,7 @@ ORDER = (
     "injection-d", "injection-e", "injection-f",
     "root",
     "compute", "graph", "validators", "claim", "decision", "transmit", "evidence", "daily",
+    "pricelayer",
     "gates", "stage",
 )
 
