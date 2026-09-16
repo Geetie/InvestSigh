@@ -329,7 +329,7 @@ state.requestRejections = {}                                                ← 
 **这是一条可证的预测**：若下一位在**修后**复测 `valuelayer` 仍 ≥170s，说明它的成本**另有来源**，
 应当再开一张卡，而不是调超时。
 
-### 3-5 「报告四段式 + 真实输出 + commit hash + `git status`」 ✅ 见 ④ / ⑥
+### 3-5 「报告四段式 + 真实输出 + commit hash + `git status`」 ✅ 见 ④ / ⑦
 
 ---
 
@@ -381,11 +381,11 @@ state.requestRejections = {}                                                ← 
 8. **★ 合并后夹具批次的耗时数字已过期，且本轮无法复测**：`main` 把 `tests/valuelayer/`（新批次，28 个
    夹具用例）与 `tests/daily/test_no_change_day.py` 增量合了进来，`tests/injection/` 也长了
    ⇒ `unit` / `daily` / `injection-*` 的**条目数与耗时都会变**。§2.5 与 3-4 的表是**合并前**的读数，
-   我没有把它们当作合并后的结论（详见 §⑦ 的复测清单）。**这不是"没测"，是"测不了"**（配额，见 ④.1）。
+   我没有把它们当作合并后的结论（详见 §⑤ 的复测清单）。**这不是"没测"，是"测不了"**（配额，见 ④.1）。
 
 ---
 
-## ⑦ 下一轮复测清单（★ 本单**未能**完成的测量，逐条给出可直接照抄的命令）
+## ⑤ 下一轮复测清单（★ 本单**未能**完成的测量，逐条给出可直接照抄的命令）
 
 > 前置：**必须是新的一轮**（新用户消息）。同一轮里重试**无效**（§2.6：累计键 = conversation request）。
 > 每轮**只跑一个**夹具批次（`V-08`）：一次夹具 teardown ≈250 项，阈值 99999 ⇒ **一轮 ≈3~4 个批次**是硬上限，
@@ -423,7 +423,7 @@ PY="${HOME}/.workbuddy/binaries/python/envs/default/bin/python"   # 必须有 py
 
 ---
 
-## ⑤ 复现入口（最小）
+## ⑥ 复现入口（最小）
 
 ```bash
 cd <worktree>/system
@@ -466,7 +466,7 @@ EOF
 
 ---
 
-## ⑥ 提交与仓库状态
+## ⑦ 提交与仓库状态
 
 **本报告首次随提交 `49ce681` 落地**（分支 `ws/fixture-cost`；合并 `main` 后 `HEAD == 65cef01`）：
 
@@ -499,7 +499,7 @@ $ git status --short
 | `verification_policy_guard` | PASS（`batches: 22` · `max_timeout_s: 300` · `test_files: 74` · `test_files_uncovered: 0`） |
 | `shell_var_guard` / `graph_integrity_guard` / `criterion_effectiveness_guard` | PASS |
 
-★ **自指说明**：本段（§⑥）是**在 `49ce681` 之后**补写入的 ⇒ 本文件的**最新一次**提交 hash 与上表不同。
+★ **自指说明**：本段（§⑦）是**在 `49ce681` 之后**补写入的 ⇒ 本文件的**最新一次**提交 hash 与上表不同。
 取最新一次请用：
 
 ```bash
