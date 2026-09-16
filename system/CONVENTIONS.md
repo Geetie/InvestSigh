@@ -100,7 +100,18 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
 `injection-b` 已 `32 → 34`。**取数命令**（复算用这两条，别照抄任何数字）：
 ① 整批：`python system/scripts/ops/verify.py --batch injection-b`，读门禁自印的 `N passed`；
 ② 逐片：以 `test_shard_coverage.py::_collect_count` 现算，**片数唯一真源 = `verify.py::INJECTION_SHARDS`**。
-（★ 复算陷阱：`_collect_count` 里的 `--noconftest` **会吃掉 parametrize 出来的用例**，照抄它手算是会得到错数的。）
+★★ **`_collect_count` 的 `--noconftest` 对收集是「中性」的（实测，别再"顺手改掉它"）**：
+本仓 `tests/` 下四个 `conftest.py` 均**无参与收集的钩子**（`pytest_generate_tests` /
+`pytest_collection_modifyitems` / `pytest_collect_file` / `pytest_addoption` / `pytest_configure` 全无命中），
+且**严格单变量**实测（同目标 / 同 cwd / 同解释器，只换这一个自变量）：`30 tests collected` ↔ `30 tests collected`。
+⇒ 模块 docstring 里"收集结果不受影响"**成立**。
+★ **真陷阱在别处**（我踩过，留给后来人）：手写复算脚本时
+① 用 `argv[3:]` 这类**切片**取 pytest 目标，很容易**悄悄少一个文件**（`BATCHES[*].argv` 的前两项是
+`-m pytest`，目标从**下标 2** 起）⇒ 用例数会小一截，而**不报错**；
+② `-q` 写两次（`-qq`）**会换输出格式** —— 从 `N tests collected` 变成**逐文件 `文件: N` 行**，
+于是"少文件"的错会被一个看起来像汇总的数字盖住。
+⇒ **判据：复算脚本必须打印它真正传给 pytest 的目标列表**（打印 `argv` 或 `targets`），
+**并同时贴出 pytest 自己的 `N tests collected` 原文** —— 只贴一个解析后的数字，不能算证据（`V-10`）。
 ⇒ 漂移记录与复算见 `reports/ws_fixture_cost_report.md`（卡 13-F/`#91`）。**超时列本身也曾有 6 行过期**
 （`unit`/`guards` 写 60s 实为 300s、`compute` 60→180、`validators` 30→90、`claim`/`decision` 30→120）—— 同一次一并订正。
 
