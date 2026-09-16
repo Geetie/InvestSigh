@@ -138,6 +138,17 @@ HEAD 上 **13 批 700 条测试全绿**，`run_all_gates` **23/24 绿**（唯一
   被改写行是否入库: 0                          ← 拦住了
 ```
 
+**真 worktree 的钩子路径同一条确认**（本报告自身的提交 `4f3a42b` 触发，逐字取自 pre-commit 输出）：
+```
+--- 修复后（本 worktree，linked worktree + 钩子环境）---
+  scanned pathspec_tracked_files: 22          ← 新增的记账位：pathspec 真匹配到 22 个被跟踪文件
+  note: pathspec = system/facts/*.jsonl（相对仓库根 /Users/gaza/Developer/InvestSigh/.worktrees/ws-schema-expand）
+                                              ← toplevel = **worktree 根**（修复前是 .../ws-schema-expand/**system**）
+--- 修复前（同一 worktree，提交 1d09ae0 时）---
+  note: pathspec = facts/*.jsonl（相对仓库根 .../ws-schema-expand/system）    ← 指错，恒空放行
+```
+⇒ **同一台机器、同一个 worktree、同一条钩子路径**，修复前后 toplevel 截然不同。
+
 **回归绑定**（`tests/injection/test_append_only.py`，+2 条；两条都必不可少）：
 - `test_hook_env_git_dir_does_not_blind_the_guard`：**导出 `GIT_DIR`/`GIT_INDEX_FILE`**（= 钩子环境）后
   改写既有行必须**仍被拦下**，且 `staged_facts_files: 1`（证明确实"看见了"，不是"没扫到"）。
