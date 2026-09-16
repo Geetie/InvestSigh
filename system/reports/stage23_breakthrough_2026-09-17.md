@@ -152,6 +152,21 @@ note: core_chain: PASS
 | 同型对照 | 与缺口 `D-4`（`rel` 参数顺序写反 ⇒ 免扫整体失效）**完全同型**——豁免类机制的失效在输出上与"真的违规"**完全同形**（`G-62`） |
 | 实测 | `run_all_gates` → **非零计数 0**；`tests/unit/{test_contracts,test_scope_matchers,test_file_lock}.py` → 21/21/15 passed |
 
+### 3.5 ★ 三个 ops 脚本的解释器候选只覆盖 POSIX 布局 ⇒ pre-commit 对每次提交假红
+
+| 项 | 内容 |
+|---|---|
+| 症状 | 恢复 `.git/hooks/pre-commit`（事故中曾被清空）后实跑：`scenario_tag_binding_guard` 与 `rule_key_alignment_guard` 各阻断一次，报 `ModuleNotFoundError: No module named 'yaml'` ⇒ **每一次提交都会被拒** |
+| 根因 | `pre-commit.sh` / `bootstrap_worktree.sh` / `run_pytest.sh` 三处的解释器候选**只列 POSIX 布局** `<venv>/bin/python`；Windows 是 `<venv>/Scripts/python.exe` ⇒ 全部候选落空 ⇒ 回落 `python3`（宿主 Python，**没装 yaml/pydantic**） |
+| 为什么必须根治 | **天天误报的门禁一定会被关掉**（`V-07`）⇒ 必然有人 `--no-verify` 绕过 ⇒ **纪律 9 的防线彻底失效**。把处置推给"每个人自己 export WORKBUDDY_PY"不是根治，那是把环境知识变成口头传统 |
+| 修法 | 候选**同时覆盖两种 venv 布局**（POSIX `bin/python` + Windows `Scripts/python.exe`，两级 venv 各一对，末位 `python3` 兜底）；**三处保持同一优先级**，否则会出现"钩子用一个解释器、跑测用另一个"的错位 |
+| 实测 | 不设 `WORKBUDDY_PY`：`sh .git/hooks/pre-commit` → **`pre-commit ✓ 全部门禁放行`**；`run_pytest.sh tests/unit/test_scope_matchers.py` → **21 passed in 0.11s** |
+| 端到端证据 | 该修复的提交本身被 hook 放行：`RESULT: PASS（0 violations）` → `[main 4c1727d] 3 files changed` |
+
+★ **同族症状的第三次出现**：`requirements.txt` 抬头早已写明这一族
+（「换一个解释器/会话跑门禁时 … `ModuleNotFoundError: No module named 'yaml'` … 表现为 `gates`/`stage` 批**假红**（看起来像代码坏了，其实是环境缺包）」）。
+**区别只是**：那次是"手里没有依赖清单"，这次是"有清单但**解释器选错了**"。
+
 ---
 
 ## 四、诚实记录：一次 `.git` 事故与恢复
@@ -324,9 +339,52 @@ cd system && "$V" -m pytest tests/unit/test_contracts.py -q
 
 ---
 
-## 附录 B · 一句话总结（收口）
+## 附录 B · 第三次回顾（07:25）
+
+### B.1 目标复核（无偏离）
+
+| 目标 | 状态 |
+|---|---|
+| 阶段② `nvidia_sample` | ✅ **PASS**（4/4 判据绑定，0 violations） |
+| 阶段③ `core_chain` | ✅ **PASS**（3/3 判据绑定，T01–T14 = 14/14） |
+| 门禁 | ✅ **非零计数 0**（23 项） |
+| pre-commit 钩子 | ✅ **已恢复且真跑通**（`pre-commit ✓ 全部门禁放行`） |
+| 四份文档回顾 | ✅ §二（首次）+ §附录A（第二次） |
+
+### B.2 本次新增：第 6 个平台缺陷（见 §3.5）
+
+`pre-commit` 在 Windows 上**对每次提交假红** —— 根因是三处 ops 脚本的解释器候选只覆盖 POSIX venv 布局。
+**这一条比前五条更危险**，因为它的后果不是"某批测试跑不动"，而是
+**"所有提交都被拒" ⇒ 必然有人 `--no-verify` ⇒ 纪律 9 的防线静默失效**。
+修完后 hook 自主解析正确解释器，且**该修复自身的提交被 hook 放行**（端到端证据）。
+
+### B.3 缺陷总表（六个，全部已修）
+
+| # | 缺陷 | 类型 | 后果 |
+|---|---|---|---|
+| 1 | `store.py` 模块级 `import fcntl` | Unix-only 模块 | 全仓 ImportError，验证链路不可用 |
+| 2 | `rules/` 哈希锁恒红（14 条） | CRLF 行尾转换 | 所有工作树 pre-commit 恒红 |
+| 3 | 分支 ref 建不出来 | 宿主回滚 loose ref | agent 提交后 `git log` 报无提交 |
+| 4 | `rel()` 返回反斜杠 | 路径分隔符假设 | 豁免集合失配 + 分桶错误（**两处静默失效**） |
+| 5 | 三处 ops 脚本解释器候选缺 Windows 布局 | 路径布局假设 | **pre-commit 对每次提交假红** |
+| 6 | （连带）`rule_key_consumer_scan` 分桶依赖正斜杠 | 同 #4 | 候选集进错桶，**不报错** |
+
+★ **六个里有四个的共同形态**：**平台假设导致机制"静默失效或恒红"**，
+而**输出与"真的违规"或"正常"同形**（`G-62` 静默等价态）。
+这也是为什么它们**只能在真跑时被发现**，不能靠读代码看出来。
+
+### B.4 剩余时间的工作原则
+
+目标已达成，剩余时间**只做加固、不引入新风险**：
+① 不改设计语义；② 每步必附真实输出与退出码；③ 每次提交让 **pre-commit 真跑**（已恢复）；
+④ 若发现新缺陷，按"根因 + 同类全文件审计 + 源头修"三步处置。
+
+---
+
+## 附录 C · 一句话总结（收口）
 
 > **阶段②③ 在 04:37 打通（提前 4 小时 23 分）**：`stage_gate` 违规 15 → 1（仅剩阶段⑤ 前置），
 > 门禁非零 1 → **0**，阶段② 判据 4/4 绑定、阶段③ 判据 3/3 绑定且 **T01–T14 = 14/14**。
-> 过程中定位并根治了**五个**平台/机制缺陷（`fcntl` · CRLF · loose ref 回滚 · `rel()` 路径分隔符 · 由此连带的豁免与分桶静默失效），
+> 过程中定位并根治了**六个**平台/机制缺陷（`fcntl` · CRLF · loose ref 回滚 · `rel()` 路径分隔符 ·
+> 由其连带的豁免与分桶静默失效 · ops 脚本解释器候选缺 Windows 布局），
 > 并诚实记录了一次由我自己触发的 `.git` 事故及其恢复路径。
