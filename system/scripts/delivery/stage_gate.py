@@ -491,11 +491,16 @@ def stage_core_chain_passed(root: Path) -> tuple[bool, list[Violation], dict[str
 
 
 def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str, int]]:
-    """时点可核 + 覆盖可核 + 任务状态可核 + **降级保留上次有效结果**（`Ch11 §B`）。
+    """时点可核 + **覆盖可核** + 任务状态可核 + **降级保留上次有效结果**（`Ch11 §B`）。
 
-    ★ `coverage_verifiable`（覆盖可核）已在 `registry/delivery.yaml` 声明为
-      automated，本函数**尚未实现**该检查 → 由 `assert_criteria_implemented()`
-      在前置产物齐备时阻断，并在报告里显式计数。
+    ★ `coverage_verifiable`（覆盖可核）**已在本函数内绑定**（批次 9 集成）：
+      实现住 `scripts/daily/coverage.py`（`Ch3 §N3.2-03/04` 三分量分别可表达 + 深度四态可回退 +
+      `10/01 §N10.1-06` 无静默遗漏 + `G-03` 非真空），本函数**复用**它，并调
+      `criterion("daily_run", "coverage_verifiable", v)` 使其对本阶段的**门禁**生效。
+
+    ★ **为什么必须绑**（否则判据形同虚设）：`registry/delivery.yaml` 声明它是 automated，
+      而"声明"与"实现"必须有**机器绑定**（本项目的血泪铁律 5）——
+      不绑的话，**覆盖不达标时阶段④门禁不会红**，等于判据没接。
     """
     tasks = _read_jsonl(root / "facts" / "tasks.jsonl")
     check_records = [t.get("check_record") for t in tasks if t.get("check_record")]
@@ -504,8 +509,23 @@ def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
     v: list[Violation] = []
     # 「降级保留上次有效结果」（Ch8 §E.4）：失败任务必须保留上一次有效结果的引用，
     # **不得置 null、不得标最新**。
+    # ★ **首日豁免**（批次 10 审计 `G7`：口径冲突）：
+    #   `scripts/daily/degrade.py` 对**首日**降级行（`status=failed` 且 `last_valid_result_ref=None`）
+    #   判 **0 违例**（依据 `G-03`：无上次有效结果时**如实为 None**，不得编一个）；
+    #   而本函数原先**无条件**判 FATAL → **同一批行两个口径打架**，且真仓库每次日更都会多一条红。
+    #   → 判据改为**可判定**：若该失败运行的 `run_date` 是**全部运行记录中最早的一次**，
+    #     则"上次有效结果"**结构上不可能存在** ⇒ 记显式 note、**不判违例**；
+    #     否则（存在更早的运行）仍判 FATAL —— **不放松对"真的丢了引用"的要求**。
+    _earliest = min(
+        ((_t.get("parent_context") or {}).get("run_date") or "") for _t in tasks
+    ) if tasks else ""
+    first_day_exempt = 0
     for t in tasks:
         if t.get("status") == "failed" and not t.get("last_valid_result_ref"):
+            _rd = (t.get("parent_context") or {}).get("run_date") or ""
+            if _rd and _earliest and _rd == _earliest:
+                first_day_exempt += 1
+                continue
             v.append(
                 Violation("daily_run", f"{t.get('task_id')} 失败但未保留 last_valid_result_ref", "facts/tasks.jsonl")
             )
@@ -516,8 +536,17 @@ def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
     criterion("daily_run", "timing_replayable", v)
     criterion("daily_run", "task_state_auditable", v)
     criterion("daily_run", "degrade_keeps_last_valid", v)
+    # ★ 「覆盖可核」（`coverage_verifiable`）：阶段④ 声明的第 4 条判据。
+    #   实现住 `scripts/daily/coverage.py`，此处**复用**（`G-06` 唯一真源，不重造）。
+    #   下面这一行 `criterion(...)` 既是**记录**也是**绑定** —— `assert_criteria_implemented()`
+    #   用 AST 抽取"函数体内的 `criterion()` 字面量"，故缺了这一行该判据就**不会被算作已实现**。
+    from scripts.daily.coverage import check as coverage_check
+
+    cv = coverage_check(root)
+    v += cv.violations
+    criterion("daily_run", "coverage_verifiable", v)
     v += assert_criteria_implemented(root, "daily_run")
-    return (not v), v, {"tasks": len(tasks), "check_records": len(check_records)}
+    return (not v), v, {"tasks": len(tasks), "check_records": len(check_records), "degrade_first_day_exempt": first_day_exempt, **cv.scanned}
 
 
 def stage_expansion_passed(root: Path) -> tuple[bool, list[Violation], dict[str, int]]:
