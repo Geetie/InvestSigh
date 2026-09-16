@@ -1,0 +1,68 @@
+# source_url:      https://investor.tsmc.com/english/monthly-revenue/2026
+# fetched_at:      2026-09-16T11:19:04.275369Z
+# transport:       webfetch（非本机 HTTP 直取）
+# body_sha256:     n/a（本机未取得原始响应体，故无此哈希）
+# deposit_note:    investor.tsmc.com 对本机 IP 一律 HTTP 403（WAF，urllib/curl 均实测 403）→ 经 allowlist 的 builtin_capability websearch_webfetch 取得；下方为取得的页面文本（含 markdown 链接语法，未加工）
+# text_sha256:     b1cf9a19cf4ad1572984b88ef09e49358c1247b696dca38609a9fef3568df799
+
+**标题**: TSMC 2026 monthly revenue - Taiwan Semiconductor Manufacturing Company Limited
+
+[Skip to main content](https://investor.tsmc.com/english/monthly-revenue/2026#main-content)
+
+# Financial Results -2026 Monthly Revenue
+
+[](https://investor.tsmc.com/english/monthly-revenue/2026)
+
+### 2026 Monthly Revenue
+
+(In Millions of New Taiwan Dollars)
+
+Month Consolidated Net Revenue YoY Change
+
+Jan.
+
+401,255 36.8%
+
+Feb.
+
+317,657 22.2%
+
+Mar.
+
+415,191 45.2%
+
+Apr.
+
+410,726 17.5%
+
+May
+
+416,975 30.1%
+
+Jun.
+
+442,680 67.9%
+
+Jul.
+
+467,580 44.7%
+
+Aug.
+
+514,806 53.3%
+
+Sept.
+
+Oct.
+
+Nov.
+
+Dec.
+
+Total
+
+3,386,870 39.3%
+
+* Year 2026 figures have not been audited.  
+** Starting 2013, TSMC prepares financial statements in accordance with TIFRS (International Financial Reporting Standards as endorsed in R.O.C.), TSMC will report only consolidated financial figures from January 2013.
+

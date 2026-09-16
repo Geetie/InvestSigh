@@ -1,0 +1,160 @@
+# source_url:      https://news.skhynix.com/en/sk-hynix-ships-samples-of-12-layer-next-gen-hbm4e-2/
+# fetched_at:      2026-09-16T11:16:15.905181Z
+# http_status:     200
+# content_type:    text/html; charset=UTF-8
+# body_sha256:     c443acd9af5cd6a16fdd6ed0725fb1cc02ac73eb8675757685e51821363b8c6b
+# text_sha256:     b1bd25d60cebe69fdadbda4d2f1da229b426741328bfe503b7f43975fc6439e8
+
+SK hynix Ships Samples of 12-Layer Next-Gen ‘HBM4E’ – SK hynix Newsroom
+SK hynix Newsroom  | SK hynix Ships Samples of 12-Layer Next-Gen ‘HBM4E’
+Skip to the content
+FACT
+PRESS
+TECH&AI
+STORY
+IR
+Open Search
+EN
+EN
+KR
+CN
+Seach
+Seach
+Open Menu
+FACT
+PRESS
+TECH&AI
+STORY
+IR
+EN
+KR
+CN
+Close Menu
+PRESS
+SK hynix Ships Samples of 12-Layer Next-Gen ‘HBM4E’
+AI
+AI Memory
+HBM
+HBM4E
+MR-MUF
+June 18, 2026
+SK hynix
+AI Summary
+SK hynix has shipped 12-layer HBM4E AI memory samples to major customers. The chip reaches 16Gbps per pin, boosts power efficiency by over 20%, uses Advanced MR-MUF to improve stability and heat resistance, and aims to strengthen SK hynix’s AI leadership.
+Share
+Copy URL
+Share Facebook/span>
+Share X
+Print
+PRESS
+SK hynix Ships Samples of 12-Layer Next-Gen ‘HBM4E’
+News Highlights
+· Delivers 12-high HBM4E samples to major customers
+· Achieves a maximum speed of 16Gbps per pin with improvements in both performance and efficiency
+· Utilizes Advanced MR-MUF, reducing heat resistance by 17% while improving stability
+· “SK hynix strengthens its AI leadership with HBM4E based on its market-leading technological capabilities and manufacturing expertise… delivering the value needed in the market”
+Seoul, June 18, 2026 – SK hynix Inc. (or “the company”, www.skhynix.com) announced today that it has shipped samples of HBM4E, a next-generation DRAM for AI, to major customers.
+“The company was able to deliver samples of the 12-stack HBM4E on schedule thanks to its advanced HBM development and production expertise for HBM,” said SK hynix, adding that “We will work closely with partners for mass production in a timely manner.”
+The 12-layer HBM4E shows improvements in both performance and power efficiency. The product features a maximum data processing speed of 16Gbps per pin and power efficiency that is up more than 20 percent from previous models. These enhancements improve data processing capabilities for AI training and inference.
+The HBM4E reduces data transfer latency through its latest interface and design optimization while maintaining stable operation in high-bandwidth environments. This enables customers to increase efficiency in processing data for AI datacenters and large-scale computing systems.
+SK hynix utilizes Advanced MR-MUF1 technology for HBM4E products to achieve a 48GB capacity in a 12-layer stack while ensuring structural stability. In particular, the company has also improved heat resistance by 17 percent, compared to the preceding HBM4, enabling stable operation of memory chips in high-performance computing environments.
+1MR-MUF (Mass Reflow Molded Underfill): A process used for stacking semiconductors by injecting liquid protective materials between chips to protect circuits.
+SK hynix has successfully supplied optimized memory solutions to customers based on its expertise in the mass production and supply of HBM3, HBM3E, and HBM4. Leveraging its market-proven product reliability and supply capabilities, the company will support the development of next-generation infrastructure while helping address AI system bottlenecks.
+“SK hynix has laid the foundation to strengthen its AI leadership with HBM4E based on its market-leading technological capabilities and manufacturing expertise,” said Ahn Hyun, President and Chief Development Officer, adding, “Through close collaboration with our partners, we will deliver the value needed in the market while reinforcing our technology leadership as a full-stack AI memory creator.”
+About SK hynix Inc.
+SK hynix Inc., headquartered in Korea, is the world’s top-tier semiconductor supplier offering Dynamic Random Access Memory chips (“DRAM”) and flash memory chips (“NAND flash”) for a wide range of distinguished customers globally. The Company’s shares are traded on the Korea Exchange, and the Global Depository shares are listed on the Luxembourg Stock Exchange. Further information about SK hynix is available at www.skhynix.com, news.skhynix.com.
+Media Contact
+SK hynix Inc.
+Global Public Relations
+Technical Leader
+Youngwon Kim
+E-Mail: global_pr@skhynix.com
+Download Press Release
+Download Photos
+AI
+AI Memory
+HBM
+HBM4E
+MR-MUF
+Copy URL
+Share Facebook
+Share X
+View All
+Related content
+SK hynix Charts Its Business and Technology Direction at the 2026 Future Forum—”Now Is the Golden Time to Leap Forward”
+September 9, 2026
+TECH&AISTORY
+3D Memory
+AI Memory
+AX
+Future Semiconductor
+SK hynix Future Forum
+[AI Ecosystem] The real bottleneck: Data, not compute
+September 3, 2026
+TECH&AI
+AI
+AI Memory
+HBF
+HBM
+[AI Infrastructure Insight] Why faster GPUs alone can’t deliver AI performance
+August 31, 2026
+TECH&AI
+AI data center
+AI Infra
+AI Memory
+GPU
+SK hynix Indiana fab breaks ground as new hub for US AI innovation
+August 28, 2026
+STORY
+AI Infra
+AI Memory
+HBM
+Indiana fab
+SK hynix Charts Its Business and Technology Direction at the 2026 Future Forum—”Now Is the Golden Time to Leap Forward”
+September 9, 2026
+TECH&AISTORY
+3D Memory
+AI Memory
+AX
+Future Semiconductor
+SK hynix Future Forum
+[AI Ecosystem] The real bottleneck: Data, not compute
+September 3, 2026
+TECH&AI
+AI
+AI Memory
+HBF
+HBM
+[AI Infrastructure Insight] Why faster GPUs alone can’t deliver AI performance
+August 31, 2026
+TECH&AI
+AI data center
+AI Infra
+AI Memory
+GPU
+SK hynix Indiana fab breaks ground as new hub for US AI innovation
+August 28, 2026
+STORY
+AI Infra
+AI Memory
+HBM
+Indiana fab
+Homepage
+INSTAGRAM
+YOUTUBE
+Heritage
+Media Library
+Toggle Menu
+Back to Top
+FACT
+PRESS
+TECH&AI
+STORY
+IR
+Contact Us
+Terms of Use
+Homepage
+Instagram
+Youtube
+Linkedin
+RSS
