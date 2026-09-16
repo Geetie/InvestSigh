@@ -1407,3 +1407,120 @@ routing.key / binding_field / metric_owner_field 0          ★ 零
 | `len(kinds) >= 2`（设计伪码逐字） | ✅ **不是违规**（判据是"设计有没有指派参数化"） |
 | `metric-sets.yaml` 的 6–7 个分组**全仓零消费者** | ⚠ **待裁定**（不判缺陷；同族第三次） |
 | 未核部分 | 4 个新模块**未跑其单测**（避 `V-05`/`V-08` 配额）；结论仅覆盖静态读取链和数字扫描 |
+
+---
+
+## §15 卡 **13-G**（`G-57`）：`rules/metric-sets.yaml` 9 个零消费者键**逐键三分类** + `R8-3` 收口复核
+
+**复核人**：`ws-ch2-rules` —— ★ **我是这 4 件规则文件的转写人（13-R）** ⇒ 本节我是**枚举者**，**定性结论须换人复核**（并入批次 14 审计）。**不因"是我自己写的"而放宽 (c) 类登记要求。**
+**被审对象**：`system/rules/metric-sets.yaml`（11 顶层键，**9 键零消费者**）+ 全仓消费者面（`system/scripts` · `system/tests` · `system/schema` · `system/registry`）。
+**基准**：`main = 90e7c94`（含 `bef9628`）；13-A 面另查**其工作区**（因 `route_guard.py` 尚未提交，只查 `main` 会假阴性）——
+快照 SHA：`route_guard.py f1c0c166ceb6` · `_rules.py 74c20c26e398` · `completeness.py 62e541cc95ad` · `rollup.py 087eb7640667` · `moat_guard.py 602050847758` · `growth_quality.py 55043b1f4c0c` · `state_machine.py 5b67f2680356` · `__init__.py 448cc755719e`。
+**未改任何被审文件**（`rules/**` 0444，只准主理人安装）。
+
+### §15.1 一、结论（四段式 · 第①段）
+
+> **`(a) 有运行时消费者 = 0` / `(b) 由门禁·schema·测试核 = 0` / `(c) 三者皆无 = 9`。**
+> **⇒ 9 个键**全部落到 **(c)**，需要**逐键处置**（补消费者，或显式登记"首版不消费 + note + 计数"）。
+
+★★ **我必须先更正我自己 `§14.3` 的推测**：我当时写「`binding_guard` 的两条 `rule_*` 恰好是 `rollup.py` 实现的规则 ⇒ 更可能是『**声明面，由门禁核**』」。**"由门禁核"这半句被实测推翻**：全仓**没有任何门禁读 `metric-sets.yaml` 的语义**。真实情形是「**有实现**（代码真的实现了那两条规则）+ **有行为测试**（13-A 的 `tests/valuelayer/test_rollup.py` 等）」—— 但**检查的是行为，不是键**。这两件事差别很大：**键被删掉、或被改成矛盾值，那些测试照样全绿**。
+⇒ 这正是本卡要防的形态：**"有人实现了同一件事" ≠ "这个键有人消费"**。
+
+### §15.2 二、证据（四段式 · 第②段）
+
+#### (a) 三分类的**判定口径**（我先把它写成可判定的，免得"算不算被核"各说各话）
+
+| 类 | 我用的可判定判据 |
+|---|---|
+| **(a)** | 全仓（`scripts`+`tests`+`schema`+`registry`，**含 13-A 工作区**）搜该键名 ⇒ 有**代码**读它（指名 `文件:行`） |
+| **(b)** | ★ **判别力口径**：把该键的值换成一个**"合法但错误"**的值（如 `binding_field: nonsense`）后，**存在某个机器检查会变红**。只"输出会随该键语义变化"的检查才算。按本项目自己的 `R-06 ①/④`：**关键词/禁词式的通用扫描不算**（它只覆盖**形状**，不覆盖**消费关系**） |
+| **(c)** | 以上皆无 |
+
+#### (b) 逐键结果（★ 9/9 落在 (c)）
+
+| 键 | 类 | 证据（实测） | 处置 |
+|---|---|---|---|
+| `binding_guard` | **(c)** | 键名全仓 **0 命中**（含 13-A 工作区）。★ 但它的**声明内容恰好全部真实存在**：`guard: scripts/valuelayer/route_guard.py` ✅、`entry: validate_binding` ✅（`route_guard.py:21` 与 `:254`）、`rule_model_class_mismatch: raise MetricSetMismatch` ✅（`:65 class MetricSetMismatch`）、`rollup: scripts/valuelayer/rollup.py` ✅ ⇒ **声明与实现对得上，但无人校验"对得上"** ⇒ 两边可各自漂移 | **补绑定（最便宜、价值最高）**：一条"规则里声明的**路径/符号必须存在**"的检查（`guard`/`entry`/`rollup` 可解析；`rule_model_class_mismatch` 里的符号名存在）。这正是 `§C.2` 声明面唯一缺的机器绑定 |
+| `metric_item_fields` | **(c)** | 0 命中。schema 里**没有"指标 item"对象**：`$defs` 中含 `source_class` 的**只有 `Driver`**（`models.py:1206` 的 `Literal[7 类 + mixed]`），`linked_account` 对应的是 `Driver.financial_link.accounts`（`models.py:1267` 逐字）⇒ **同名但不同物** | 显式登记"首版不消费"。★ **给门禁设计者的防误报提示**：**别按字段名绑** —— `source_class` 是 `Driver` 的字段，按名字绑会得出"已消费"的**假绿** |
+| `segment_evidence` | **(c)** | 0 命中。其**字段名**在 schema 有对应（`facts.schema.json:1566` 的 `ChainSegment` 描述 + `:1585 pending_evidence` 属性 + "证据为空却不标注 ⇒ 拒绝"的校验器），但**没有检查读这个键** | **补绑定**：断言 `ChainSegment` 的字段集 ⊇ `{evidence, pending_evidence}`（`field`/`evidence_field` 两键各指一处） |
+| `conversion_chain_generic_stages` | **(c)** | 0 命中。四段名只在 `models.py:1036` 的 **docstring** 与 schema 的 description 里被**文字引用** | 显式登记"首版不消费"。★ **不要**为它加枚举绑定：`facts.schema.json:1566` 逐字说明 `stage` **刻意是自由字符串**（"写成枚举会让 `§C.3` 的扩展机制失效"） |
+| `conversion_chain_per_model_class` | **(c)** | 同上，0 命中 | 同上（同理不得绑成枚举） |
+| `extension_policy` | **(c)** | 0 命中。**行为**已实现（`route_guard` 的 `MS-GENERIC` 兜底 + `unregistered_model_class` 标注，13-A 内 7 处），但**键本身无人读** | **补绑定（判别力最强的一条）**：用 13-A **已有的 scratch-root 夹具**写"给副本 rules 注册一个新 `metric_set` ⇒ `route_guard` 能路由它、**不改一行代码**" —— 这才真正守住 `new_model_class_requires_code_change: false` |
+| `routing.key` | **(c)** | 0 命中（值 `model_class`）。★★ **且该值与 schema 不一致**：`Business` 的路由字段是 **`business_type`**（`models.py` 类 docstring：`business_type: str  # 路由键（model_class，见 §C）`）；`metric-sets.yaml:15-18` 自己已登记这处"命名张力" | 显式登记 + **绑定须做映射**：按 `business_type` 做**等价映射**，**别按字面 `model_class` 找字段**（必然找不到） |
+| `routing.binding_field` | **(c)** | 0 命中（值 `business.metric_set_id`）。对应字段**存在**：`Business.metric_set_id`（`models.py:1118`） | **补绑定**：断言 `business.metric_set_id` 可在 schema 解析 |
+| `routing.metric_owner_field` | **(c)** | 0 命中（值 `business_id`）。对应字段存在：`Business.business_id` | **补绑定**：同上 |
+
+#### (c) 独立登记的「**有覆盖但只覆盖形状**」三处（**不**因此判 (b)，但**必须写出来**，否则会显得"这文件完全没人管"）
+
+| 检查 | 覆盖什么 | 为什么**不足以**算 (b) |
+|---|---|---|
+| `rules_lock_guard`（`rules.lock.json` 含 `metric-sets.yaml`：`bytes`/`locked_mode 0o444`/`sha256`） | **文件级**：内容一变（未重锁）就红 | 它判的是"**文件变了**"，不是"**语义错了**"；重锁即绿 |
+| `conflict_scan` **L3**（`CONFIG_SCAN_TARGETS = ("rules", "registry")`，`_flatten_mapping` **逐键**取 `(key, val, dotted)` 比 L3 禁词） | **键名与外层字符串值**命中禁词则红 | 把值改成 `nonsense`（合法但错）**不会红** ⇒ 对该键的**消费关系**零判别力（`R-06 ①/④`） |
+| `no_placeholder_guard`（`scanned files: 136`；`.yaml` 在 `SCAN_EXTENSIONS` 内；`rules/` **不在** `EXEMPT_PATTERNS`/`_EXEMPT_PREFIXES`/豁免清单里） | **文件级**占位词扫描 | 同上：只判形状。★ 顺带一条**实测事实**：`tbd` **不在**该门禁的 token 表里（8 条 `LINE_RULES` 无 `tbd`）⇒ `metric-sets.yaml` 的 `tbd` 现在 **PASS**（`RESULT: PASS（0 violations）`） |
+
+### §15.3 三、处置建议（四段式 · 第③段）
+
+**原则**：**(c) 不等于"必须马上写代码"**，但**必须二选一**（`G-03`：不许静默留着）——
+**① 补消费者**，或 **② 显式登记"首版不消费"（note + 计数，落在 `registry/` 侧）**。
+
+| 优先级 | 键 | 建议 |
+|---|---|---|
+| **P0（补绑定，成本低、判别力强）** | `extension_policy` · `binding_guard` | 前者一条 scratch-root 用例；后者一条"声明路径/符号存在性"检查 |
+| **P1（补绑定，成本低）** | `routing.binding_field` · `routing.metric_owner_field` · `segment_evidence` | 都是"断言 schema 里那个字段/字段集存在" |
+| **P2（登记"首版不消费"+ 说明为什么不该绑）** | `metric_item_fields` · `conversion_chain_generic_stages` · `conversion_chain_per_model_class` | 前者的"同名不同物"、后两者的"自由字符串是有意设计" ⇒ **登记时把"为什么不绑"写清**，防后人误绑 |
+| **P2** | `routing.key` | 登记 + 记录"值 `model_class` 与 schema 字段 `business_type` 的映射关系"（`metric-sets.yaml:15-18` 已有张力说明，登记时**指回去**即可） |
+
+**★ 对 `ws-schema-expand` 的 13-pre（方向 2）门禁设计的硬约束（三条，来自本卡实测）**：
+1. **必须三态输出**（`有消费者(运行时)` / `有消费者(门禁·测试)` / **`零消费者 ⇒ 红`**）且**三类各自计数**（主理人已裁，我补证据）。
+2. ★★ **(b) 的判定必须用"判别力"口径**（改值 ⇒ 变红），**不能**把"这个行为已被测试覆盖"算成"这个键被消费" —— 否则本批 9 个键会**全绿**（因为 `rollup.py`/`route_guard.py` 的行为确实有实现也有测试），**门禁当场变成安慰剂**。
+3. ★ **必须防"同名不同物"**：`segment_evidence` 的 `field`/`evidence_field`、`metric_item_fields` 的 `source_class` 都与 schema 里的**别的东西**同名 ⇒ **按字段名匹配会造成假绿**。绑定要么按**显式映射表**（规则键 → schema 符号），要么**只认"显式登记过的绑定"**，不做名字推断。
+
+### §15.4 四、边界与待复核（四段式 · 第④段）
+
+**责任边界（`§九`，我自己是转写人）**
+1. 我是**枚举者**；**"哪一类"的最终定性须换人复核**（并入批次 14 审计）。我**没有**因"文件是我写的"而下调 (c) 的标准 —— **9 个键我一个都没往 (b) 里塞**，包括最像 (b) 的 `binding_guard`。
+2. 本节结论对应 §15 开头的**快照 SHA**；13-A 工作区**正在被编辑**（我在核查中发现同一键的命中数在两分钟内从 1 变 0 —— 因为那是 `_fixtures.py` 里的**夹具副本**且该文件正被改动）⇒ 13-A 面**须在提交后复跑**。
+
+**未做（如实登记，不冒充已核）**
+3. **未跑**任何探针去"真的把一个键改成错值再看门禁变不变"（那需要可写副本 + 逐门禁跑；`rules/**` 0444 且我按纪律不写被审区）⇒ (b) 的判定是**静态**的（"无任何代码路径读该键"是**穷尽式搜索**结论，强；"无检查依赖其语义"是**由前句推出**）。**若要更硬，需在 scratch root 上做一次"改值 ⇒ 跑门禁"的实测**（建议并入批次 14）。
+4. `no_placeholder_guard` 覆盖 `rules/**` 这条，我是**代码审查 + `scanned files: 136`** 得出的，**不是**"逐文件列出被扫清单"的实测。
+
+---
+
+### §15.5 附：同轮的 `R8-3` 收口复核（`bef9628`）—— **rules 侧 ✅ 已补 / 代码侧 ❌ 仍未动，且新增一层"声明 ≠ 实现"**
+
+**(a) `rules/` 侧 ✅ 已补，且采纳了我 §12.2(d) 的**方案 ②**：**
+```diff
+ system/rules/valuation-methods.yaml
+ solution_set_display:
+   default_count: 3
+   max_count: 5
++  must_show_multiple: true       # ★ 语义键（`§B.1` 逐字）…这是**语义要求**、非数值参数。
++                                 #   ★ 数值下界（"多"的机械化 = ≥2）**不在此处**：它由本键**派生**
++                                 #   （`min_count = 2 if must_show_multiple else 1`），
++                                 #   以**避免**"语义键与数值键可互相矛盾"的同一事实两处（`G-06`）。
+```
+⇒ 我 §10.3 候选里的 `min_count: tbd` **没有被采纳**，改为"语义键 + 派生" —— **这个取舍比我的更好**：`tbd` 会把一条**已经把话说死的语义要求**降级成"待定"，且与语义键构成"同一事实两处"。**这一处我判 ✅ 好。**
+
+**(b) 代码侧 ❌ 未动 —— 且形态**升级**了：**
+```
+$ git grep -nE 'DEFAULT_DISPLAY_CAP|MAX_DISPLAY_CAP|DEFAULT_MIN_SOLUTIONS' main -- system/scripts system/tests
+solver.py:79 DEFAULT_DISPLAY_CAP = 3 / :82 MAX_DISPLAY_CAP = 5 / :85 DEFAULT_MIN_SOLUTIONS = 2
+solver.py:318/:336/:391/:403/:503（决策路径，同 §11.2）
+test_solver.py:19/:20/:168/:169
+$ git grep -n 'solution_set_display' main -- system/scripts system/tests
+(exit=1)                    ← ★★ rules 那份**仍然零消费者**（含新增的 `must_show_multiple`）
+```
+★ 定档 **❌ 错**（比 §12.2(b) 的"未做"更重）：规则文件现在**明文写着一个实现行为**——"它**由本键派生**（`min_count = 2 if must_show_multiple else 1`）"——而**该派生在代码里不存在**、常量 `2` 仍硬编码。**从"零消费者"升级为"声称已被消费/已派生"**。
+★ **我把分歧点写出来，判词可由你定**：该注释也可读作**给你的实施指令**（`batch13_taskbook.md` 同批写了"代码删掉常量 `2`"）。若按"指令文本"读 ⇒ 应记为**未做**；我按**文件自身时态**（"它由本键**派生**"是陈述句、且 `rules/` 是**已安装真相源**而非草稿）判 **错**。**请裁**。
+
+**(c) 我 §12.5 的两条已闭合 ✅**：`:374` 的假阴性括注**已删**并加了订正段（还留了一句很好的教训："裁定文本引用下级的 `grep` 结果前，要么自己复跑、要么注明未复核"）；`:391-392` 的落点**已更正为 `valuation-methods.yaml`**。
+
+**(d) 仍未闭合**：13-B 的 `scenario_guard.py` 机器绑定**仍只在工作区**：
+```
+$ git grep -nE 'RULE_KEY_TAGS|_rule_binding_violations|SCENARIO-RULE-BINDING' main -- system/scripts/pricelayer/scenario_guard.py
+(exit=1)     $ git grep -n 'scenario_tags' main -- system/scripts system/tests   → 0 命中
+```
+⇒ `G-55`（`scenario_tags` ↔ `ScenarioTag` 零绑定）在**真源上仍未闭合**；`bef9628` 没动它。
+
+**`#69` 状态**：13-A 仍**未提交**（`main..ws/ch4-valuelayer` 空；`UU` 两个文件）⇒ A/B 的 13-A 面**仍差"提交后按 hash 重跑"**。
