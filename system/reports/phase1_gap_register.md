@@ -22,7 +22,7 @@
 | **G-10** | **`facts/industry_nodes.jsonl` 有写无读**：写入方 `scripts/ingest/seed_industry_nodes.py`，业务代码零读取方 | `§6.2 Empty Execution` | 中 | `OPEN`：读取方（图谱页 / 关系核验）属阶段③ |
 | **G-11** | **`index/facts.sqlite` 只在测试里重建**：无生产读取方（可重建索引尚未被真正使用） | `Ch9 §3.3.2` | 低 | `OPEN`（④ 前置） |
 | **G-12** | **11 项参数全部 `tbd`**：A 档拍板是**验收前置**，不阻塞开工 | `§6.1` / `§十二 N-03` | — | `OPEN`（**等需求方**；代码路径完整、值一改即生效） |
-| **G-13** | **注入防护执行器缺生产接线**（批次 4 独立审计 `D-1`）：`scripts/guard/**` 6 模块与 `process_external_text` / `handle_external_request` **仅被测试调用**；`pipeline.py` 只注册了 `_publish_hook`/`_verify_hook`，**无采集步（第 1 步）handler** | `Ch9 §3.4.6` 措施①（"外部文本**只进** `raw/` 与 `claims`"）· `Ch6 §D`（采集编排）· `§一 底线 2` | **高** | `OPEN` —— **验收判据（明确、可测）**：`pipeline.py` 第 1 步（或 Ch6 采集 Skill）**真的调用** `process_external_text`，并在**真实 `system/`** 上留下 `raw/<file>` 与 `facts/claims.jsonl` 落库痕迹（≥1 行）。**注意**：该接线属**阶段② 采集层**，阶段① 内不越阶实现（纪律 12） |
+| **G-13** | **编排器未兑现 `rules/pipeline.yaml` 的步骤声明**（批次 4 独立审计 `D-1` 的根因）：该文件（**0444 锁定，属设计真相源，不可改**）声明 **step 1–6 `implemented_in_first_version: True`**、`blocking: True`、**step 1 无 hook**；只有 step 7–8 是 `False` + `gap_behavior: explicit_gap_when_hook_absent`。而 `pipeline.py` **一个 handler 都没注册** → 实跑 8 步全为 `gap`。**step 1 = `ingest_public_information`，`process_external_text` 正是它的实现。** | `rules/pipeline.yaml::steps[1]`（声明）· `Ch1 §B/§E`（8 步闭环与注册面）· `Ch9 §3.4.6` 措施① · `§一 底线 2` | **高** | `OPEN` —— ★ **原判"属阶段② 采集层"是错的，已纠正**：step 1 的声明要求首版实现，故这属**阶段① 编排缺陷 + 声明脱节**，不是跨阶段。**验收判据**：`pipeline.py` 注册 step 1 handler（消费外部文本 → `process_external_text`），实跑后真实 `system/` 留下 `raw/<file>` 与 `facts/claims.jsonl`（≥1 行），且 `Pipeline.run_daily` 的 step 1 报 `ok` 而非 `gap`。**step 2–6 的声明同样高于现实**（其组件属阶段②③）→ 已升级为**张力 `T-08`**（不能改 `rules/`，须需求方裁定） |
 
 ---
 

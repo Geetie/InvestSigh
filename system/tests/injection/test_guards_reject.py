@@ -442,3 +442,159 @@ def test_placeholder_mention_in_shell_comment_passes(code_root: Path) -> None:
     )
     proc = run_gate(PLACEHOLDER, code_root, "--fail-on", "warn")
     assert proc.returncode == 0, f"注释里的规则描述被误报\n{proc.stdout}\n{proc.stderr}"
+
+
+# ═══════════ 注入守卫 · B/C 静态绊线回归（独立审计 D-3 抓出的绕过面） ═══════════
+#
+# 背景：独立审计实测 `injection_guard` 的 B/C 静态断言**只匹配字面量直传形态**，
+# 变量间接 / getattr / f-string / 路径拼接都能被**一次普通改写**绕过（D-3）。
+# 工程师已把 B/C 加固为「结构化 + 对不可判定形式 fail-closed」。
+#
+# 下面的探针把这一加固钉死：① 4 条**必须被拦**（曾可绕过）；② 1 条**反向对照必须放行**
+# （证明 fail-closed 没退化成"见 append_records 就杀"）；③ 2 条**已知静态局限必须放行**
+# —— 它们**记录事实**而非把缺口说成不存在：将来若有人把静态判据做全了，这两条会红，
+# 逼其**显式**更新预期。
+#
+# ★ 断言一律取**退出码**，不取守卫输出里的说明文字（措辞可改，行为不可改）——
+#   故**不传 `rule_hint`**：`injection_guard` 的说明文字可能被并发地做"仅措辞"改动。
+# ★ 探针写在 `scripts/guard/` 下（守卫的扫描面），用完即删。
+
+INJECTION_GUARD = "scripts/checks/injection_guard.py"
+
+
+def _restore_rule_perms(root: Path) -> None:
+    """把夹具副本 `rules/**` 权限改回 0444。
+
+    ★ 只改权限：`injection_guard` 的断言 A 复用 `rules_lock_guard`，后者要求
+      `rules/` **恰为 0444**；夹具默认放开为 0644（`_make_writable`，便于注入）。
+      hash 校验仍**唯一**经该守卫 —— 本函数不重算、不比对 hash（`R-05` 唯一真源）。
+    """
+    import os
+
+    for path in sorted((root / "rules").rglob("*")):
+        if path.is_file() and path.suffix in (".yaml", ".yml", ".json"):
+            os.chmod(path, 0o444)
+
+
+def _probe_guard(code_root: Path, name: str, source: str):
+    """在 `scripts/guard/` 放一个探针模块 → 跑注入守卫（`finally` 删除探针）。"""
+    _restore_rule_perms(code_root)
+    rel = f"scripts/guard/{name}.py"
+    _inject_py(code_root, rel, source)
+    try:
+        return run_gate(INJECTION_GUARD, code_root)
+    finally:
+        (code_root / rel).unlink(missing_ok=True)
+
+
+def test_injection_guard_rejects_subprocess_import_in_data_path(code_root: Path) -> None:
+    """① 数据路径 `import subprocess` → 必须 exit 1（工具能力静态绊线）。"""
+    proc = _probe_guard(
+        code_root,
+        "probe_d3_import_subprocess",
+        "import subprocess\n\n\nPROBE = subprocess.PIPE\n",
+    )
+    assert_rejected(proc)
+
+
+def test_injection_guard_rejects_getattr_os_system(code_root: Path) -> None:
+    """② `getattr(os, 'system')(cmd)` → 必须 exit 1（动态调用的字面量落工具原语集合内）。"""
+    proc = _probe_guard(
+        code_root,
+        "probe_d3_getattr_os_system",
+        "import os\n\n\n"
+        "def run_cmd(cmd):\n"
+        "    return getattr(os, 'system')(cmd)\n",
+    )
+    assert_rejected(proc)
+
+
+def test_injection_guard_rejects_variable_append_stem(code_root: Path) -> None:
+    """③ `append_records(root, stem, rows)`（stem 是**变量**）→ 必须 exit 1（fail-closed）。"""
+    proc = _probe_guard(
+        code_root,
+        "probe_d3_variable_stem",
+        "from schema.store import append_records\n\n\n"
+        "def persist(root, stem, rows):\n"
+        "    return append_records(root, stem, rows)\n",
+    )
+    assert_rejected(proc)
+
+
+def test_injection_guard_rejects_fstring_append_stem(code_root: Path) -> None:
+    """④ `append_records(root, f'{x}', rows)`（f-string 目标）→ 必须 exit 1（fail-closed）。"""
+    proc = _probe_guard(
+        code_root,
+        "probe_d3_fstring_stem",
+        "from schema.store import append_records\n\n\n"
+        "def persist(root, x, rows):\n"
+        "    return append_records(root, f'{x}', rows)\n",
+    )
+    assert_rejected(proc)
+
+
+def test_injection_guard_allows_literal_non_recommendation_stem(code_root: Path) -> None:
+    """**反向对照**：`append_records(root, 'claims', rows)`（字面量且非 recommendations）→ 必须放行。
+
+    证明 C 的「无法静态判定即 fail-closed」**没有**退化成"见 `append_records` 就杀"。
+    """
+    proc = _probe_guard(
+        code_root,
+        "probe_d3_literal_claims_stem",
+        "from schema.store import append_records\n\n\n"
+        "def persist(root, rows):\n"
+        "    return append_records(root, 'claims', rows)\n",
+    )
+    assert proc.returncode == 0, (
+        "字面量且非 recommendations 的 stem 被误拦 —— fail-closed 退化成见词就杀\n"
+        f"{proc.stdout}\n{proc.stderr}"
+    )
+
+
+def test_injection_guard_known_static_limit_constant_in_receiver(code_root: Path) -> None:
+    """★ **已知静态局限**：常量拼接落在**接收者**位置 → 当前 exit 0（放行）。
+
+    `(root / 'facts' / ('recommend' + 'ations.jsonl')).write_text('x')`：
+    目标名由**运行期** `str.__add__` 计算得到，静态上不可判定 —— 属**原理上**的局限，
+    不是缺陷。
+
+    **完整保证由运行时效果断言承担**：处理外部文本前后 `facts/recommendations.jsonl`
+    的**行数不变**（见 `tests/injection/test_prompt_injection.py` 的效果三元组 (b)）。
+
+    本用例**记录事实**，而不是把缺口说成不存在：将来若有人把静态判据做全了，
+    这条会红，逼其**显式**更新这里的预期。
+    """
+    proc = _probe_guard(
+        code_root,
+        "probe_d3_receiver_constant_concat",
+        "from pathlib import Path\n\n\n"
+        "def overwrite(root: Path) -> None:\n"
+        "    (root / 'facts' / ('recommend' + 'ations.jsonl')).write_text('x')\n",
+    )
+    assert proc.returncode == 0, (
+        "接收者位置的常量拼接**已**被静态判据覆盖 —— 请显式更新本『已知静态局限』用例"
+        "（并同步 injection_guard.py 的 KNOWN_STATIC_LIMIT note）\n"
+        f"{proc.stdout}\n{proc.stderr}"
+    )
+
+
+def test_injection_guard_known_static_limit_fstring_open_target(code_root: Path) -> None:
+    """★ **已知静态局限**：写入目标名藏在**变量**里 → 当前 exit 0（放行）。
+
+    `open(f'{root}/facts/{stem}.jsonl', 'a')`：目标名由 f-string + 变量拼出，
+    静态不可判定 —— 属**原理上**的局限，不是缺陷。
+
+    **完整保证由运行时效果断言承担**（同上，效果三元组 (b) 的 `recommendations.jsonl`
+    行数不变）。将来静态判据做全了，这条会红，逼其**显式**更新预期。
+    """
+    proc = _probe_guard(
+        code_root,
+        "probe_d3_fstring_open_target",
+        "def append_line(root, stem):\n"
+        "    with open(f'{root}/facts/{stem}.jsonl', 'a', encoding='utf-8') as fh:\n"
+        "        fh.write('x')\n",
+    )
+    assert proc.returncode == 0, (
+        "变量化的写入目标**已**被静态判据覆盖 —— 请显式更新本『已知静态局限』用例\n"
+        f"{proc.stdout}\n{proc.stderr}"
+    )

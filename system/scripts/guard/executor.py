@@ -8,8 +8,8 @@
 ★ 本模块**不解析**文本内容，故"外部文本无法改变规则内核 / 无法触发工具"是**结构性**的。
 
 `handle_external_request`（`R-07`）：外部来源的**请求**入口，按**调用方声明的 `kind`** 路由，
-使两个收口点（`rulewrite.write_rule` / `toolwatch.request_tool`）拥有**生产调用方**、
-不再是"仅供测试调用"的变相孤儿（`§一 底线 2`）。
+为两个收口点（`rulewrite.write_rule` / `toolwatch.request_tool`）提供**可被生产调用的**路由入口。
+★ 生产接线（把本入口接进真实采集链路）属阶段② 采集层，见 `G-13`。
 
 ★ `kind` 由调用方**声明**，不是对文本做词面分类 —— 因此**不违反** `AC-33`（禁关键词黑名单）。
 """
@@ -47,6 +47,8 @@ __all__ = [
     "NOTE_UNKNOWN_KIND",
     "NOTE_RULE_WRITE_BLOCKED",
     "NOTE_TOOL_CALL_BLOCKED",
+    "NOTE_SOURCE_MISSING",
+    "NOTE_MISSING_PAYLOAD_FIELDS",
     "IngestResult",
     "process_external_text",
     "process_raw_file",
@@ -62,6 +64,8 @@ NOTE_DECODE_DEGRADED = "DECODE_DEGRADED"
 NOTE_UNKNOWN_KIND = "UNKNOWN_KIND"
 NOTE_RULE_WRITE_BLOCKED = "RULE_WRITE_BLOCKED"
 NOTE_TOOL_CALL_BLOCKED = "TOOL_CALL_BLOCKED"
+NOTE_SOURCE_MISSING = "SOURCE_MISSING"
+NOTE_MISSING_PAYLOAD_FIELDS = "MISSING_PAYLOAD_FIELDS"
 
 
 @dataclass
@@ -186,7 +190,12 @@ def process_raw_file(
     locator: str = "",
     persist: bool = True,
 ) -> IngestResult:
-    """从 `raw/` 读一个文件走同一流程；非 UTF-8 → `status="blocked"` + note（不崩）。"""
+    """从 `raw/` 读一个文件走同一流程。
+
+    - 非 UTF-8 → `status="blocked"` + note（`DECODE_DEGRADED`，不崩）。
+    - 输入源缺失（`raw/<relpath>` 不存在）→ `status="blocked"` + note（`SOURCE_MISSING`），
+      **不把 `FileNotFoundError` 抛给调用方**（`AC-05`：明确降级，不 500）。
+    """
     root_path = Path(root)
     path = root_path / relpath
     try:
@@ -201,6 +210,18 @@ def process_raw_file(
             status=STATUS_BLOCKED,
             note=f"{NOTE_DECODE_DEGRADED}: {exc}",
             blocked_kind="decode",
+        )
+    except FileNotFoundError as exc:
+        # 输入源缺失 → 明确降级（raw_ref 留空：未产出任何 raw 物）
+        return IngestResult(
+            raw_ref="",
+            claim_id=None,
+            annotated=None,
+            prompt_context="",
+            tool_calls=0,
+            status=STATUS_BLOCKED,
+            note=f"{NOTE_SOURCE_MISSING}: {relpath}",
+            blocked_kind="missing_source",
         )
     return process_external_text(
         root_path,
@@ -247,7 +268,9 @@ def handle_external_request(
                           → 捕获后返回 `status="blocked"` + note（不吞异常语义：blocked 即明确降级）
     - `kind="tool_call"`  → `toolwatch.request_tool(origin=ORIGIN_EXTERNAL, ...)`（→ 恒抛）
                           → 捕获后返回 `status="blocked"` + note
-    - `kind="data"`       → 走 `process_external_text` 的**数据**路径（正常吸收）
+    - `kind="data"`       → 走 `process_external_text` 的**数据**路径（正常吸收）；
+                            必需字段 `("claim_nature","claim_form","tier")` 缺任一 →
+                            `status="blocked"` + note（`MISSING_PAYLOAD_FIELDS`，不抛 `KeyError`）
     - 未知 kind           → `status="blocked"` + note（**明确拒绝，不静默当数据**）
 
     ★ `kind` 由**调用方声明**，不是对文本做词面分类（因此不违反 `AC-33` 禁关键词黑名单）。
@@ -280,6 +303,15 @@ def handle_external_request(
         )
 
     if kind == "data":
+        # 先校验必需键：缺字段 → 明确降级为 blocked（不把 KeyError 抛给调用方）
+        required = ("claim_nature", "claim_form", "tier")
+        missing = [key for key in required if key not in payload]
+        if missing:
+            return _blocked(
+                ledger,
+                kind="payload",
+                note=f"{NOTE_MISSING_PAYLOAD_FIELDS}: {missing}",
+            )
         return process_external_text(
             root,
             str(payload.get("text", "")),

@@ -21,6 +21,7 @@
 | **T-05** | `skills/` 契约的锚点指向 | `施工图 §3.1` 组件表把 `SKILL.md` 的出处标为 **`Ch9 §3.2.1`**；但 `Ch9 §3.2.1` 实为「**六项硬约束的归属裁定**」，不含任何 I/O 契约字段 | 按实际内容改用 **`Ch9 §3.5 模块输入输出契约（对齐 N9.2-09）`** 作为 SKILL.md 的 I/O 来源，并**同时标注** `施工图 §3.1` 的原始指向，便于需求方核对。同类于施工图 §7 已登记的 `N-01` | 待确认 |
 | **T-06** | `registry/rules.lock.json` 自身的防篡改 | 纪律 9「`rules/` 0444 + SHA256」未说明**锁清单自身**由谁保护 | 锁清单刻意放在 `rules/` **之外**，使"模型对 `rules/` 无写权"无例外路径；锁清单自身的完整性由 **Git 提交历史**承担（`Ch9 §3.2.1`：追加式不可变由 Git 承担）。已在 `rules_lock_guard.py` 报告里输出 `locked_at` 以便人工核对 | 已按设计意图落地 |
 | **T-07** | `10/02 §I.2` 的 T 表指向错误 | `10/02 §I.2` 把 T 权威表指向"本章 §B.1"，实为「六结果链条表」 | 按施工图 §7 `N-01` 指示：查 T 表一律以 `10/01 §2.1` 为准；**不修改设计文档** | 待需求方修正 |
+| **T-08** | **`rules/pipeline.yaml` 把 step 1–6 声明为"首版已实现"，但实现体（采集/核验/传导/估值/决策五层）分属阶段②③** | ① `rules/pipeline.yaml::steps`：`implemented_in_first_version: True`（step 1–6）、`blocking: True`、**无 `hook`、无 `gap_behavior`**；仅 step 7–8 为 `False` 且 `gap_behavior: explicit_gap_when_hook_absent`<br>② `施工图 §3.2` 组件归位：`scripts/orchestrate/pipeline.py` 属**阶段①**，而**采集/核验/传导/估值/决策各层组件属阶段②③** | **step 1（`ingest_public_information`）的声明与现实可达** → 本批次**按声明实现**（`process_external_text` 正是它的实现），登记为 `G-13`；**step 2–6 的声明高于现实** → 我**不改 `rules/`**（0444 锁定 + 纪律 10），只登记本张力。请需求方裁定：是把 step 2–6 的 `implemented_in_first_version` 改回 `False` 并补 `gap_behavior`（与 7–8 一致），还是确认"8 步骨架在首版即须真实现"（那将大幅前移阶段②③ 范围） | **待裁定** |
 
 ---
 

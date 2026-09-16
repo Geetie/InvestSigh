@@ -8,15 +8,25 @@ python system/scripts/checks/injection_guard.py [code_root]
 ★ 判据取**效果**不取词面（`Ch9 §N9.2-01` / `施工图 §八 N-2`）：本守卫**不设关键词黑名单**，
   只断言"数据路径不具备工具能力 / 不写建议 / 规则写收口点存在且被真调用"这些**结构不变式**。
 
-四条机械断言（命中即 FATAL → exit 1）：
+★ B / C 是**对常见形式的静态绊线**（`import` 禁用 · 属性访问 · `append_records` 的字面量 stem +
+  对不可判定形式 fail-closed），**不构成完整证明** —— 任意**计算得到的路径**（如 receiver 位置的字符串拼接、
+  f-string 变量目标）在静态上不可判定，**不在** B/C 的覆盖内。
+  **完整保证由运行时效果断言承担**：处理外部文本前后 `facts/recommendations.jsonl` 的**行数不变**
+  （见 `tests/injection/test_prompt_injection.py` 的效果三元组 (b) 判据）。
+  上述已知静态边界在每次运行中以 `note: KNOWN_STATIC_LIMIT: …` **显式列出**（不得据静态绊线判"已证明"）。
+
+★ 断言 B / C 对**无法静态判定**的形态一律 **fail closed**（宁可误报也不放行）：
+  否则"换成变量 / `getattr` / f-string / 字符串拼接"就能一次绕过（规避 `D-3`）。
+
+静态绊线 / 断言（命中即 FATAL → exit 1）：
 
 | # | 断言 | 依据 |
 |---|---|---|
 | A | 规则内核未被改：**复用** `checks/rules_lock_guard.check(root)`，violations 原样并入（**同一 hash 出口，不新写第二套**） | 措施②/纪律 9/10 |
-| B | 数据路径无工具能力：对 `scripts/guard/**` **单遍 AST 扫描**，出现 `TOOL_PRIMITIVES` 引用 → FATAL | 措施③ |
-| C | 数据路径无写建议：对 `scripts/guard/**` 单遍 AST，出现 `append_records(... "recommendations" ...)` 或写 `facts/recommendations.jsonl` → FATAL | 措施①/判据 |
+| B | 数据路径无工具能力（**静态绊线**）：对 `scripts/guard/**` **单遍 AST 扫描**，出现任一形态 → FATAL：<br>① `import`/`from ... import` 禁用模块 `subprocess`/`pty`/`shlex`/`pickle`/`marshal`；<br>② 属性访问 `os.system`/`os.popen`/`os.exec*`/`os.spawn*`；<br>③ `getattr`/`__import__`/`eval`/`exec`/`compile` 的**字面量字符串参数**落在工具原语集合内（含 `getattr(os,"system")`） | 措施③ |
+| C | 数据路径无写建议（**静态绊线**，仅覆盖 `append_records` 字面量 stem）：`append_records(...)` 的 **stem 实参**（第 2 个位置参数或 `stem=`）**必须是字符串字面量**；为 `Name`/`Call`/`JoinedStr`/拼接（`BinOp`）等**无法静态判定**的形式 → **fail closed FATAL**；stem 字面量等于 `"recommendations"` 或路径常量含 `recommendations.jsonl` → FATAL | 措施①/判据 |
 | D | 规则写收口点存在且真被调用：`rulewrite.py` 的 `write_rule` **函数体内**含对 `refuse_write` 的调用 → 否则 FATAL | 措施②/R-01 |
-| E | 工具收口点有生产调用方（`R-07`）：`executor.py` 的**某函数体内**调用 `write_rule`、**另一处函数体内**调用 `request_tool` → 否则 FATAL | `§一 底线 2` |
+| E | 收口点有生产调用方（`R-07`）：`executor.py` 的**若干函数体内存在**对 `write_rule` 的调用，且**存在**对 `request_tool` 的调用 → 否则 FATAL（按函数体集合判定，不要求落在同一函数） | `§一 底线 2` |
 
 ★ `D`/`E` 的断言**AST 绑定到对应函数体**（只在该 `FunctionDef` 内查找），
   **禁止**全文件字符串匹配（规避 `D-9` 手工台账被一行数据绕过）。
@@ -75,6 +85,19 @@ TOOL_PRIMITIVES = frozenset(
     }
 )
 
+# B·① 数据路径禁止 import 的模块（`subprocess` 亦堵住 `getattr(os,"system")(...)` 的 `import os` 组合面）
+IMPORT_DENY_MODULES = frozenset({"subprocess", "pty", "shlex", "pickle", "marshal"})
+
+# B·② `os.<attr>` 属性访问即判违例（`exec*` / `spawn*` 家族由 `_is_tool_primitive` 前缀匹配覆盖）
+OS_TOOL_ATTRS = frozenset({"system", "popen", "exec", "spawn"})
+
+# B·③ 动态调用：函数名落此集合时，其**字面量字符串参数**落 `DYNAMIC_CALL_TOKENS` 内即判违例
+DYNAMIC_CALLS = frozenset({"getattr", "__import__", "eval", "exec", "compile"})
+DYNAMIC_CALL_TOKENS = frozenset(
+    IMPORT_DENY_MODULES
+    | {"system", "popen", "exec", "spawn", "eval", "compile", "__import__", "import_module"}
+)
+
 # 收口点名称（R-07：必须各有生产调用方，AST 绑定到函数体）
 CHOKEPOINT_WRITE_RULE = "write_rule"
 CHOKEPOINT_REQUEST_TOOL = "request_tool"
@@ -94,12 +117,30 @@ def _is_tool_primitive(dotted: str) -> bool:
     return any(dotted == prim or dotted.startswith(prim + ".") for prim in TOOL_PRIMITIVES)
 
 
+def _import_denied(name: str) -> bool:
+    """`import` / `from ... import` 的模块**顶层名**是否在禁用集合内。"""
+    top = (name or "").split(".")[0]
+    return top in IMPORT_DENY_MODULES
+
+
+def _append_stem_arg(call: ast.Call) -> ast.AST | None:
+    """取 `append_records(...)` 的 stem 实参节点（`stem=` 关键字优先，其次第 2 个位置参数）。"""
+    for kw in call.keywords:
+        if kw.arg == "stem":
+            return kw.value
+    if len(call.args) >= 2:
+        return call.args[1]
+    return None
+
+
 class _GuardVisitor(ast.NodeVisitor):
-    """对单个文件做**单遍**遍历，收集：工具原语引用 / 写建议。"""
+    """对单个文件做**单遍**遍历，收集：工具原语引用 / 禁用 import / 写建议 / 无法判定的 stem。"""
 
     def __init__(self) -> None:
-        self.tool_hits: list[tuple[int, str]] = []          # (lineno, 点分名)
-        self.recommendation_writes: list[tuple[int, str]] = []
+        self.tool_hits: list[tuple[int, str]] = []              # (lineno, 点分名/动态调用)
+        self.import_deny_hits: list[tuple[int, str]] = []       # (lineno, 模块名)
+        self.recommendation_writes: list[tuple[int, str]] = []  # (lineno, 说明)
+        self.unverifiable_stem_calls: list[tuple[int, str]] = []  # (lineno, 说明)
 
     # ── 工具原语引用（Name / Attribute）──
     def visit_Name(self, node: ast.Name) -> None:
@@ -117,6 +158,8 @@ class _GuardVisitor(ast.NodeVisitor):
         for alias in node.names:
             if _is_tool_primitive(alias.name):
                 self.tool_hits.append((node.lineno, alias.name))
+            if _import_denied(alias.name):
+                self.import_deny_hits.append((node.lineno, alias.name))
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
@@ -125,25 +168,46 @@ class _GuardVisitor(ast.NodeVisitor):
             dotted = f"{module}.{alias.name}" if module else alias.name
             if _is_tool_primitive(dotted):
                 self.tool_hits.append((node.lineno, dotted))
+            if _import_denied(module) or _import_denied(dotted):
+                self.import_deny_hits.append((node.lineno, dotted))
         self.generic_visit(node)
 
-    # ── 写建议 ──
+    # ── 动态调用（工具能力）+ 写建议 ──
     def visit_Call(self, node: ast.Call) -> None:
         dotted = _dotted(node.func)
         callee = dotted.split(".")[-1] if dotted else ""
-        # C：append_records(..., "recommendations", ...)
-        if callee == "append_records":
+
+        # B·③ 动态调用的**字面量字符串参数**落在工具原语集合内 → 判违例
+        #      （例：`getattr(os, "system")(cmd)` —— 字面量 "system" 命中）
+        if callee in DYNAMIC_CALLS:
             for arg in list(node.args) + [kw.value for kw in node.keywords]:
-                if isinstance(arg, ast.Constant) and arg.value == RECOMMENDATION_STEM:
-                    self.recommendation_writes.append(
-                        (node.lineno, "append_records:recommendations")
-                    )
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    if arg.value in DYNAMIC_CALL_TOKENS:
+                        self.tool_hits.append((node.lineno, f"{callee}:{arg.value}"))
+
+        # C：append_records 的 stem 必须可静态判定（fail closed）
+        if callee == "append_records":
+            self._check_append_stem(node)
+
         # C：把 recommendations.jsonl 作为路径常量传入写入调用
         for arg in list(node.args) + [kw.value for kw in node.keywords]:
             if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
                 if f"{RECOMMENDATION_STEM}.jsonl" in arg.value:
                     self.recommendation_writes.append((node.lineno, "path:recommendations.jsonl"))
+
         self.generic_visit(node)
+
+    def _check_append_stem(self, node: ast.Call) -> None:
+        """stem 为字符串字面量 → 仅当等于 recommendations 判违例；否则 fail closed。"""
+        stem = _append_stem_arg(node)
+        if isinstance(stem, ast.Constant) and isinstance(stem.value, str):
+            if stem.value == RECOMMENDATION_STEM:
+                self.recommendation_writes.append(
+                    (node.lineno, "append_records:recommendations")
+                )
+            return
+        form = type(stem).__name__ if stem is not None else "MISSING_STEM_ARG"
+        self.unverifiable_stem_calls.append((node.lineno, f"append_records:{form}"))
 
 
 def _analyze(path: Path) -> _GuardVisitor:
@@ -212,7 +276,9 @@ def check(root: Path) -> CheckReport:
 
     # ── B / C. 数据路径单遍 AST：无工具能力、无写建议 ──
     tool_hits = 0
+    import_deny_hits = 0
     rec_writes = 0
+    unverifiable_stem_calls = 0
     for path in modules:
         visitor = _analyze(path)
         relpath = rel(path, root)
@@ -222,6 +288,16 @@ def check(root: Path) -> CheckReport:
                 Violation(
                     "措施3·工具白名单",
                     f"数据路径出现工具原语 {name!r}（外部文本不得触发工具）",
+                    relpath,
+                    lineno,
+                )
+            )
+        for lineno, name in visitor.import_deny_hits:
+            import_deny_hits += 1
+            report.violations.append(
+                Violation(
+                    "措施3·工具白名单",
+                    f"数据路径 import 了工具原语模块 {name!r}（外部文本不得触发工具）",
                     relpath,
                     lineno,
                 )
@@ -236,8 +312,21 @@ def check(root: Path) -> CheckReport:
                     lineno,
                 )
             )
+        for lineno, what in visitor.unverifiable_stem_calls:
+            unverifiable_stem_calls += 1
+            report.violations.append(
+                Violation(
+                    "判据·不产生建议",
+                    f"append_records 的 stem 无法静态判定（{what}）—— "
+                    "fail closed：无法证明不写建议，即判违例",
+                    relpath,
+                    lineno,
+                )
+            )
     report.scanned["tool_primitive_hits"] = tool_hits
+    report.scanned["import_deny_hits"] = import_deny_hits
     report.scanned["recommendation_writes"] = rec_writes
+    report.scanned["unverifiable_stem_calls"] = unverifiable_stem_calls
 
     # ── D. 规则写收口点：write_rule 函数体内调用 refuse_write（AST 绑定函数体）──
     rw_tree = ast.parse(rulewrite_path.read_text(encoding="utf-8"), filename=str(rulewrite_path))
@@ -257,17 +346,17 @@ def check(root: Path) -> CheckReport:
 
     # ── E. 收口点有生产调用方（R-07，AST 绑定函数体）──
     ex_tree = ast.parse(executor_path.read_text(encoding="utf-8"), filename=str(executor_path))
-    func_wiring: dict[str, tuple[int, set[str]]] = {}
+    body_calls_per_func: list[set[str]] = []
     for node in ast.walk(ex_tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            func_wiring[node.name] = (node.lineno, _body_calls(node))
+            body_calls_per_func.append(_body_calls(node))
     calls_write_rule = any(
         any(c == CHOKEPOINT_WRITE_RULE or c.endswith(".write_rule") for c in calls)
-        for _, calls in func_wiring.values()
+        for calls in body_calls_per_func
     )
     calls_request_tool = any(
         any(c == CHOKEPOINT_REQUEST_TOOL or c.endswith(".request_tool") for c in calls)
-        for _, calls in func_wiring.values()
+        for calls in body_calls_per_func
     )
     if not calls_write_rule:
         report.violations.append(
@@ -288,6 +377,13 @@ def check(root: Path) -> CheckReport:
     report.scanned["chokepoints_wired"] = int(calls_write_rule) + int(calls_request_tool)
 
     # ── 空样本显式记 note（不变式真空成立，须标注，不得判 PASS=已验证）──
+    report.notes.append(
+        "KNOWN_STATIC_LIMIT: B/C 为**静态绊线**，不构成完整证明；**计算得到的路径**静态不可判定"
+        "（例：receiver 位置拼接 (root/'facts'/('recommend'+'ations.jsonl')).write_text(...) 与 "
+        "f-string 变量目标 open(f'{root}/facts/{stem}.jsonl','a')）→ 不在 B/C 覆盖内。"
+        "**完整覆盖由运行时效果断言承担**：处理外部文本前后 facts/recommendations.jsonl 行数不变"
+        "（tests/injection/test_prompt_injection.py 效果三元组 (b)）。"
+    )
     if not _raw_has_external_text(root):
         report.notes.append(
             "NO_RAW_EXTERNAL_TEXT：raw/ 无外部文本（数据路径不变式**真空成立**，须标注）"

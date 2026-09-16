@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 __all__ = [
@@ -62,12 +63,28 @@ def _validate_name(name: str) -> str:
     return "/".join(parts)
 
 
+def _content_addressed_sibling(target: Path, text: str) -> Path:
+    """为"同名但内容不同"的原始物计算**内容哈希后缀**落点（`<stem>.<sha256前8位><suffix>`）。
+
+    - 该哈希路径不存在，或已存在但内容一致 → 直接返回（幂等）。
+    - 哈希前缀碰撞（极不可能）→ 逐步加长前缀，直至得到"不存在或内容一致"的路径。
+    """
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    for length in (8, 16, 32, 64):
+        candidate = target.with_name(f"{target.stem}.{digest[:length]}{target.suffix}")
+        if not candidate.exists() or read_external_text(candidate) == text:
+            return candidate
+    raise ValueError(f"同名不同内容且内容哈希前缀重复，无法落成新文件: {target}")
+
+
 def store_raw(root: Path, name: str, text: str, *, dedup: bool = True) -> Path:
-    """把外部文本**只**写入 `root/"raw"/<name>`（去路径穿越）；返回落盘路径。
+    """把外部文本**只**写入 `root/"raw"/<name>`（去路径穿越）；返回**实际**落盘路径。
 
     - `name` 含路径分隔符 … 允许法相对名；含 `..` / 绝对路径 → `ValueError`（越界，不静默改写）。
-    - `dedup=True` 且同名文件内容一致 → 不重复写（幂等，避免刷屏）。
-    - 返回路径**必在 `raw/` 内**（断言 `raw_dir in parents`，越界即抛）。
+    - **永不覆盖**既有原始物：目标已存在且内容一致 → 幂等返回原路径（不重复写）；
+      目标已存在但**内容不同** → 落成**内容哈希后缀**的新文件 `<stem>.<sha256前8位><suffix>`，
+      并返回该实际路径（既有证据不被静默替换）。
+    - 返回路径**必在 `raw/` 内**（断言落点相对 `raw/`，越界即抛）。
     """
     safe_name = _validate_name(name)
     raw_dir = Path(root) / RAW_DIRNAME
@@ -79,8 +96,22 @@ def store_raw(root: Path, name: str, text: str, *, dedup: bool = True) -> Path:
         raise ValueError(f"外部文本落点越出 raw/：{target}")
     target.parent.mkdir(parents=True, exist_ok=True)
 
+    if target.exists():
+        if dedup and read_external_text(target) == text:
+            return target  # 内容一致 → 幂等，不重复写
+        # 同名不同内容 → 内容哈希后缀新文件（永不覆盖既有原始物）
+        target = _content_addressed_sibling(target, text)
+
+    # 落点再次确认在 raw/ 内（哈希后缀不改变父目录，此处为结构性复核）
+    resolved_target_parent = target.parent.resolve()
+    if (
+        raw_dir.resolve() not in resolved_target_parent.parents
+        and resolved_target_parent != raw_dir.resolve()
+    ):
+        raise ValueError(f"外部文本落点越出 raw/：{target}")
+
     if dedup and target.exists() and read_external_text(target) == text:
-        return target  # 内容一致 → 幂等，不重复写
+        return target  # 哈希路径已存在且内容一致 → 幂等
 
     target.write_text(text, encoding="utf-8")
     return target
