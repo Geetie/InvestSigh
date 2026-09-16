@@ -6,9 +6,9 @@
       "sha256": "f6bab7ee92ac617f1ed3d7f3d89cbfc45b65049ff62f77686d98a5d15a811ca0"
     },
     "rules/baseline.yaml": {
-      "bytes": 6671,
+      "bytes": 7515,
       "locked_mode": "0o444",
-      "sha256": "90c8406fff082dd58f709d5234c0432a79924ebca240c33d9e608625d28c9328"
+      "sha256": "63cb2cdbb6af4cf5e7c8ff522afd1385a3c105bbce48c76b26ef3b57877c59de"
     },
     "rules/benchmark.yaml": {
       "bytes": 3985,
@@ -71,7 +71,7 @@
       "sha256": "865175aad32bfdb35c6a295f364da4faa7a47adc21c3fc3cd214845c546f0f84"
     }
   },
-  "locked_at": "2026-09-16T13:15:05+00:00",
+  "locked_at": "2026-09-16T13:27:21+00:00",
   "locked_by": "system/scripts/ops/lock_rules.py",
   "note": "本清单是 rules/ 的 SHA256 快照。校验方 scripts/checks/rules_lock_guard.py；改动流程见 lock_rules.py 文档头。",
   "owner_writable": false,

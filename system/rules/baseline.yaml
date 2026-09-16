@@ -16,6 +16,16 @@
 # ★ 例外说明（本文件内唯一一族的"键名为转写"）：`§B.2` / `§G.2` 的后果语义在设计中是**行文**而非 key，
 #   本节照其语义落布尔键并在行内标注"键名为转写"；**值本身是逐字的**，报告对照表已标出。
 #
+# ★★ 深度约定（主理人裁定 `R8-1`，2026-09-16）—— **本文件的分组深度为准。**
+#   设计里 `cfg.max_primary_drivers_per_business` 这类 `cfg.<key>` 写法，一律读作
+#   **本文件 `thresholds:` 分组下的键**（即 `cfg = baseline["thresholds"]`）；
+#   设计里的 `rules/baseline.yaml: <key>` 是 **`file:key` 记法，不锁深度** ——
+#   项目既成契约：存量 10 件规则文件 **10/10 分组包裹**，且有 2 例同源先例
+#   （`schedule.yaml:trading_calendar` → 实装 `cadence.timezone`；
+#    `freeze.yaml::freeze_param` → 实装 `freeze_params`）。
+#   设计的这两种写法与分组**不矛盾**：设计没写深度，**深度由本件填**。
+#   ⇒ 代码一律按**本文件实有结构**读；**不得**为迁就设计里扁平写法而摊平本文件。
+#
 # 只读（安装后）：0444 + SHA256。
 
 version: 1

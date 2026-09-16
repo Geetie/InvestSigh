@@ -14,9 +14,21 @@
 
 | 卡 | 文件集 | 依赖 |
 |---|---|---|
-| **13-A Ch4 价值层** | `scripts/valuelayer/**` · `tests/valuelayer/**` · 报告 | 只读 `rules/{metric-sets,baseline}.yaml` + `facts/{baselines,businesses,drivers}.jsonl` |
-| **13-B Ch5 价格层** | `scripts/pricelayer/**` · `tests/pricelayer/**` · 报告 | 只读 `rules/{valuation-methods,scenario}.yaml` + `facts/{prices,expectations,benchmarks}.jsonl` + `derived/`（Ch9 compute 已建） |
+| **13-A Ch4 价值层** | `scripts/valuelayer/**` · `tests/valuelayer/**` · `verify.py::BATCHES` 加**一条** `valuelayer`（`V-06`）· `registry/criterion_counterexamples.yaml` 加**本卡自己那一条** `nvidia_sample::chapter4_g_depth` · 报告 | 只读 `rules/{metric-sets,baseline}.yaml` + `facts/{baselines,businesses,drivers}.jsonl` |
+| **13-B Ch5 价格层** | `scripts/pricelayer/**` · `tests/pricelayer/**` · `verify.py::BATCHES` 加**一条** `pricelayer`（`V-06`）· 报告 | 只读 `rules/{valuation-methods,scenario}.yaml` + `facts/{prices,expectations,benchmarks}.jsonl` + `derived/`（Ch9 compute 已建） |
 | **13-R 规则文件转写** | `system/registry/rule-candidates/*.yaml` · 报告 | 只读**设计区**（各章 `02_实现方案.md`） |
+
+> ★ **本表的原始版本漏了两处共享文件的"限量授权"，与下方 DoD 自相矛盾**（`ws-ch2-rules` 独立复核时指出，
+> 主理人确认**是我的缺陷**，`R8` 已更正）：
+> 卡 13-A 的「接线要求」第 2 条与 DoD 第 3 条明文要求它登记反例，`V-06` 明文要求新测试目录同步加批次，
+> 但上表只列了 `scripts/valuelayer/**` · `tests/valuelayer/**` · 报告 ⇒ **按表读就是"越界"，
+> 按 DoD 读就是"必做"**。现值已补入，并把授权**收窄到"仅限本卡自己那一条"**：
+> `verify.py` 只准加自己的批次条目（**不得动别家的，也不得改 `ORDER` 里别家的位置**），
+> `criterion_counterexamples.yaml` 只准加自己的判据条目。跨卡冲突由主理人手工收（`R2` / `R3`）。
+>
+> ★ **一般化教训**：任务卡的「并行边界表」与「DoD」**必须同时更新**，否则边界表会被当作唯一的越界判据
+> —— 而 DoD 里那些"必须改共享文件"的条目会**静默失效**（执行方按边界表自我审查，反而更守规矩）。
+> 检查动作：新卡写完，**逐条把 DoD 里提到的每个文件回填进边界表**，少一个就是矛盾。
 
 ★ **`rules/**` 是 0444 + SHA256 锁（纪律 9/10），任何流都不得写。**
 13-R 只产出**候选内容**到 `system/registry/rule-candidates/`；**由主理人**安装进 `rules/` 并跑
@@ -312,3 +324,75 @@ note: 判据台账[nvidia_sample]：函数体内已绑定 2 条，声明为 auto
 
 ★ **不要跑 `verify.py --batch <整目录>`**（`V-08` 删除配额）；单文件、分次。注入测试在 `injection-a..f` 分片里，
 跑单文件即可。
+
+---
+
+### R8 · 规则消费面复核（`ws/ch2-rules`，卡 13 延伸）—— 三条裁定
+
+`ws/ch2-rules` 在 13-R 安装后做了**独立复核**，指出三处。**三处的性质各不相同，逐条裁**：
+
+#### R8-1 · `rules/baseline.yaml` 的**深度契约**：`thresholds.*` 分组 **维持为准**
+
+**事实（我逐条实测，非采信）**：
+
+| 事实 | 证据 |
+|---|---|
+| 设计写 `rules/baseline.yaml: max_primary_drivers_per_business` | `04/02:203`（`file:key` 记法） |
+| 同一设计写 `cfg.max_…` / `cfg.min_nonnull_rate`（**扁平属性访问**） | `04/02:210` / `04/02:364` |
+| 设计**全文无** `thresholds` 一词 | 全文检索零命中 |
+| 存量 10 件规则文件**全部**分组包裹 | 我实跑 `yaml.safe_load` 列顶层键：`banned_tokens` / `benchmark` / `data-sources.allowlist` / `freeze` / `notification` / `pipeline` / `publish` / `review` / `schedule` / `scope` —— 10/10 均为"元数据 + 关注面分组" |
+| **同源先例 2 例** | ① 设计 `08/02:239` 写 `schedule.yaml:trading_calendar`，实装在 `cadence.timezone` 下，按 `schedule.yaml::cadence.timezone` 读；② 设计写 `freeze.yaml::freeze_param`（单数），实装顶层键是 `freeze_params`（复数） |
+
+**裁定：维持已安装件的 `thresholds.*` 分组为准。** 四条理由：
+
+1. **`G-06` 唯一真源 + 已安装件是唯一被锁的产物体**（0444 + SHA256 + `rules_lock_guard`）。
+   为改深度而重录 4 份设计文档 + 重锁 14 件，**语义收益为零**（两种读法能表达的完全一样）。
+2. **"设计 `file:key` 记法不锁深度"已是项目既成契约**：10/10 存量件分组 + 2 例同源先例。
+   这不是"我们跟设计不一致"，而是**设计本就没写深度，深度由安装件填**。
+3. **设计 `cfg.X` 与 `thresholds` 分组不矛盾**：把 `cfg` 读作 `baseline["thresholds"]` 即两立。
+   ⇒ 这**不是**"设计 vs 实现"的冲突，而是**设计留白**，留白归安装件。
+4. **分组本身更优**：`baseline.yaml` 顶层有 6 个互不相干的关注面
+   （`thresholds` / `driver_overflow_policy` / `driver_duration` / `form_completeness` /
+   `required_extra_fields_by_profitability` / `segment_evidence`），摊平会有键语义混淆风险。
+
+⇒ **13-A / 13-B 一律按 `rules/*.yaml` 实有结构读**；`cfg` = `baseline["thresholds"]`。
+⇒ ★ **并且必须把这个留白显式写下来**（否则下一个人还会再问一遍）：已在 `rules/baseline.yaml`
+头部加"深度约定"段（主理人改 + 重锁），并在本卡留痕（本条）。
+
+#### R8-2 · 13-A 的**共享文件授权**：任务卡「并行边界表」与 DoD 自相矛盾 —— **我的缺陷，已更正**
+
+`ws/ch2-rules` 指出"13-A 允许面不含 `verify.py` / `registry/`"⇒ 无权自修。
+**结论对，归因要引对一手证据**：`PROGRESS.md:228` 那条"派单疏漏"说的是**另一件事**
+（批次只加在 `main`/`integration`、没进 WS 工作区），**不是**本条。
+本条的一手依据是**卡 13-A 自身**：line 85（`V-06` 必加批次）+ DoD 第 3 条（必登记反例）
+与「并行边界表」（只列 `scripts/valuelayer/**` · `tests/valuelayer/**` · 报告）**互相矛盾**。
+⇒ **我已按 `R8-2` 修表**（见本文开头边界表下的更正说明），并把授权**收窄到"仅限本卡自己那一条"**。
+⇒ 13-A 已获明令：`verify.py` 只加 `valuelayer` 条目、**不得动 `pricelayer`**（`R2`）。
+
+#### R8-3 · 13-B 的两个**死常量**：不是"留在代码"，而是"**进 `rules/`**"
+
+`ws/ch2-rules` 报告：13-B 有 `DEFAULT_DISPLAY_CAP=3` / `MAX_DISPLAY_CAP=5`（`grep` 零引用 = 死常量），
+以及 `DEFAULT_MIN_SOLUTIONS=2`；并引我的话"'不收进 rules' ≠ '写进代码'"。
+
+★ **它引用得对，但推出的结论我推翻。** 我当时判"暂不收进 `rules/`"的**前提**是
+**没有键名、没有指派文件**；现在前提没了 —— `05/02:460 §J3` 就是 `00_待拍板项清单.md` **B18 的来源**，
+而 **B18 已拍板**：「估值解集展示上限 `N` = **默认展示 3 组，最多 5 组**〔新给〕」。
+⇒ 条件变了，裁定随之改变：**必须进 `rules/`**（`rules/scenario.yaml`，§J3 指派的件）。
+
+**先给一条可复用的统一判据**（免得每件重新吵）：
+
+> **"影响产出取值/选择"的数 = 参数 ⇒ 必须住 `rules/`（`Ch11 §D.2` 单一真源 + `P-09`）；**
+> **"仅为防组合爆炸/防卡死的上界" = 护栏 ⇒ 可住代码，但必须在 docstring 明标为护栏。**
+
+按此判据逐条落：
+
+| 常量 | 判定 | 处置 |
+|---|---|---|
+| `DEFAULT_DISPLAY_CAP=3` | **参数**（决定"展示哪几组解"，直接改变产出） | 进 `rules/scenario.yaml`，值 `3`，`basis` 记 B18 |
+| `MAX_DISPLAY_CAP=5` | **参数**（同上） | 进 `rules/scenario.yaml`，值 `5`，`basis` 记 B18 |
+| `DEFAULT_MIN_SOLUTIONS=2` | ★ **设计无字面 2，B18 也没给** | **不得自创**。有设计出处 → 按其转写；无 ⇒ **删掉该常量**（改为"展示解数 = 求解器实际解出组数，下界由 B18 的 `default_display_cap` 与真实解数共同决定"），若确需下界则登记 `tbd` 交需求方 |
+| `max_grid_points=256` / `max_nodes=512` | **护栏**（防搜索爆炸，不改变解集语义） | 可留代码，docstring 须标"护栏" |
+
+⇒ 处置：`ws/ch2-rules` 贴回 `§J3` 的**逐字原文**（键名 + 值 + 出处）+ 上述判定理由；
+**由主理人**安装进 `rules/` + `chmod u+w` + `lock_rules.py` 重锁 + 核 `rules_lock_guard`。
+**代码里不得留第二份**（`G-06`）。
