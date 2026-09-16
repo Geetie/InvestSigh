@@ -1580,3 +1580,190 @@ $ diff <A的输出> <B的输出>
 ⇒ 两条都属"**看起来很干净的结论其实什么都没测**"，与本报告 §11.2 的 `grep` 假阴性同类 ⇒ **写进报告备查**。
 
 ★ **边界（仍未做）**：**其余 8 道门禁未逐道跑差分**；依据是"无任何代码路径读这些键"（穷尽式搜索）⇒ 任何检查都不可能对这些键有判别力。**这是推断**，我如实标注，并建议批次 14 若要更硬可补齐（成本低：同一 scratch 手法）。
+
+---
+
+## §16 提交后重跑（R11/R12 之后按 per-file SHA 结账）
+
+**本节时点**：`2026-09-16` 夜。team-lead 的边界是「13-A 仍差 `git add`，一提交你就按 hash 结账」——
+**实测：13-A 已完成 `git add`（索引不再 `UU`、5 个原冲突/改动文件全部 `M ` 已 staged、语法全部 OK），但仍未 `commit`**；
+13-B（`ws/ch5-pricelayer`）**也已 `git add` 到 12 个文件，同样未提交**。
+⇒ 本节**不是"按 commit hash 结账"**，而是**按 per-file blob SHA 结账**：我把每个被核文件的当前 blob SHA 钉在下面，
+任何人可在提交后用 `git rev-parse <commit>:<path>` 比对"是不是同一份"。
+
+### §16.1 对象与时点钉死（先说清"我在核哪一份"）
+
+| 文件（13-A 树 `ws/ch4-valuelayer`） | 本次 blob SHA（`git hash-object`） | 我上一轮记的 | 是否变过 |
+|---|---|---|---|
+| `scripts/valuelayer/_rules.py` | `97e894c6b39f` | `74c20c26e398` | ★ **变过** |
+| `scripts/valuelayer/completeness.py` | `359bd0c2a1dc` | `62e541cc95ad` | ★ **变过** |
+| `scripts/valuelayer/growth_quality.py` | `9eef7391ac03` | `55043b1f4c0c` | ★ **变过** |
+| `scripts/valuelayer/route_guard.py` | `992b9cc38f63` | `f1c0c166ceb6` | ★ **变过** |
+| `scripts/valuelayer/moat_guard.py` | `6018fa60c5d7` | `602050847758` | ★ **变过** |
+| `scripts/ops/verify.py` | `f73c6638b643` | — | — |
+| `scripts/delivery/stage_gate.py` | `52698012a694` | — | — |
+| `registry/criterion_counterexamples.yaml` | `d2dbafc7ab0a` | — | — |
+| `tests/injection/test_criterion_effectiveness.py` | `58ac473880f1` | — | — |
+
+| 文件（13-B 树 `ws/ch5-pricelayer`） | 本次 blob SHA（`git hash-object`） |
+|---|---|
+| `scripts/pricelayer/solver.py` | `452084eb3b28` |
+| `scripts/pricelayer/valuation.py` | `9e4e1102e0fc` |
+
+★ **两个工作树在我这一轮复核期间都仍在移动**：
+13-B 的 `solver.py` 在我核的过程中 SHA 又变了一次（行号随之下移/上移 1~18 行，例：`class SolutionSetDisplay` 从 `:118` → `:117`，
+`min_solutions` 派生从 `:523` 前移，`assert_multi_solution` 从 `:403` → `:505`）。
+⇒ **本节所有 `文件:行号` 一律以 §16.1 这两个 SHA 为准**；对不上就是被改过，**须重跑本节**（不要"就地沿用行号"）。
+
+★ **13-A 的树在我这一轮复核期间仍在移动**：`g_depth_violations` 已从 `moat_guard.py` **移到** `completeness.py:1082`，
+`baseline_threshold` 从 `_rules.py:127` 挪到 `:128`。我第一次写的探针因此 `ImportError`。
+⇒ **教训（再次）**：跨人工作树做"提交后复核"，**唯一稳的做法是先把 SHA 钉下来再断言**；
+本节所有结论**只对上面的 SHA 成立**。团队里这条已咬过我两次（§11.2 的 `grep`、§13 的键数 1→0），这次是第三次。
+
+### §16.2 team-lead 指定的四项 —— 逐项结账
+
+| # | 结账项 | 判定 | 我的实测证据 |
+|---|---|---|---|
+| 1 | `未绑定判据[nvidia_sample]` **2 → 1** | ✅ | 我实跑 `python3 system/scripts/checks/criterion_effectiveness_guard.py system --no-report`：`note: 未绑定判据[nvidia_sample]：1 条（['evidence_locatable']）`，且 `RESULT: PASS（0 violations）`、`exit=0`（上一版是 2 条 + `exit=1` 结构性红） |
+| 2 | `chapter4_g_depth` 在 `registry_entry_tests_resolved` 里查得到 | ✅ | 同一跑输出 `scanned registry_entry_tests_resolved: 16`（= `criteria_registry_entries: 16`）；登记条目**只有 1 条**（见下"2 处命中 ≠ 2 条"） |
+| 3 | 13-B 的 `git grep 'solution_set_display'` 非空 | ⚠️ **只在工作树成立** | `git grep … main -- system/scripts system/tests` → **`exit=1`（空）**；`ws/ch5-pricelayer` 工作树 → **25 处命中**（`load_solution_set_display` 等）。⇒ **必须合并后才算真闭合** |
+| 4 | `chapter4_g_depth` 绑定位置仍在 `six_step_chain_complete` 之前 | ✅ | `stage_gate.py` 内字符偏移 `chapter4_g_depth`=**17376** < `six_step_chain_complete`=**17430**（对应 `:467` / `:468`，`:469` 是 `derivation_reviewable`） |
+
+★ **"2 处命中 ≠ 2 条登记"**（防误读）：`criterion_counterexamples.yaml` 里 `chapter4_g_depth` 字面出现 **2 次**，
+但它们是**同一条**的 `criterion_id:` 与 `test: …::test_nvidia_sample_chapter4_g_depth_blocks_on_incomplete_form`。
+⇒ **条目数 = 1**，`kind: counterexample`，`stage: nvidia_sample`，`blocked_hint: "Ch4 §G 形式完备性未过"`。
+（`nvidia_sample` 出现 7 次 = 3 条 × 2 + 1 行节标题注释，同样自洽。）
+**这条计数纪律要留着**：`grep -c` 对 YAML 是**下界**，不是条目数。
+
+### §16.3 `R8-1` 复核（键名 + 深度）—— 独立探针，全程不走它们的 pytest
+
+我写了一个只做直接调用的探针（`/tmp/probe13a.py`，不落库、不写报告），实测：
+
+```
+=== R8-1(a) 键名：真件读值 ===
+  baseline_threshold('min_locator_count')            = 1
+  baseline_threshold('min_derivation_count')         = 1
+  baseline_threshold('min_nonnull_rate')             = 0.9
+  baseline_threshold('max_primary_drivers_per_business') = 5
+  baseline_threshold('min_fields_per_section') -> UndecidedThreshold
+      "rules/baseline.yaml::thresholds 的 'min_fields_per_section' 为 'tbd' —— `tbd`/未拍板的值不得被当成一个可用…"
+  baseline_threshold('__no_such_key__') -> MissingRuleInput
+      "rules/baseline.yaml::thresholds 缺少键 '__no_such_key__' —— Ch4 §G.2/§D.2 要求该阈值参数化在…"
+
+=== R8-1(b) 深度：真件必须可判定 ===
+  len(g_depth_violations(真件)) = 9   FATAL = 9
+    例：FATAL Violation(rule='nvidia_sample', reason="Ch4 §G 形式完备性未过 [baseline-nvda-001][sections_nonempty]：①业务与产业…")
+```
+
+⇒ **✅ R8-1 两件都落地，且是"真件可判定"而不是"夹具里可判定"**：
+4 个阈值真读到值（**键名已真对上**）；`min_fields_per_section` = `tbd` ⇒ **响亮拒绝**（`UndecidedThreshold`，非静默取默认）；
+**不存在的键 → `MissingRuleInput`**（≥2 处调用 ⇒ 缺键不兜底，这正是我在 §10 要的"缺键不许兜"）。
+深度侧 `g_depth_violations(真件) = 9 条全 FATAL`（六节为空 + 非空率 0.1429 < 0.9）⇒ **不再是"无被检对象"**。
+
+★ **残留（非阻塞，可核）1**：`completeness.py:543`、`:652` 两处 docstring **仍写旧键名** `cfg.min_locators` / `cfg.min_derivations`
+（实装常量已是 `min_locator_count` / `min_derivation_count`，见 `:85-87`）。同一文件 `:82` 已留改名史说明 ⇒ **文档漂移，非行为缺陷**，
+但我上一轮报过、**这一轮实测仍在**，故如实记载（不重复开单，只挂在此处备查）。
+
+★ **残留（非阻塞，可核）2 —— `R8-3` 条款③ 的第二个条件没满足**：`moat_guard.py:19` 的 `len(kinds) >= 2` 仍是**唯一 1 处**、
+代码未动（`90e7c94` 只把它写成条款③）。条款③ 说「照设计落值 = 转写，**可留代码**」——但**有第二个条件**：
+「**代码必须在 docstring 标出该设计锚点**」。实测该行只有行末注释 `# 需证据组合（≥2 类）`，
+**没有**指向设计逐字出处（我们上一轮引的是 `04_…/02_实现方案.md:311`）。
+⇒ 判定：**留代码的资格成立，但"标设计锚点"这一子条件未做** —— 这是个一条注释即可闭合的小缺口，但它**不属于任何门禁能核的范围**（见 §16.5 末尾的名单类判据边界）。
+
+### §16.4 `R8-2` 复核（归属：只登记自己的）
+
+| 子项 | 判定 | 证据 |
+|---|---|---|
+| 只加自己的 `valuelayer` 批次条目 | ✅ | `verify.py:395` 新增 1 个 `valuelayer` 批次（`:396` 注释援引 `V-06`）；`pricelayer` 批次仍在 `:348`，其条目内容我逐行比对后**未变**；`ALL` 序 `:436/:437` 两者相邻 |
+| 只登记自己的 `nvidia_sample::chapter4_g_depth` 反例 | ✅ | 见 §16.2 之"2 处命中 ≠ 2 条"：条目 1 条、`kind: counterexample`、note 明确自称"批次 13-A 绑定"；**未占用**他人条目（同节其余 2 条是既有的） |
+| `未绑定判据[nvidia_sample]` 2→1 | ✅ | §16.2 第 1 项 |
+
+★ **但该条 note 里有一句不实，我实测证伪**：note 写「…**真仓库那份尚不存在**，故不写它就只能测到'规则缺失 ⇒ 无法判定'这一条」。
+实测：`system/rules/baseline.yaml` **存在**（7515 B，`thresholds` 段键齐全：
+`max_primary_drivers_per_business: 5` / `min_nonnull_rate: 0.9` / `min_locator_count: 1` / `min_derivation_count: 1` / `min_fields_per_section: 'tbd'`）。
+**夹具副本存在的真实理由不是"真件不存在"，而是"真件的 `min_fields_per_section` 是 `tbd`（未拍板）⇒ 该判据在真件上不可判定"** ——
+反例要让 `sections_nonempty` / `nonnull_rate` **判成红**，需要一个**已拍板**的字段数阈值，这一点 13-A 自己在
+`tests/valuelayer/_fixtures.py:97` 已经写清了（「★ 与 `BASELINE_CFG` 的唯一差别：`min_fields_per_section` 在这里是**已拍板的 1**」）。
+⇒ **建议把 note 的理由改成后者**（现成措辞就在 `_fixtures.py:19-24` / `:97-116`）。这是**登记文本不实**，不是行为缺陷，但本项目的口径是"登记的每条理由都要能被证伪"。
+
+### §16.5 `R8-3` 复核 —— 我上一轮的判词要**加对象限定**（自我更正）
+
+**★ 更正点**：§15.5(b) 我判「代码侧 ❌ **错**：`rules/` 现在**断言**了一段代码里不存在的派生
+（`min_count = 2 if must_show_multiple else 1`）」。
+**这条判词对 `main` 成立，对 `ws/ch5-pricelayer` 工作树不成立** —— 同一句话在两个对象上真假相反。
+（这正是本项目反复在教的那一课；我自己又犯了一次"判词不带对象"。）
+
+**实测（13-B 工作树）**：该派生**已实现**，且不是"把值挪个地方"：
+
+```
+（行号 as of `solver.py` SHA `452084eb3b28`）
+solver.py:102  RULE_KEY_SOLUTION_SET_DISPLAY = "solution_set_display"
+solver.py:117  class SolutionSetDisplay  —— "带来源标注"
+solver.py:127      @property
+solver.py:128      def min_count(self) -> int:
+solver.py:130          return 2 if self.must_show_multiple else 1
+solver.py:133  def load_solution_set_display(root) —— "唯一读口"，走 `scripts._common._cached_yaml`（P-02）
+solver.py:494  min_count = display.min_count          ← 呈现层真读（不再是常量）
+solver.py:522  assert_multi_solution:  min_solutions = display.min_count if … else DEFAULT_MIN_SOLUTIONS
+solver.py:582  check(): "下限**读** …solution_set_display.must_show_multiple 派生，**不硬编码**"
+solver.py:597  report.scanned["min_solution_count"] = display.min_count   ← 计数也走真源
+solver.py:600  for text in _rule_binding_violations(root_path):   ← 规则↔代码机器绑定
+solver.py:672  if int(declared_default) != DEFAULT_DISPLAY_CAP:  → 违例
+solver.py:679  if int(declared_max)     != MAX_DISPLAY_CAP:      → 违例
+```
+
+**我自己的独立探针（不走他们的 pytest；`/tmp/probe13b.py`）**：
+
+| 探针 | 输入 | 输出 | 说明 |
+|---|---|---|---|
+| A 真件 | `root = ws/ch5-pricelayer/system` | `default_count=3  max_count=5  must_show_multiple=True  min_count=2  value_source='rules'` | 真读规则，不是走常量 |
+| B 篡改（**合法但改行为**） | `must_show_multiple: true → false` | `min_count 2 → 1`，`value_source='rules'` | ★ **有判别力**：规则改则行为改 |
+| C 篡改（非法） | `default_count: 3 → 9`（> `max_count=5`） | `PriceLayerError`（响亮失败，"不静默夹紧"） | 非法值不静默 |
+| D 键整体缺失 | 删掉 `rules/valuation-methods.yaml` | 回落 `3/5/2` 且 `value_source='design_default'` | 回落**标了来源** |
+
+⇒ **`R8-3` 在 13-B 这一面实质落地**（口径从"值在不在 rules 里"升级到"规则改则行为改"），
+**且 `git grep` 只在工作树非空**（§16.2 第 3 项）。
+
+**三个常量没消失，但角色变了**（要请示口径）：
+`solver.py:79 DEFAULT_DISPLAY_CAP=3` / `:86 MAX_DISPLAY_CAP=5` / `:92 DEFAULT_MIN_SOLUTIONS=2` 仍在，但现在承担两件事：
+① 规则文件/键缺失时的**回落**（docstring 明标"真值取自 `rules/…`"）；
+② **漂移断言锚** —— `_rule_binding_violations` (`:643`) 在 `:672` / `:679` 比对规则声明的 `default_count` / `max_count`
+与代码常量，**不一致即报违例**（`solver.py:672` / `:679`，实测读的是"与 `DEFAULT_DISPLAY_CAP` / `MAX_DISPLAY_CAP` 不一致"）。
+⇒ 按 `G-06` 的通行解法（真源 + 机器绑定，同批次 11 的 `_TRUTH_STEMS↔注册表` 手法），我判**已收口**：两处**不静默**。
+★ **但这里有一个必须说清的分层（否则会把它读成"已单一真源"）**：
+`must_show_multiple` 是**真·单一真源**（代码**只**派生、不存副本，改规则即改行为 —— 探针 B 已证）；
+而 `default_count` / `max_count` 是"**真源在 rules + 代码留副本 + 漂移断言绑死**"：
+只改 rules 会让 `_rule_binding_violations` 报违例 ⇒ **使用者必须同时改两处**才能过门禁。
+⇒ 也就是"**副本不可能悄悄漂移**"，但**仍是同一事实两处**。**请 team-lead 裁**：`G-06` 允不允许这一形态
+（我倾向允许，理由是它不静默、且副本能覆盖"规则文件缺失仍需可运行"的场景；但这条只是我的倾向，不是我可以自己拍的口径）。
+
+**★ 残留（新增，可核）—— `max_grid_points` 面两条**：
+
+1. **`护栏` 标注未落地**。`batch13_taskbook.md:402` 明文要求「`max_grid_points=256` / `max_nodes=512` … 留代码，**docstring 须标"护栏"**」
+   （这是我在 §10.3 提、主理人采纳的处置）。实测：`grep -c 护栏` → `solver.py` **0**、`valuation.py` **0**。
+   ⇒ **要求未做**。**且它天然无法被门禁核**（没有任何检查能判断 docstring 里有没有"护栏"二字）⇒ 属**名单类判据**，
+   按 `R-06` 只能当 lint，**不得**当成防护判据（这正是我 §15 对 13-G 那三条硬约束的同一逻辑）。
+2. **模块头一句陈述与实装不符**。`solver.py:30-31` 写：「超出 `max_grid_points` **不静默**：记 note **+ 置 `degraded`**」。
+   实测：网格超限路径（`:369-374`）**只**记 note（`GRID_CAP_EXCEEDED: …`，`:371`），note 经 `:466 solution_set.notes.extend(notes)`
+   **确实非静默** ✅；但 **`degraded` 只在"未达解数下限"路径置位**（`:495-496`，`SINGLE_SOLUTION_RISK`），
+   `GRID_CAP_EXCEEDED` 与 `degraded = True` 在全文件**无任何关联**（`grep` 各仅 1 处）。
+   ⇒ **"记 note + 置 degraded" 里后半句是不实陈述**。修法二选一：改文档，或在超限路径也置 `degraded`（**请 13-B 定，我不改他人文件**）。
+   ★ 附带说明**为什么我维持"`max_grid_points` 是护栏"这个分类**：它**会**改变产出（`:374 values = values[:max_grid_points]` 截断 ⇒ 可行集变了），
+   但它**非静默**（note 落盘）⇒ 满足"护栏"分类成立的前提；反之前提一旦丢掉（note 被删），这个分类立刻不成立。
+
+### §16.6 未闭合清单（按对象分，便于派活）
+
+| 对象 | 未闭合项 | 严重度 | 我的建议 |
+|---|---|---|---|
+| **13-A**（工作树，已 `git add` 未提交） | 无阻塞项（四项结账 3 ✅ + 1 条件成立）；两条文档/登记残留：`completeness.py:543/:652` 旧键名、`criterion_counterexamples.yaml` note 的「真仓库那份尚不存在」 | 低（非行为） | **提交即可**；两条残留一并顺手改（各 1 行） |
+| **13-B**（工作树，已 `git add` 12 文件未提交） | ① `max_grid_points`/`max_nodes` 的 `护栏` 标注（taskbook:402 要求）；② `solver.py:30-31` "置 `degraded`" 不实；③ 三个常量形态待 team-lead 裁 | 低（①②） | 提交后我按 hash 复跑 §16.3/§16.5 探针 |
+| **13-B（`main` 面）** | `git grep 'solution_set_display' main` 仍 `exit=1` ⇒ `R8-3` 在真源上**尚未闭合** | — | **以合并为准**，合并后我重跑一次 |
+| **我的树** | `git status --short system/rules system/registry` = **空** ✅（未污染真源）；本节只改 `reports/` | — | 无 |
+
+★ **本节仍未做（如实标注，不掩盖）**：
+1. **没有"按 commit hash 结账"** —— 因为**两个工作树都还没提交**。本节是**按 blob SHA 结账**，SHA 已钉在 §16.1；
+   提交后请把 `git rev-parse <commit>:<path>` 与我表里的 SHA 对一下，**一致则本节结论直接继承**，不一致则**本节作废、须重跑**。
+2. **我没有跑 13-A / 13-B 的 pytest**（`V-05`/`V-08` 的批耗时方差问题；此刻 13-A 树在动、13-B 树也在动）。
+   本节所有"可执行"结论都来自**我自己的直接调用探针**（`/tmp/probe13a.py`、`/tmp/probe13b.py`），
+   与它们的用例**互不覆盖**：我只能证明"这个键真被读了、改了会变行为"，**不能**代替"它们的用例全绿"。
+3. 其余 10 个 rules 文件的引用面**本轮未重扫**（§12 已按 `main` 重钉过一次；13-A/13-B 未提交 ⇒ 不影响 `main`）。
