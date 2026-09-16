@@ -50,14 +50,19 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
 
 **强制手段**：守卫断言每批 `timeout > 0` 且 `<= 300s`，且 `BATCHES` 与 `ORDER` 键集合一致。
 
-**当前批次表**（**15 批**；超时随实测更新，更新须同步守卫上限）：
+**当前批次表**（**20 批**；超时随实测更新，更新须同步守卫上限）：
 
 | 批次 | 内容 | 超时 | 实测 |
 |---|---|---|---|
 | `unit` | `tests/unit/`（契约 + 作用域匹配器） | 60s | ~8s |
 | `conflict` | `tests/conflict/`（P-03/P-05/P-07 schema） | 30s | ~0.3s |
 | `guards` | `tests/guards/`（门禁退出码契约 + 验证规范） | 60s | ~18s |
-| `injection` | `tests/injection/`（注入 / 接线 / 审计回归） | 120s | ~36s |
+| `injection-a` | `tests/injection/` 分片 A（审计回归 + 链路接线）· 27 例 | 90s | 6.85s（13.1×） |
+| `injection-b` | `tests/injection/` 分片 B（判据有效性 + 守卫防御性）· 28 例 | 150s | 18.62s（8.1×） |
+| `injection-c` | `tests/injection/` 分片 C（守卫拦截 A 半 + 追加式）· 27 例 | 150s | 16.50s（9.1×） |
+| `injection-d` | `tests/injection/` 分片 D（守卫拦截 B 半 + 幂等 + 时间契约）· 31 例 | 210s | 24.99s（8.4×） |
+| `injection-e` | `tests/injection/` 分片 E（提示注入 + rules 锁）· 27 例 | 90s | 9.82s（9.2×） |
+| `injection-f` | `tests/injection/` 分片 F（阶段闸门 + 接线守卫 + 分片绑定）· 29 例 | 120s | 12.53s（9.6×） |
 | `root` | `tests/test_ch11_invariants.py`（Ch11 不变量） | 30s | ~0.3s |
 | `compute` | `tests/compute/`（确定性计算层） | 60s | ~5s |
 | `graph` | `tests/graph/`（依赖图与 T12 传播） | 60s | ~4s |
@@ -70,10 +75,52 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
 | `gates` | `run_all_gates.py`（全部门禁逐项退出码） | 60s | ~3s |
 | `stage` | `stage_gate.py --stage all`（阶段判据） | 30s | ~0.3s |
 
+### ★ `tests/injection/` 为什么是 **6 个片**（不是设计选择，是宿主配额决定的）
+
+**根因（实测）**：夹具是**每个用例复制一份 `system/`**（`conftest.py::code_root`，
+实测每份 **273 项**：`copytree(ignore=_ignore)` + `_ENSURE_DIRS` + `_make_writable` +
+`_reset_truth_source` 之后 `os.walk` 计目录 + 文件）。宿主对**单轮（turn）**的删除操作有
+**累积配额 9999 项**（`scope: "turn"`）。`tests/injection` 合并跑 **165 例** × 273 ≈
+**45,045 项/轮 ≫ 9,999** ⇒ 越过阈值后**连单个用例目录都被拒删**，之后所有夹具 setup
+直接报 `E` —— **症状看起来完全像"测试坏了"，实际是配额**。
+⇒ 即 **`injection` 这个批次事实上等于被关掉了**。而本文件的铁律是
+「**卡死的门禁 = 被关掉的门禁**」，故必须修，不能靠"知道就好"。
+（`verify.py` 里原来那个以 `tests/injection` 为目标的**目录全量批次已删除** ——
+ 保留它就等于保留那个超配额的入口。）
+
+**代价（如实写明）**：完整覆盖 `tests/injection` 现在需要 **6 个轮次**（每轮跑一片）。
+这是**宿主删除配额决定的**，不是设计选择 —— 合并成一轮就必然重现上面那个"被关掉"的故障。
+`--batch all` 会把 6 片连着跑完 ⇒ **恰好**会重新越过配额，在某一处突然变红。
+**要完整覆盖该目录，请分 6 个轮次跑**。
+
+**三条做法约束（都不可放宽）**：
+
+1. **不许靠"缩小夹具副本"省配额**：明确**禁止**把 `scripts/` 或 `tests/` 从
+   `conftest._COPY_SKIP` / 副本里去掉 —— 有些守卫**就是扫副本**的
+   （`conflict_scan` 的 L2 扫 `code_root/scripts/**`；`verification_policy_guard` 扫
+   `code_root/tests/**`）。去掉会让它们**扫到 0 个文件而"通过"**，
+   那是比配额严重得多的**守卫静默失效**；
+   → 已登记：`test_guards_reject.py` 单文件 41 例 ≈ 11,111 项**本身就超阈值**，
+   故按 `# ═══` 分节边界**纯移动**拆成 `test_guards_reject_a.py`（21 例）+
+   `test_guards_reject_b.py`（20 例）；两半共用的工具提到 `tests/injection/_guard_common.py`
+   （**唯一真源**，`G-06`：不许两处各抄一份）。
+2. **不许用 `-k` / 名字关键词分片**（`R-06 ①`：关键词式判据不可穷尽，
+   **新用例会静默落进 `not` 分支**，而"漏测"与"测过没问题"在报告里长得一样）；
+3. 片目标一律**显式文件路径**（目录式目标会一次拉起整个目录的用例 ⇒ 配额问题原样复发）。
+
+**机器绑定**：`tests/injection/test_shard_coverage.py` 断言
+① 各片目标文件的并集 **恰好等于** `tests/injection/` 下的测试文件集合（穷尽，不重不漏）；
+② 各片目标**两两不相交**（重复收录 = 删除量翻倍）；③ 每片**用例数 `--collect-only` 现算 ≤ 32**
+（32 × 273 = 8,736 < 9,999，留 ~13% 余量）；④ 片目标必须是**显式测试文件路径**（不是目录、不用 `-k`）。
+片 ↔ 目录的**唯一真源**是 `verify.py::INJECTION_SHARDS`（判据现读它，**不靠批次名前缀猜**
+ —— 那也是关键词式判据）。
+
 ★ `evidence` / `daily` / `transmit` 等**由主理人在集成时统一加入**（`reports/batch9_stage3_4_taskbook.md §3 I-1`）——
   并行工作流的 Agent **不得**自行改 `verify.py`（多方同改必冲突），只报"需新增批次"。
-★ **批次表不写项数**（曾出现 18/19/20/23 四种数字）：项数的真源是 `run_all_gates.GATES` 与
-  `tests/guards::GUARDS`（**两个不同的数**），描述里重复它必然漂移。
+★ **批次表不写"门禁项数"**（曾出现 18/19/20/23 四种数字）：项数的真源是 `run_all_gates.GATES`
+  与 `tests/guards::GUARDS`（**两个不同的数**），描述里重复它必然漂移。
+  （上表 `injection-*` 行的**例数**是"分片配额"的直接依据，属该判据自身的量；其真源仍是
+   `verify.py` 的目标清单 + `test_shard_coverage.py` 的现算断言，表里的数字仅为可读性。）
 
 ### V-03 **超时 = 该批有问题**，且**绝不算通过**
 
@@ -165,6 +212,8 @@ python system/scripts/ops/verify.py --batch <名>       # 已内置同一环境�
 **处置（按优先级）**：
 
 1. **一轮内只跑一次全量**；诊断与迭代用**单批**（`--batch <name>`）或**单文件**（`run_pytest.sh tests/<dir>/<file>`）。
+   ★ **`tests/injection` 现在切成 6 片**（`injection-a`~`f`，见 `V-02`）：**每轮只跑一片**。
+   那是这条配额规则的直接产物 —— 该目录 165 例 × 273 项/例 ≈ 45,045 项/轮，合并跑必然超阈值。
 2. 需要反复迭代时：**新开一轮**（配额按轮重置）。
 3. **不要**把"批次提前红"当成测试问题去改断言 —— 先看日志有没有 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`。
 4. 手工清理夹具目录时**分片删**（逐子项），不要一次 `rm -rf` 整个 `tests/.work`。
