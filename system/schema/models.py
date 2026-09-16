@@ -1374,6 +1374,15 @@ class Valuation(_Base):
       **不再落一份副本**。
     ★ `probability` 默认 `None`（`§D.6` + `N5.3-07` + `C45-2`）：**不默认 50/50**，
       "仅当有依据才填"；且 `§J` 的 `J9` 明写依据"须为 `DerivedValue` 且标注来源"。
+    ★ **`Ch5 §A.1`「新字段」清单的处置**（`05_价格与市场预期研究/02_实现方案.md` 第 21 行逐字：
+      「`baselines.valuation` 上（`independent_judgment`、`implied_ref`、`input_source`、
+      `probability`、`scenario_tag`）」）—— 五项中：
+      · **本对象新增三项**（下三个字段）；
+      · `probability` **已在**（见上一条）；
+      · `input_source` **不在本对象**：它按 `§D.5`「事实输入 / 模型估计 / 人工设定三类分开存」
+        落在**估值输入层** `AssumptionInput.input_source`（**必填** + `manual` 须留痕的校验器），
+        且 `§D.5` / `N5.3-04` 的验收面就在那一层 ⇒ 若在此处再落一份即**双真源**（`G-06`）。
+      该裁定有可执行断言钉住（`tests/unit/test_schema_expand.py`），非本注释独有。
     """
 
     method_class: str = TBD
@@ -1386,6 +1395,23 @@ class Valuation(_Base):
     """`Ch5 §D.2` 的 `inputs.forecast_assumptions` —— 来自第四章 `drivers`。"""
     valuation_params: list[str] = Field(default_factory=list)
     """`Ch5 §D.2` 的 `inputs.valuation_params` —— 方法参数（模型估计 / 人工设定）。"""
+    scenario_tag: str = TBD
+    """情景标签（`Ch5 §A.1` 新字段清单 + `§E.3`「`scenario_guard.assert_scenario_match()`：
+    情景/期间一致才生成相对判断」，其伪码逐字 `if stock.scenario_tag != benchmark.scenario_tag:
+    raise ScenarioMismatch(...)`）。
+    取值域由 `rules/scenario.yaml::scenario_tag.values`（`bear`/`neutral`/`bull`/`custom`）
+    **注册表驱动** ⇒ 此处落**自由字符串、不枚举**（同 `method_class`；枚举即与 `rules/` 双真源）。"""
+    implied_ref: str = TBD
+    """指向"价格隐含"判断的引用（`Ch5 §A.1` 新字段清单 + `§C.1` 三份判断表：价格隐含 `implied`
+    的**存储**是 `facts/implied_requirements.jsonl`，由反向估值计算产出）。
+    ⇒ 本字段只持**引用**，不复制该表内容（沿用 `formula_ref` 的既有命名；单一真源）。"""
+    independent_judgment: str = TBD
+    """独立判断（`Ch5 §A.1` 新字段清单 + `§C.1` 三份判断表：独立判断 `independent` 的
+    **存储即本字段**，来源"第四章 baseline + 估值"，随 baseline 更新；与 `implied`（价格隐含）之差
+    归档 `price_gap_state`，见 `§E.6` R-06；`N5.1-03` 要求三份判断"各有来源与可信度"）。
+    ★ 设计（`§A.1`）只给了**字段名、未给结构** ⇒ 本字段按同族既有形态
+      （`formula_ref` / `method_class` 的 `str = TBD`）落为可 `tbd` 字符串，
+      **不臆造区间/数值结构**；下游若需结构化承载，应回设计与需求方确认后另行扩表。"""
 
     @field_serializer("probability")
     def _ser_probability(self, v: Decimal | None) -> str | None:

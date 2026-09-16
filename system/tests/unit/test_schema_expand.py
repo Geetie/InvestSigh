@@ -10,10 +10,16 @@
 4. **`baseline.driver_model` 不再是第二个真源**：它只能是
    `driver_refs[]` + `drivers.jsonl` 的**投影**（`project_driver_model` 可现算；
    凭空写入的孤儿条目被 schema 拒绝）。
+5. **`Ch5 §A.1`「新字段」清单的边界**（`05/02` 第 21 行逐字列了 5 项）：3 项进
+   `Valuation`（`scenario_tag` / `implied_ref` / `independent_judgment`），`probability`
+   已在；而 `input_source` **明确不进** —— 它按 `§D.5`「三类分开存」落在估值输入层
+   `AssumptionInput`，在 `Valuation` 上再落一份即**双真源**（`G-06`）。含精确字段集断言
+   与 `input_source` 的双向对照。
 
 设计锚点（逐字）：`Ch4 §B.1`（business）/`§C.4`（financial_link）/`§D.1`（driver）/
 `§F.1·§F.3`（moat 与写路径白名单）/`§G.1·§G.4·§H.3`（baselines 补齐）/
-`Ch5 §B.2`（implied_requirements）/`§D.5·§D.6`（估值输入与区间）/
+`Ch5 §A.1`（`baselines.valuation` 新字段清单）/`§B.2`（implied_requirements）/
+`§C.1`（三份判断表）/`§D.5·§D.6`（估值输入与区间）/`§E.3`（`scenario_tag` 一致性）/
 `Ch7 §B.3`（relation_flows 三边）。
 """
 
@@ -411,3 +417,77 @@ def test_real_repo_existing_rows_still_validate() -> None:
         "真仓库 facts/ 里一行数据都没有 ⇒ 本用例真空（G-03：不得把'无被检对象'当'已验证'）。"
         "若确有意图清空真仓库，请同时删掉本用例并说明。"
     )
+
+
+# ──────────── 6. `Ch5 §A.1` 新字段：3 项进 `Valuation`，`input_source` 不进 ────────────
+
+
+def test_valuation_carries_the_three_new_ch5_fields() -> None:
+    """`Ch5 §A.1`（`05_价格与市场预期研究/02_实现方案.md` 第 21 行）逐字：
+
+    「`baselines.valuation` 上（`independent_judgment`、`implied_ref`、`input_source`、
+    `probability`、`scenario_tag`）」—— 五项里 `probability` 扩表前已在
+    ⇒ 本用例钉住**这一批新增的三项**。
+    """
+    assert {"scenario_tag", "implied_ref", "independent_judgment"} <= set(M.Valuation.model_fields)
+
+
+def test_valuation_field_set_is_exactly_the_designed_nine() -> None:
+    """★ 钉死 `Valuation` 的**精确字段集**：既防"顺手多塞一个"造成双真源，
+    也防将来有人悄悄删字段而无人发现（同 `DriverModel` 那条精确断言的用意）。"""
+    assert set(M.Valuation.model_fields) == {
+        "method_class", "range", "probability", "formula_ref",
+        "forecast_assumptions", "valuation_params",
+        "scenario_tag", "implied_ref", "independent_judgment",
+    }
+
+
+def test_new_valuation_fields_default_to_the_tbd_marker() -> None:
+    """★ 设计（`§A.1`）只给了**字段名、未给结构** ⇒ 默认落 `TBD`（哨兵 `"tbd"`，`models.py::TBD`）
+    表示"待研究"，**不臆造** 区间 / 数值 / 枚举（臆造就是编）。
+    `independent_judgment` 尤其如此：它要不要结构化承载属 13-B 的实现面，本批次不预设。
+    """
+    v = M.Valuation()
+    assert (v.scenario_tag, v.implied_ref, v.independent_judgment) == (M.TBD, M.TBD, M.TBD)
+
+
+def test_input_source_stays_on_assumption_input_not_valuation() -> None:
+    """★ **反向对照**：`Ch5 §A.1` 清单里的 `input_source` **不得**落进 `Valuation`。
+
+    理由（逐字）：`§D.5`「事实输入 / 模型估计 / 人工设定**三类分开存**」的落点是估值输入层
+    `AssumptionInput.input_source`（**必填** + `manual` 须留痕的校验器），
+    `§D.5` / `N5.3-04`（`input_source ∈ {fact, model_estimate, manual}` + 留痕）的验收面**也在那一层**。
+    ⇒ 若按 `§A.1` 的字面清单在 `Valuation` 上再落一份，同一事实就有**两个存放处**（`G-06` 双真源）。
+
+    本断言把这条裁定变成可执行的：**少了它，"为什么只加 3 个而不是 5 个"就只是注释里的一句话。**
+    """
+    assert "input_source" not in M.Valuation.model_fields
+    assert "input_source" in M.AssumptionInput.model_fields
+
+
+def test_valuation_still_rejects_unknown_fields() -> None:
+    """反向：`extra="forbid"` 对新字段一样生效 —— 加字段时**没有**顺手关掉 forbid 的旁路。"""
+    with pytest.raises(ValidationError):
+        M.Valuation.model_validate({"scenario_tag": "bull", "not_a_designed_field": 1})
+
+
+def test_new_valuation_fields_survive_a_baseline_roundtrip() -> None:
+    """正向：3 个新字段嵌在 `Baseline` 里也能 roundtrip（`model_dump` → `model_validate` 值不变）。
+
+    `Valuation` 不是独立事实表（它内嵌在 `baselines.jsonl` 的行里），故此处走
+    `Baseline` 级 roundtrip，而不是 §1 那套 `store` roundtrip。
+    """
+    b = M.Baseline(
+        baseline_id="b1", company_id="company_nvidia", version=1, business_mechanism="x",
+        valuation=M.Valuation(
+            scenario_tag="bull",
+            implied_ref="IMP-001",
+            independent_judgment="per-share-range-2026-09",
+        ),
+    )
+    again = M.Baseline.model_validate(b.model_dump())
+    assert again.valuation.scenario_tag == "bull"
+    assert again.valuation.implied_ref == "IMP-001"
+    assert again.valuation.independent_judgment == "per-share-range-2026-09"
+    # 旧字段不受影响（契约变更只增不改）
+    assert again.valuation.probability is None
