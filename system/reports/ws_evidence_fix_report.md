@@ -140,7 +140,7 @@ claims: 5   claim_propagation: 0   companies: 2   tasks: 3   baselines: 1   reco
 - **测试**：`tests/evidence` **44 passed / exit 0**；`pre-commit` **全绿**。
 - **③G3 / ⑤G6**：见 §④（**未交付**，落点在范围外，已上报裁决）。
 
-**提交哈希**：见回传消息（commit 后补）。
+**提交哈希**：`66422a88ac0b15ce9e19af6f09c2f66239214d42`（分支 `ws/evidence-fix`，11 files changed, 1220 insertions(+), 21 deletions(-)）。
 
 ---
 
