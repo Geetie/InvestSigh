@@ -494,4 +494,66 @@ python scripts/ops/run_all_gates.py . --timeout 30
 逐条见报告 §④。
 
 
+---
+
+## 十二、批次 13-A · Ch4 价值层（`scripts/valuelayer/**`）
+
+> 分支 `ws/ch4-valuelayer`　｜　工作树 `.worktrees/ws-ch4-valuelayer`
+> 报告：`system/reports/ws_ch4_valuelayer_report.md`（四段式）
+
+**基站变动**：开工时 `main = d74a829`；交付前**重新 `git merge main`** 到 **`bb8991a`**
+（含 13-B `ws/ch5-pricelayer`、13-R 四个规则文件、`ws/ch13-d-valuation-fields`），解 2 处冲突后交付。
+
+### 12.1 已落地
+
+| 项 | 内容 |
+|---|---|
+| **新增 8 个模块** | `scripts/valuelayer/{__init__,_rules,route_guard,rollup,growth_quality,moat_guard,state_machine,completeness}.py` |
+| **新增测试目录** | `tests/valuelayer/**`（7 文件，**206 用例**） |
+| **`chapter4_g_depth` 判据绑定** | ★ **只改 `stage_gate.py::stage_nvidia_sample_passed()` 函数体内**（`criterion(...)` 字面量 + 真调 `completeness.g_depth_violations`）。实测真仓库 `scanned nvidia_sample.criteria_bound: 3`（原 2），阶段② 输出逐项 `Ch4 §G 形式完备性未过 [baseline][check_id]` |
+| **反例登记** | `registry/criterion_counterexamples.yaml` 加 `nvidia_sample::chapter4_g_depth`；配套真实用例 `tests/injection/test_criterion_effectiveness.py::test_nvidia_sample_chapter4_g_depth_blocks_on_incomplete_form`。`criterion_effectiveness_guard` → PASS（`criteria_bound: 13` / `registry_entries: 16` / `tests_resolved: 16`） |
+| **生产调用方（不留孤儿）** | `chain_steps.make_growth_handler`（**step 4**）真调 `route_guard.check` / `growth_quality.check` / `moat_guard.check` / `g_depth_violations`；违例逐条进 `incomplete_reason`，`produced` 恒空 + `degraded=True` ⇒ 记 `gap` + `blocked`（价值层**只核不产**，纪律 7） |
+| **`verify.py::BATCHES`** | 加 `"valuelayer"` 批（`tests/valuelayer/`，300s = `V-02` 上限，实测 88.5s）；`verification_policy_guard` → `batches 22 / test_files_uncovered 0` PASS |
+
+### 12.2 实测（真实输出与退出码见报告 §②）
+
+- `tests/valuelayer`：**206 用例 / 0 failure**。其中 32 个 `code_root` 用例因宿主 safe-delete
+  **每轮批量删除阈值**在夹具 setup 阶段被拦（`SystemExit: 1`，**不是**测试失败），
+  按 ≤10 例/批分 6 批重跑**全绿**。★ 此现象 `tests/conftest.py` 已登记过同族问题。
+- 六个模块的**注入违例 / 反向对照 / 配置缺失**：`EXIT=1 / 0 / 2` 逐个贴真输出
+  （`rollup` / `state_machine` **刻意无 CLI**：无真源可扫，是被调用方的纯函数，其违例契约为抛异常）。
+- **真规则文件集成**：用 13-R 安装的 `rules/**`，合规 baseline 六项全过 `EXIT=0`。
+- `run_all_gates.py`：**非零 1 项**，唯一是 `traceback.py`，已用 `git archive HEAD`
+  （不含本单任何改动）**逐字对拍证明预先存在**。⇒ DoD"无新增非零项"成立。
+- `no_placeholder_guard`：扫 **143 文件**（含本单 15 个新文件）PASS。
+
+### 12.3 ★ 已由 13-R / `R8-1` 裁定、本单照裁定改正（**初版猜的键名与深度被真文件推翻**）
+
+| 项 | 初版（当时无真文件可核） | **裁定 / 真文件** | 不改的后果 |
+|---|---|---|---|
+| `cfg` 深度 | 顶层扁平键 | **`baseline["thresholds"]`**（`R8-1`：按实有结构读） | 阈值全部读不到 ⇒ 判据**恒红**（`G-01`） |
+| 定位数键名 | `min_locators` | **`min_locator_count`** | 同上 |
+| 推导数键名 | `min_derivations` | **`min_derivation_count`** | 同上 |
+| 六项 section 名 | `① 业务与产业位置`（多一空格） | `①业务与产业位置` | 违例文案与真源不一致 |
+| `metrics: tbd` / `stages: tbd` | 当字符串处理 | **未声明** | `metrics` 逐字符迭代**抛异常**；`stages` 变成名为 `tbd` 的段名 ⇒ **假红** |
+
+★ 合并 main 后还需补跑 `sh system/scripts/ops/bootstrap_worktree.sh`：git 不跟踪只读位，
+merge 进来的 4 个 `rules/*.yaml` 是 `0644` ⇒ `rules_lock_guard` / `injection_guard` 报纪律 9（4 条）。
+该脚本**只改权限位**、内容零改动，跑完两门禁 PASS 且 `git status` 无额外变化。
+
+### 12.4 ★ `min_fields_per_section = tbd` 的处置（**唯一降级决定，请复核**）
+
+设计 `§G.2` 表格写"六项 section 非空**且达最小字段数**"，但**未给数值**；`B5` 只定了非空率与定位数
+⇒ 13-R 如实转写 `tbd`。两难：当缺键 ⇒ **恒红**（`G-01` 禁）；代码兜一个数 ⇒ "设计未拍板"**不可观测**（`G-03` 禁）。
+
+**处置**：拆两半 —— 『非空』可核 ⇒ **照常强制**；『达最小字段数』需阈值 ⇒ 记 **`不可核` + 计数 + note**
+（CLI `scanned["min_fields_undecided_sections"]` + `MIN_FIELDS_UNDECIDED` note），**既不放行也不恒红**。
+需求方给该键拍数后，**无需改代码**即自动生效。
+
+### 12.5 待裁定 / 缺口（逐条见报告 §④）
+
+`§C.1` 模板式注册表 vs `§C.2` 逐条归属断言（真文件已佐证模板式：`metric_item_fields` 不含
+`owner_business_id`）、`§C.2` × `§C.3` 的字面比较冲突（本单改判"路由相等"，更强）、
+`CLAIM_KINDS_KEY`、`§G.1⑥` 的 Ch5↔Ch7 循环接缝口径、`§J.4 J7` 的 AST 关键字扫描（本单**刻意未做**，
+`R-06` 禁关键词作判据）、`rollup`/`state_machine` 无 CLI 的取舍。
 

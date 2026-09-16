@@ -431,6 +431,11 @@
           "title": "Change Records",
           "type": "array"
         },
+        "claims_complete_forecast": {
+          "default": false,
+          "title": "Claims Complete Forecast",
+          "type": "boolean"
+        },
         "coverage_profile": {
           "additionalProperties": true,
           "title": "Coverage Profile",
@@ -466,10 +471,38 @@
           "$ref": "#/$defs/BenchmarkFreezeStatus",
           "default": "unfrozen"
         },
+        "holdings_disclosure_lag": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Holdings Disclosure Lag"
+        },
         "includes_non_listed_assets": {
           "default": false,
           "title": "Includes Non Listed Assets",
           "type": "boolean"
+        },
+        "modeled_coverage": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modeled Coverage"
         },
         "non_listed_assets": {
           "additionalProperties": true,
@@ -540,6 +573,28 @@
           "additionalProperties": true,
           "title": "Sensitivity",
           "type": "object"
+        },
+        "unmodeled_parts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unmodeled Parts",
+          "type": "array"
+        },
+        "unverifiable_forecasts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unverifiable Forecasts"
         }
       },
       "required": [
@@ -5419,6 +5474,11 @@
           "title": "Change Records",
           "type": "array"
         },
+        "claims_complete_forecast": {
+          "default": false,
+          "title": "Claims Complete Forecast",
+          "type": "boolean"
+        },
         "coverage_profile": {
           "additionalProperties": true,
           "title": "Coverage Profile",
@@ -5454,10 +5514,38 @@
           "$ref": "#/$defs/BenchmarkFreezeStatus",
           "default": "unfrozen"
         },
+        "holdings_disclosure_lag": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Holdings Disclosure Lag"
+        },
         "includes_non_listed_assets": {
           "default": false,
           "title": "Includes Non Listed Assets",
           "type": "boolean"
+        },
+        "modeled_coverage": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modeled Coverage"
         },
         "non_listed_assets": {
           "additionalProperties": true,
@@ -5528,6 +5616,28 @@
           "additionalProperties": true,
           "title": "Sensitivity",
           "type": "object"
+        },
+        "unmodeled_parts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Unmodeled Parts",
+          "type": "array"
+        },
+        "unverifiable_forecasts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unverifiable Forecasts"
         }
       },
       "required": [
