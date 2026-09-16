@@ -50,7 +50,10 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
 
 **强制手段**：守卫断言每批 `timeout > 0` 且 `<= 300s`，且 `BATCHES` 与 `ORDER` 键集合一致。
 
-**当前批次表**（**20 批**；超时随实测更新，更新须同步守卫上限）：
+**当前批次表**（★ **刻意不写"批次数"** —— 唯一真源是 `verify.py::BATCHES`；
+这与 `verify.py` 自己对 `guards` / `gates` 描述**不写条数**是同一个教训（批次 7 审计）：
+**数字只留在各自的真源里**，否则"手写的数"会随新增批次**静默过期**。
+本节给的是**人的索引**：内容与超时；**超时随实测更新，更新须同步守卫上限**）：
 
 | 批次 | 内容 | 超时 | 实测 |
 |---|---|---|---|
@@ -72,6 +75,8 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
 | `transmit` | `tests/transmit/`（Ch7 传导编排引擎） | 60s | ~5s |
 | `evidence` | `tests/evidence/`（Ch6 证据层：去重/独立判定/预算闸门） | 150s | ~18s |
 | `daily` | `tests/daily/`（阶段④每日运行：覆盖可核/降级/幂等/调度） | 180s | ~43s |
+| `pricelayer` | `tests/pricelayer/`（Ch5 价格层：反解多解/估值路由/倒填/情景/历史外推/每日解释）· 168 例 | 300s | 53.89s / 83.80s（3.6~5.6×） |
+| `valuelayer` | `tests/valuelayer/`（Ch4 价值层：路由防串味/分部加总/增长质量/护城河/状态机/形式完备性）· 206 例 | 300s | 88.5s（≈3.4×） |
 | `gates` | `run_all_gates.py`（全部门禁逐项退出码） | 60s | ~3s |
 | `stage` | `stage_gate.py --stage all`（阶段判据） | 30s | ~0.3s |
 
@@ -282,6 +287,17 @@ sh system/scripts/ops/bootstrap_worktree.sh
 但症状是"**每次合并都白红一次**"，且合并与下一次门禁之间存在一个**可写窗口**（窗口内的写入仍会被
 SHA256 抓到，故仍是"检测得到"，非"静默"）。
 ⇒ 一律在 `git merge` 之后立刻跑本脚本；**不要**在各人自己的 `chmod` 上打补丁，更**不是**用 `--no-verify` 绕过。
+
+★★ **触发面比"新建工作树 + `git merge`"更宽（批次 13 追加，`ws-ch2-rules` 实测）**：
+**任何把该文件纳入索引的 git 操作**都会把它翻回 `0644` —— 实测**一条 `git add system/rules/<某件>.yaml` 就足够**。
+⇒ 触发面应读作：`worktree add` / `clone` / **`git add`** / **`git commit`** / `checkout` / `merge`。
+⇒ **稳妥做法**：**提交前**先跑一次本脚本（它只改权限位、`git status` 恒为空、不污染提交）；
+**提交后**再用 `rules_lock_guard` 核一次。
+
+★★ **并且`pre-commit` 不是经验上的沙箱**（同一个实测来源）：它**可被 `--no-verify` 绕过** ⇒
+**不能作为纪律 9 的唯一强制点**。本项目对这一点已有结构性冗余：
+`rules_lock_guard.py` **同时**在 `scripts/ops/run_all_gates.py` 的 `GATES`（24 项/25 条）里 ---- 
+⇒ 即使有人绕过钩子，**全量门禁仍会拦**。**新增纪律 9 相关守卫时，必须同时进 `pre-commit` 与 `run_all_gates`（`G-07`）。**
 
 **天天误报的门禁一定会被关掉**（`G-01`）→ 必须在流程层根治，而不是让每个工程师各自 `chmod`，
 更**不是**用 `--no-verify` 绕过。

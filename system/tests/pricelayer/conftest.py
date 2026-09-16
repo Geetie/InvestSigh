@@ -88,6 +88,43 @@ def write_rules() -> Callable[[Path, str, Mapping[str, Any]], Path]:
     return _write
 
 
+REAL_RULES_DIR = SYSTEM_ROOT / "rules"
+"""真 `rules/`（0444 + SHA256 锁，**只读**）。"""
+
+
+def copy_real_rules(root: Path, *names: str) -> list[Path]:
+    """把真 `rules/<name>` **原样复制**进夹具副本（**只读真文件**，不写它们）。
+
+    ★ 为什么必须有：`G-43`/`G-45` 的病灶是"夹具形状 = 生产代码写不出来的形状"。
+      只用手写 YAML 夹具，会让"代码读一个真文件里不存在的键"这种缺陷在夹具上**永远绿**。
+      故凡涉及规则解析的用例，一律优先用**真文件内容**。
+    """
+    import shutil
+
+    out: list[Path] = []
+    target_dir = root / "rules"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        src = REAL_RULES_DIR / name
+        if not src.exists():
+            raise FileNotFoundError(f"真规则文件不存在: {src}")
+        dst = target_dir / name
+        shutil.copyfile(src, dst)
+        out.append(dst)
+    return out
+
+
+@pytest.fixture()
+def real_rules() -> Callable[[Path, str], list[Path]]:
+    """把**真** `rules/<name>.yaml` 复制进夹具副本（真文件只读；副本可写）。"""
+
+    def _copy(root: Path, *names: str) -> list[Path]:
+        return copy_real_rules(root, *(names or ("scenario.yaml",)))
+
+    return _copy
+
+
+
 @pytest.fixture()
 def run_script() -> Callable[..., subprocess.CompletedProcess]:
     """跑仓库里的**真脚本**（真子进程）—— 断言退出码用。"""

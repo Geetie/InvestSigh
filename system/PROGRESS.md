@@ -427,7 +427,7 @@ blocked = True
 
 ```bash
 cd system && python scripts/ops/verify.py --batch pricelayer
-# → ✓ [pricelayer] exit=0  39.18s/180s ；127 passed in 38.82s
+# → ✓ [pricelayer] exit=0  91.26s/300s ；168 passed in 90.09s
 
 sh system/scripts/ops/pre-commit.sh
 # → pre-commit ✓ 全部门禁放行（exit=0）
@@ -442,16 +442,65 @@ python scripts/ops/run_all_gates.py . --timeout 30
 `scripts/pricelayer/step.py::run_price_guards(root)`（一行调用）与 `register_into(pipeline)` 两种方式提供，
 生产调用方 = 该模块的处理器 + 5 个守卫 CLI。**注册动作留待主理人集成时二选一**（详见报告 §4 接缝与缺口）。
 
-**登记进 `verify.py::BATCHES`**：新增批次 `pricelayer`（`tests/pricelayer/`，超时 180s = 实测 4.6×）。
+**登记进 `verify.py::BATCHES`**：新增批次 `pricelayer`（`tests/pricelayer/`，超时 300s = 实测 91.26s 的 3.3×；
+依据 `V-02` 注「慢批次取不超过上限的最大值」，与 `daily`/`injection-*` 同族）。同步补 `CONVENTIONS.md` 批次表缺行
+（原表漏登本批次，已补 `pricelayer` 行并把「20 批」改为「21 批」）。
 `verification_policy_guard` 实测 `test_files 67 / uncovered 0` ⇒ `V-06` 已闭合。
 
 **六门禁反例有效性**：6/6 门禁均有**可执行反例（exit=1）+ 反向对照（exit=0）**（真机演示，脚本与输出见报告 §② V-1）。
+另有 **4/4 规则↔代码绑定反例**（真 `rules/` 只读副本上改键、代码不动 ⇒ exit=1；对照 exit=0，见报告 §② V-1c）。
 
-**待裁定 / 缺口（已上报，不自行裁决）**：两个规则文件 `rules/valuation-methods.yaml`（**文件有名、YAML 键名无名**）与
-`rules/scenario.yaml`（文件与 `scenario_method_status` / `method_version` 键名均已逐字实现）当前**均不存在**、
-`§E.2` 子串判据 vs `R-06 ①`、`§D.4` 的 `assumption_source` vs `§D.5` 的 `input_source`、
-`RecommendationStatus` 缺 `rechecking`、`Benchmark` 缺 `holdings_disclosure_lag`/`unverifiable_forecasts`/`modeled_coverage`/`unmodeled_parts`/`claims_complete_forecast`
-（本流按"行内优先 → `coverage_profile` 回落"实现，落点待裁定）、`Ch5 §B.1` 未给 `f` 的具体形式 —— 逐条见报告 §④。
+### 12.1 ★ 修订轮（已并入主干后被真文件打回的两处「夹具与真文件不同源」）
+
+主理人合并后拿**真 `rules/` 文件**探了一手，抓出两处缺陷 —— **与 `G-43`/`G-45` 同族**（"夹具形状生产代码写不出来"）。
+两处均已修，且**不是就地打补丁，而是把整类问题的防复发装置一起补上**：
+
+| # | 缺陷（主理人实测） | 根因 | 修法 |
+|---|---|---|---|
+| 修 1 | 真 `rules/scenario.yaml` **没有 `method_version` 键**，而夹具虚构了它；`doc.get(...) or ""` **静默返回空串**，测试恒绿 | 「夹具与真文件不同源」：`§E.4` 的 `method_version` 是**转正后运行时写入的字段**，不是规则文件里的键 | **删掉 `or ""` 静默兜底**。改从**真实载体**读：`scenario_consistency.param_ref → rules/freeze.yaml::p05`（走唯一参数读口 `config.freeze.get_param`，`G-06` 复用）。`""` **仅在 `status == pending` 时**返回，并标 `method_version_source="not_applicable_pending"`（是**正确取值**而非兜底）；`status` 已转正而版本不可用（空串 / `tbd` / 指针悬空 / 非映射值）⇒ **响亮抛 `ScenarioGuardError`** |
+| 修 2 | `pending ⇒ 阻塞相对判断` 被**硬编码**，而真文件里**就有** `scenario_method_blocking` 这个口径键；取值域 `pending/neutral/probability_weighted` 同理 | `P-09` / `Ch11 §D.2`「参数只能住 `rules/`，代码不得内置」被违反 ⇒ **规则改了代码不改** | 阻塞条件改读 `scenario_method_blocking.when`，取值域改读 `scenario_method_status_domain`。`when` 用**刻意极小且严格校验**的语法（`<字段> == <单 token>`，字段必须恰为 `scenario_method_status`）解析；**形态不认识 ⇒ 响亮失败**（"不发明表达式求值器"）；缺键 ⇒ 回落设计逐字条件 + `NO_BLOCKING_RULE` note |
+
+**同族扩展（不等主理人再抓一遍）**：把同一处置施加到另三个守卫 —— 它们读的键也是刚装好的真文件里就有的：
+
+| 模块 | 改读的规则键 | 行为绑定证据 |
+|---|---|---|
+| `solver.py` | `rules/valuation-methods.yaml::solution_set_display`（`default_count` / `max_count` / `must_show_multiple` / `selection` / `overflow`） | 把 `default_count` 由 3 改成 2 ⇒ 求解结果**只展示 2 组、折叠 1 组**（不硬编码 3）；`must_show_multiple: false` ⇒ 多解下限由 2 降为 **1**（下限是**派生量**，不另存一份，`G-06`）；`default_count > max_count` ⇒ 响亮失败**不静默夹紧** |
+| `daily_explain.py` | `rules/review.yaml::forced_recheck`（`single_day_drop_pct: -7` / `three_day_cumulative_pct: -12` / `on_hit.keep_original_judgment_time`） | 单点口径换算（百分点 → 内部小数）集中在 `load_recheck_trigger`；改规则阈值 ⇒ 判定随之改变；阈值为正 ⇒ 响亮失败 |
+| `valuation.py` | `rules/valuation-methods.yaml::unregistered_fallback` + `valuation_compute.entry` | 规则声明的入口若在实现里不存在 ⇒ `VALUATION-RULE-BINDING`「规则文件声明的入口与实现脱节」 |
+
+**防复发装置（机器绑定，`G-43`/`G-45` 的正面解法）**：
+
+1. 每个守卫的 `check()` **首位**跑 `_rule_binding_violations(root)`，产出各自的判据码
+   `SOLVER-RULE-BINDING` / `VALUATION-RULE-BINDING` / `SCENARIO-RULE-BINDING` / `DAILY-RULE-BINDING`：
+   ① 本模块**实际读取的键在真文件里真的存在**；② 规则键的值**与代码常量一致**（不一致即"声明与实现脱节"）；
+   ③ 规则声明的入口确实存在于实现。**该检查在 `facts/` 为空时照跑**（否则会被空样本真空跳过）。
+2. `tests/pricelayer/conftest.py` 新增 `real_rules` 夹具：把**真 `rules/*.yaml`** 拷进用例 scratch 根，
+   docstring 逐字点名 `G-43`/`G-45`。新增用例一律走真文件，不再自备虚构形状。
+3. `test_tests_never_write_real_rules_files`：对真 `rules/*.yaml` **改前 / 改后各取 SHA256** 断言不变
+   （`rules/` **只读不写**；0444 纪律由 `rules_lock_guard.py` 承载）。
+4. `bootstrap_worktree.sh`：`git merge` 会把 `rules/*.yaml` 的 0444 **重置为 0644**（git 只跟踪可执行位），
+   故**每次合并后必须**跑它复原（只 `chmod`，内容零变更，不动 `locked_at`/SHA 台账）。
+   本轮 `pre-commit` 曾因此 4 条 FATAL，已按此处置。
+
+**禁用做法（本轮明确不做）**：不给 `method_version` 造一个规则文件里没有的键；不发明 `when` 表达式求值器；
+不用 `or ""` / `try-except-pass` 之类的静默兜底 —— **程序写错必须响**。
+
+**提交与合并**：修订内容提交 `9552e8c` → `git merge main`（`3c7b34d`，**零冲突**）→ 合并提交 `60aab53`。
+合并后**重跑** `bootstrap_worktree.sh`（`git merge` 只跟踪可执行位，`rules/*.yaml` 一进树即 `0644` ⇒ 必须复原 0444；
+只 `chmod`、内容零变更）、批次（**168 passed / 54.48s / 300s / exit=0**）、`pre-commit`（**全绿**）；`git status --short` 空。
+
+**与同轮并入的 `scripts/valuelayer/_rules.py` 交叉核对**：该模块（13-A）与本流**同构**（`_cached_yaml` 唯一读口 +
+缺键响亮 + 不内置默认值）。唯一差异：`_rules.py` 在**读口**抛错，本流在**门禁**响亮（`*-RULE-BINDING` 把键列为必需 ⇒ exit 1，
+用例②实测）。若裁定统一，本流改动面 = 4 个 `load_*` 各加一处 `raise`（键名表已是常量）。
+
+**待裁定 / 缺口（修订后；1 / 3 / 5 三项已由主理人答复，此处记答案不记问题）**：
+① 两个规则文件**已由 `ws-ch2-rules` 装入**（`bb32863`）+ `bef9628` 补 `solution_set_display`，本流已按真键名读；
+② `§E.2` 子串判据 vs `R-06 ①`（本流已改词元等价 + 结构判据）仍待主理人裁定是否修订设计表述；
+③ `§D.4` 的 `assumption_source` vs `§D.5` 的 `input_source` 已统一为 `InputSource`；
+④ `Benchmark` 的 5 个覆盖率键**不归本卡**（`schema` 的唯一写入者是 `ws-schema-expand`，已单列成卡）；
+⑤ `method_routing` 真值已逐个核过并贴进报告（`hardware` 4 / `cloud` 2 / `software` 3 / `etf` 1）——
+逐条见报告 §④。
+
 
 ---
 

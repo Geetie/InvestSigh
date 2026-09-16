@@ -521,7 +521,12 @@ blocked = True
 |---|---|---|---|
 | **`G-53`** | `git merge` / 检出会把 `rules/*.yaml` 的 **0444 还原成 644**（权限位不在 git 管理范围内）⇒ 每次合并后必然红一次 | 低 | `OPEN`（有检测，见下） |
 | **`G-54`** | `unit` 测试批 **高方差且逼近/越过超时**：同一套件（76 例）两次实测 **48.73s** 与 **66.72s**，而原超时 **60s** ⇒ **会随机被判 TIMEOUT** | **高** | 超时已上调（安全网）；**根因待修** → 卡 13-F |
-| **`G-55`** | **同一语义、两种载体形态、零机器绑定**：`rules/scenario.yaml::scenario_tags`（YAML 列表）↔ `schema/models.py::ScenarioTag`（Python 枚举）—— 值相同、**无任何绑定断言**，改一侧另一侧不会红 | 中 | `OPEN` · 已派 `ws-schema-expand`（与其双向键对齐守卫合卡） |
+| **`G-55`** | **同一语义、两种载体形态、零机器绑定**：`rules/scenario.yaml::scenario_tags`（YAML 列表）↔ **`scripts/pricelayer/scenario_guard.py:82` 的 `ScenarioTag` 枚举** —— 值相同、**无任何绑定断言**，改一侧另一侧不会红。★ **同形态第二处**（`ws-schema-expand` 实现时扫出，已一并绑定）：`rules/scenario.yaml:41 scenario_method_status_domain` ↔ `scenario_guard.py:91 SCENARIO_METHOD_STATUSES`（同 3 个 token、同样零绑定） | 中 | `IN PROGRESS` · `ws-schema-expand` 已交付 `7835c0b`（`scenario_tag_binding_guard.py` + 5 例；`GATES` 24→25、`pre-commit` 11→12） |
+
+★ **本条的登记被我写错过一次（主理人缺陷，已更正）**：原文写 B 侧是 **`schema/models.py::ScenarioTag`** ——
+`ws-schema-expand` 实测**该文件里没有这个类**（全仓只有 `scripts/pricelayer/scenario_guard.py` 一处定义）。
+⇒ 这正是**我自己**要求别人做的自查（"键路径/落点**不许按记忆写**"），我又犯了一次（与口径 10 同族）。
+**正确落点 = `scripts/pricelayer/scenario_guard.py:82`。**
 | **`G-56`** | `Valuation.scenario_tag` **零生产消费者**（`T-18` / `G-50` 同族） | 低 | `OPEN` · **暂不修**（等 13-B 的 `scenario_guard` 修完自然产生消费点），作方向 2 的**显式白名单条目**登记 |
 | **`G-57`** | ★ **分组级零消费者**：`rules/metric-sets.yaml` **11 个顶层键里 9 个全仓零消费者**（`binding_guard` / `metric_item_fields` / `segment_evidence` / `conversion_chain_per_model_class` / `conversion_chain_generic_stages` / `extension_policy` / `routing.key` / `routing.binding_field` / `routing.metric_owner_field`） | 中 | `OPEN` · **已立卡 13-G**（逐键三分类定性） |
 
@@ -636,3 +641,30 @@ INTERNALERROR> … in _exit_bulk_guard_control → SystemExit: 1
 
 ★ **纪律（不许绕）**：`ws-degrade-contract` **没有**用 `--no-report` / 环境变量 / 任何方式去关掉那把闸门 —— **正确**。
 **绕过安全机制得到的"绿"不算证据。**
+
+### 13.8 `G-60` · ★★ 夹具清理的**自锁**形态：残留清不掉 ⇒ 会话启动即被拒 ⇒ 永久锁死
+
+| # | 缺口 | 严重度 | 状态 |
+|---|---|---|---|
+| **`G-60`** | `tests/conftest.py::_clear_work_dir()` **逐的是「目录」而非「文件」** ⇒ 单次删除体量 = 一个 `test_*` 目录（约 **250 项**）；而宿主删除闸门判据是 `本回合已累计 + 本次目标体量 > 99999 ⇒ 拒` ⇒ **基数推到天花板后，连"删 1 项"都被拒** ⇒ `.work/` 残留**永远清不掉**，且 `pytest_sessionstart` 的清理**必然失败** ⇒ **每个会话启动即 `INTERNALERROR`** | **高**（**自锁**，恢复需外部介入） | `OPEN` · 改进并入 **卡 13-F**；恢复需**用户授权**（见下） |
+
+**实测（`ws-degrade-contract`，主理人复核）**：
+```
+[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":100113,"threshold":99999,"scope":"turn", …}
+$ python3 <连"零夹具"用例>   → 仍 INTERNALERROR      ← ★ 决定性：与用例体量无关
+```
+★ **真正根因**：卡点在 **`pytest_sessionstart` 的 `_clear_work_dir()`** —— **只要 `.work/` 还有残留子项，会话启动就被拒**，
+与"这个用例建不建夹具"**无关**。⇒ 这解释了"连"零夹具"用例也 `INTERNALERROR`"。
+★ **`ws-degrade-contract` 把闸门行为逆向成一个可核模型**：`count = 本回合已累计 + 本次目标体量`，拒绝 ⟺ `count > 99999`。
+⇒ 本回合已累计 ≈ **天花板级**（删 1 项也被拒）。
+⇒ ★★ **因此"把批次拆小/分片跑"原理上救不了** —— 它只在**基数低于天花板**时才有窗口。
+  （`ws-ch4-valuelayer` 之前"≤10 例/批 ⇒ 6 批全过"**只是当时基数低**，**不能**读成"分片可行"；
+  **主理人先前据此给出的"≤10 例/批"建议在一般情况下是错的，已更正。**）
+
+**改进（并入卡 13-F，不另开卡）**：`_clear_work_dir()` **改为逐文件删除**（单次体量由 ~250 降到 1）。
+★ **为什么并入 13-F 而不单独立卡**：`tests/conftest.py` 是**共享文件**，13-F 为"夹具成本"已在改它；
+**同一文件两个写入方**正是本批次反复出现的冲突模式 ⇒ 合并到同一张卡。
+
+**残留现状**（走授权时一并清）：`system/tests/.work/` **34 项 / 4041 文件**（其中 24 项属本流）；`.work/` 已被 gitignore ⇒ **不进仓库**。
+**恢复路径**：只剩 **③ 用户授权批量删除**（守卫本名即 `BULK_CONFIRM_REQUIRED`，**是设计好的通道**）。
+★ `.work/` 是**测试草稿目录、非真源、且不进仓库** ⇒ 删除**风险极低**（这是请需求方授权时可以明确的前提）。

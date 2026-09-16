@@ -59,7 +59,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
@@ -77,13 +77,105 @@ METHOD_VERSION = "pricelayer-solver-v1"
 """
 
 DEFAULT_DISPLAY_CAP = 3
-"""解集**默认展示组数**（`00_待拍板项清单` B18 已确认："默认展示 3 组，最多 5 组"）。"""
+"""解集**默认展示组数**的设计逐字值（B18："默认展示 3 组"）。
+
+★ 真值取自 `rules/valuation-methods.yaml::solution_set_display.default_count`（现为 `3`）；
+  本常量仅作规则文件/该键缺失时的回落，并由 `check` 的绑定断言核"代码默认值 == 文件真值"。
+"""
 
 MAX_DISPLAY_CAP = 5
-"""解集展示**硬上限**（同上 B18："最多 5 组"）。"""
+"""解集展示**硬上限**的设计逐字值（B18："最多 5 组"）。
+
+★ 真值取自 `solution_set_display.max_count`（现为 `5`）；同上。
+"""
 
 DEFAULT_MIN_SOLUTIONS = 2
-"""`Ch5 §B.1` 的**多解下限**："欠定方程 ⇒ 必须展示多组解"。低于此值 ⇒ `SingleSolutionError`。"""
+"""多解**数值下界**（"多"的机械化）。
+
+★ **不由本常量定义** —— 它是 `solution_set_display.must_show_multiple` 的**派生值**
+  （`2 if must_show_multiple else 1`），真值源在 `rules/`（`Ch11 §D.2` / `G-06`：
+  避免"语义键与数值键可互相矛盾"的同一事实两处）。
+  ★ 本常量仅作规则文件缺失时的设计逐字回落（`Ch5 §B.1`："必须展示多组解"）。
+"""
+
+VALUATION_METHODS_YAML = "rules/valuation-methods.yaml"
+RULE_KEY_SOLUTION_SET_DISPLAY = "solution_set_display"
+RULE_KEY_ASSUMPTION_GRID = "assumption_grid"
+RULE_KEY_MUST_SHOW_MULTIPLE = "must_show_multiple"
+RULE_KEY_DEFAULT_COUNT = "default_count"
+RULE_KEY_MAX_COUNT = "max_count"
+RULE_KEY_SOLVER_REF = "solver_ref"
+
+RULE_BOUND_ENTRIES: tuple[tuple[str, str], ...] = (
+    (VALUATION_METHODS_YAML, RULE_KEY_SOLUTION_SET_DISPLAY),
+    (VALUATION_METHODS_YAML, RULE_KEY_ASSUMPTION_GRID),
+)
+"""``(规则文件, 本模块实际读取的顶层键)`` 的机器绑定对照集合（`Ch11 §D.2`）。"""
+
+
+@dataclass(frozen=True)
+class SolutionSetDisplay:
+    """`rules/valuation-methods.yaml::solution_set_display` 的解析结果（**带来源标注**）。"""
+
+    default_count: int
+    max_count: int
+    must_show_multiple: bool
+    selection: str = ""
+    overflow: str = ""
+    value_source: str = "design_default"
+
+    @property
+    def min_count(self) -> int:
+        """多解数值下界 = `must_show_multiple` 的**派生值**（真源 = 该语义键）。"""
+        return 2 if self.must_show_multiple else 1
+
+
+def load_solution_set_display(root: str | Path | None = None) -> SolutionSetDisplay:
+    """读 `solution_set_display`（`Ch5 §I.2` / `§J.3` / B18）—— **唯一读口**。
+
+    - 文件/键缺失 → 回落设计逐字值（`3` / `5` / `must_show_multiple=True`）并标 `value_source="design_default"`。
+    - `default_count > max_count` 或非正整数 → `PriceLayerError`（**响亮失败**，不静默夹紧）。
+    """
+    from scripts._common import _cached_yaml  # `P-02`
+
+    if root is None:
+        return SolutionSetDisplay(
+            default_count=DEFAULT_DISPLAY_CAP,
+            max_count=MAX_DISPLAY_CAP,
+            must_show_multiple=True,
+        )
+    path = Path(root) / VALUATION_METHODS_YAML
+    if not path.exists():
+        return SolutionSetDisplay(
+            default_count=DEFAULT_DISPLAY_CAP,
+            max_count=MAX_DISPLAY_CAP,
+            must_show_multiple=True,
+        )
+    doc = _cached_yaml(path) or {}
+    node = doc.get(RULE_KEY_SOLUTION_SET_DISPLAY)
+    if not isinstance(node, Mapping):
+        return SolutionSetDisplay(
+            default_count=DEFAULT_DISPLAY_CAP,
+            max_count=MAX_DISPLAY_CAP,
+            must_show_multiple=True,
+        )
+    default_count = int(node.get(RULE_KEY_DEFAULT_COUNT) or DEFAULT_DISPLAY_CAP)
+    max_count = int(node.get(RULE_KEY_MAX_COUNT) or MAX_DISPLAY_CAP)
+    must_show_multiple = bool(node.get(RULE_KEY_MUST_SHOW_MULTIPLE, True))
+    if default_count < 1 or max_count < 1 or default_count > max_count:
+        raise PriceLayerError(
+            f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY} 取值非法："
+            f"default_count={default_count} / max_count={max_count} "
+            "（须为正整数且 default_count <= max_count；不静默夹紧）"
+        )
+    return SolutionSetDisplay(
+        default_count=default_count,
+        max_count=max_count,
+        must_show_multiple=must_show_multiple,
+        selection=str(node.get("selection") or ""),
+        overflow=str(node.get("overflow") or ""),
+        value_source="rules",
+    )
 
 
 def all_assumption_keys() -> tuple[str, ...]:
@@ -315,7 +407,8 @@ def solve_implied_requirements(
     tolerance: Decimal,
     solution_set_id: str,
     max_grid_points: int = 256,
-    display_cap: int = DEFAULT_DISPLAY_CAP,
+    display: SolutionSetDisplay | None = None,
+    display_cap: int | None = None,
     computed_at: datetime | None = None,
     method_version: str = METHOD_VERSION,
 ) -> ImpliedSolutionSet:
@@ -323,9 +416,13 @@ def solve_implied_requirements(
 
     - `current_price` 非正 → `SolverError`（价格隐含要求对非正价格无定义）。
     - 每个候选组合都产出一组解（含 `feasible=False` 的"该组合不成立"）；
-      **可行**解按 `(区间下界, combination_id)` 稳定排序后按 `display_cap` 折叠
+      **可行**解按 `(区间下界, combination_id)` 稳定排序后按上限折叠
       （`Ch5 §I.2`："只保留代表解 + 区间包络（`solution_set` 上限 N，超出折叠）"）。
-    - `display_cap` 必须 ∈ `[1, MAX_DISPLAY_CAP]`（B18 的"最多 5 组"是硬上限）。
+    - **展示上限来自规则**：`display` = `load_solution_set_display(root)` 的结果
+      （`rules/valuation-methods.yaml::solution_set_display`，B18：默认 3 / 最多 5）。
+      `display_cap` 是**显式覆盖**（测试用）；不传则取 `display.default_count`。
+      → 规则文件改了上限，本函数行为随之改变，**不硬编码**（`Ch11 §D.2`）。
+    - 上限必须 ∈ `[1, display.max_count]`（B18 的"最多 5 组"是硬上限）。
     - 求解完成后**不自行宣布合格**：多解不变式由 `assert_multi_solution()` 单独把关
       （呈现前调用），此处只把"未达下限"如实记进 `notes` + `degraded`。
     - 时间契约：`computed_at` 缺省取 `now()` —— 这是**本层自产时间**（`Ch5 §B.2` 的
@@ -333,9 +430,14 @@ def solve_implied_requirements(
     """
     if current_price <= 0:
         raise SolverError(f"{security_id}: 当前价格非正（{current_price}），反解无定义")
-    if not 1 <= display_cap <= MAX_DISPLAY_CAP:
+    display = display or SolutionSetDisplay(
+        default_count=DEFAULT_DISPLAY_CAP, max_count=MAX_DISPLAY_CAP, must_show_multiple=True
+    )
+    cap = display.default_count if display_cap is None else display_cap
+    if not 1 <= cap <= display.max_count:
         raise SolverError(
-            f"display_cap={display_cap} 越界（1..{MAX_DISPLAY_CAP}；B18：默认 3、最多 5）"
+            f"展示上限 {cap} 越界（1..{display.max_count}；"
+            f"`{RULE_KEY_SOLUTION_SET_DISPLAY}.{RULE_KEY_MAX_COUNT}` = B18「最多 5 组」）"
         )
     if not candidates:
         raise SolverError("候选假设组合为空 —— 反解无输入（Ch5 §B.3：假设由模型给）")
@@ -381,18 +483,21 @@ def solve_implied_requirements(
     feasible_solutions = [s for s in all_solutions if s.feasible]
     solution_set.feasible_count = len(feasible_solutions)
     feasible_solutions.sort(key=lambda s: (s.solved_low or Decimal(0), s.combination.combination_id))
-    solution_set.solutions = feasible_solutions[:display_cap]
-    solution_set.folded = feasible_solutions[display_cap:]
+    solution_set.solutions = feasible_solutions[:cap]
+    solution_set.folded = feasible_solutions[cap:]
     if solution_set.folded:
         solution_set.notes.append(
             f"SOLUTION_SET_FOLDED: 可行解 {len(feasible_solutions)} 组超出展示上限 "
-            f"{display_cap}，已折叠 {len(solution_set.folded)} 组（Ch5 §I.2 / B18）"
+            f"{cap}，已折叠 {len(solution_set.folded)} 组（Ch5 §I.2 / B18；"
+            f"取自 {RULE_KEY_SOLUTION_SET_DISPLAY}.{RULE_KEY_DEFAULT_COUNT}）"
         )
-    if solution_set.feasible_count < DEFAULT_MIN_SOLUTIONS:
+    min_count = display.min_count
+    if solution_set.feasible_count < min_count:
         solution_set.degraded = True
         solution_set.notes.append(
             f"SINGLE_SOLUTION_RISK: 可行解仅 {solution_set.feasible_count} 组（下限 "
-            f"{DEFAULT_MIN_SOLUTIONS}）—— 欠定方程不得以单解呈现（Ch5 §B.1）"
+            f"{min_count}）—— 欠定方程不得以单解呈现（Ch5 §B.1；下限由 "
+            f"{RULE_KEY_SOLUTION_SET_DISPLAY}.{RULE_KEY_MUST_SHOW_MULTIPLE} 派生）"
         )
     return solution_set
 
@@ -400,14 +505,23 @@ def solve_implied_requirements(
 def assert_multi_solution(
     solution_set: ImpliedSolutionSet,
     *,
-    min_solutions: int = DEFAULT_MIN_SOLUTIONS,
+    display: SolutionSetDisplay | None = None,
+    min_solutions: int | None = None,
 ) -> None:
-    """**呈现前**的多解不变式（`Ch5 §B.1`）：可行解数 < `min_solutions` → `SingleSolutionError`。
+    """**呈现前**的多解不变式（`Ch5 §B.1`）：可行解数 < 下限 → `SingleSolutionError`。
 
+    ★ 下限**不是常量**：默认由 `display.min_count` 派生，而 `display` 来自
+      `rules/valuation-methods.yaml::solution_set_display.must_show_multiple`
+      （`min_count = 2 if must_show_multiple else 1`）—— 规则改则行为改（`Ch11 §D.2`）。
+      `min_solutions` 只是**显式覆盖**（测试用）。
     ★ 为什么是"呈现前"而不是"求解后"：欠定方程**天然可能**在当前候选下只有一组可行解
       —— 那本身是合法信息（应回去让模型扩假设空间）。但**呈现层不得**把单解当成
       "市场的唯一真相"，故在呈现边界上拒绝（`Ch5 §B.1` 的原话正是"否则会把某一解误当…"）。
     """
+    if min_solutions is None:
+        min_solutions = (
+            display.min_count if display is not None else DEFAULT_MIN_SOLUTIONS
+        )
     if solution_set.feasible_count < min_solutions:
         raise _single_solution_error(
             f"{solution_set.security_id}: 解集 {solution_set.solution_set_id!r} 仅有 "
@@ -464,8 +578,13 @@ _REQUIRED_ROW_FIELDS = (
 def check(root: str | Path) -> Any:
     """扫描 `facts/implied_requirements.jsonl`：多解不变式 + `Ch5 §B.2` 必填字段。
 
-    - 每个 `solution_set_id` 的**可行**解必须 ≥2 组（`§B.1`）；单解解集 → 违例。
+    - 每个 `solution_set_id` 的**可行**解必须 ≥ 下限（`§B.1`）；单解解集 → 违例。
+      ★ 下限**读** `rules/valuation-methods.yaml::solution_set_display.must_show_multiple`
+        派生（`2 if must_show_multiple else 1`），**不硬编码**（`Ch11 §D.2`）。
     - 每行的必填字段必须齐备且非空（`§B.2`）；`alternative_explanations` 必须非空。
+    - 另含**规则↔代码机器绑定**（与 `facts/` 数据无关，故空样本也照跑）：
+      本模块读取的 `solution_set_display` / `assumption_grid` 键必须真实存在，
+      且 `assumption_grid.solver_ref` 必须指向本模块（防改名脱节）。
     - 空样本 → 显式 note（`G-03`），**不**判成"已验证"。
     """
     from scripts._common import CheckReport, Violation
@@ -473,12 +592,21 @@ def check(root: str | Path) -> Any:
 
     root_path = Path(root)
     report = CheckReport(checker="pricelayer_solver")
+    report.scanned["rule_binding_checks"] = len(RULE_BOUND_ENTRIES)
+    display = load_solution_set_display(root_path)
+    report.scanned["min_solution_count"] = display.min_count
+    report.scanned["display_default_count"] = display.default_count
+    report.scanned["display_max_count"] = display.max_count
+    for text in _rule_binding_violations(root_path):
+        report.violations.append(Violation("SOLVER-RULE-BINDING", text))
+
     rows = read_records(root_path, "implied_requirements")
     report.scanned["implied_rows"] = len(rows)
     if not rows:
         report.notes.append(f"{NOTE_NO_IMPLIED_ROWS}: 无反解行可检（非'已验证'）")
         return report
 
+    min_count = display.min_count
     groups: dict[str, int] = {}
     for row in rows:
         implied_id = str(row.get("implied_id") or "<no-implied_id>")
@@ -500,14 +628,71 @@ def check(root: str | Path) -> Any:
 
     report.scanned["solution_sets"] = len(groups)
     for sid, count in sorted(groups.items()):
-        if count < DEFAULT_MIN_SOLUTIONS:
+        if count < min_count:
             report.violations.append(
                 Violation(
                     "IMPLIED-SINGLE-SOLUTION",
-                    f"解集 {sid!r} 仅 {count} 组可行解 —— 欠定方程必须展示多组解（Ch5 §B.1）",
+                    f"解集 {sid!r} 仅 {count} 组可行解（下限 {min_count}）—— "
+                    "欠定方程必须展示多组解（Ch5 §B.1；下限由 "
+                    f"{RULE_KEY_SOLUTION_SET_DISPLAY}.{RULE_KEY_MUST_SHOW_MULTIPLE} 派生）",
                 )
             )
     return report
+
+
+def _rule_binding_violations(root: Path) -> list[str]:
+    """**规则↔代码机器绑定**：`rules/valuation-methods.yaml` 的声明必须与实现一致。
+
+    | # | 判据 | 依据 |
+    |---|---|---|
+    | ① | 本模块读取的每个顶层键**真实存在** | `Ch11 §D.2`（参数只住 `rules/`） |
+    | ② | `solution_set_display.default_count` / `max_count` 与代码默认值一致 | B18 / `§J.3` |
+    | ③ | `assumption_grid.solver_ref` 指向**本模块**（改名即违例） | `§B.3` / `§I.2` |
+
+    ★ 规则文件不存在 → 返回空（另有 note 面，**不**当已核）。
+    """
+    from scripts._common import _cached_yaml
+
+    path = root / VALUATION_METHODS_YAML
+    if not path.exists():
+        return []
+    doc = _cached_yaml(path) or {}
+    violations: list[str] = []
+
+    for relpath, key in RULE_BOUND_ENTRIES:
+        if key not in doc:
+            violations.append(
+                f"{relpath} 缺本模块实际读取的键 {key!r} —— 声明与实现脱节（Ch11 §D.2）"
+            )
+
+    node = doc.get(RULE_KEY_SOLUTION_SET_DISPLAY)
+    if isinstance(node, Mapping):
+        declared_default = node.get(RULE_KEY_DEFAULT_COUNT)
+        declared_max = node.get(RULE_KEY_MAX_COUNT)
+        if declared_default is not None and int(declared_default) != DEFAULT_DISPLAY_CAP:
+            violations.append(
+                f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
+                f"{RULE_KEY_DEFAULT_COUNT}={declared_default} 与代码默认值 "
+                f"{DEFAULT_DISPLAY_CAP} 不一致（B18；调用方应传 "
+                "load_solution_set_display(root).default_count）"
+            )
+        if declared_max is not None and int(declared_max) != MAX_DISPLAY_CAP:
+            violations.append(
+                f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
+                f"{RULE_KEY_MAX_COUNT}={declared_max} 与代码硬上限 "
+                f"{MAX_DISPLAY_CAP} 不一致（B18）"
+            )
+
+    grid = doc.get(RULE_KEY_ASSUMPTION_GRID)
+    if isinstance(grid, Mapping):
+        ref = str(grid.get(RULE_KEY_SOLVER_REF) or "")
+        expected = "scripts/pricelayer/solver.py"
+        if ref and ref != expected:
+            violations.append(
+                f"{VALUATION_METHODS_YAML}:: {RULE_KEY_ASSUMPTION_GRID}.{RULE_KEY_SOLVER_REF}="
+                f"{ref!r} 未指向本模块 {expected!r} —— 声明与实现脱节（Ch5 §B.3 / §I.2）"
+            )
+    return violations
 
 
 def main(argv: Sequence[str] | None = None) -> int:

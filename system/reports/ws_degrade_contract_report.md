@@ -11,11 +11,18 @@
 - **报告 commit**：`abbe7b3` 之后的所有 `docs(report):` 提交（`d34e6e5` / `4f03d7d` / `44dee2e` / …）
   —— **只改本文件、不动代码**；核对方式：`git diff abbe7b3..HEAD --stat` 只会列出本报告
 - **改前基线（对照用）**：`d5a37f8`；后续任何新提交**只会是本报告文件**的修改
+- **已合并**：team-lead 的 **`6ee7121`**（`merge ws/degrade-contract: G-43/G-45 …`，8 文件 970+/86-；
+  比 `abbe7b3` **多一个本报告文件**，代码逐字相同）；合并后主理人在主干**实跑全部 24 项门禁**：
+  **23 绿 + 1 已知红（`traceback.py` = 真实覆盖缺口 · design-red）· 非零计数 1**
+- **本报告的后续裁定（`T-18` / `G-52`）**：登记在 **`b7103b6`**
+  （`system/reports/phase1_gap_register.md` + `system/reports/phase1_open_tensions.md`）
 - **`git status --short`**：**（空）** —— 工作树干净（本报告已入库，故不在未跟踪列表里）
 - **`$PY`** = `/Users/gaza/.workbuddy/binaries/python/envs/default/bin/python`
 - **纪律声明**：全程**未**触碰真仓库 `system/facts/`、`system/derived/`、`system/state.json`
-  （`git status --short` 为空即证据）；`rules/**` 未改（权限位由 `bootstrap_worktree.sh` 复原）；
-  一切实验在**副本**（`/tmp/wsdc/**`）中进行；提交时 `pre-commit` **未被跳过**。
+  （`git status --short` 为空即证据）；`system/rules/**`（0444 设计真相源）**未改**；
+  一切实验在**副本**（`/tmp/wsdc/**`）中进行；本单所有提交的 `pre-commit` **均未被跳过**。
+- **跑法口径**：跑 pytest 请用 `sh system/scripts/ops/run_pytest.sh tests/...`
+  （裸 `pytest` 在宿主 FS broker 下会被 SIGTERM，见 §2.6 的对照实验）
 
 ---
 
@@ -461,26 +468,104 @@ $ grep -n "def _write_check_record\|def _state_path" system/scripts/orchestrate/
 
 ## ④ 剩余不确定性与缺口（**如实报出，不掩盖**）
 
-### ④-1 ★ 真仓库当前**永远不会有"成功运行"** ⇒ 本判据在真数据上仍只能证"首日豁免"这一半
+### ④-1 ★ 设计层自相矛盾（已登记 `T-18`）：step 7/8「既 `blocking` 又非首版实现」⇒ 首版**结构上不可能**不 `blocked`
 
-- **机器事实**：`rules/pipeline.yaml` 声明 step 7/8 `blocking: true` 且 `implemented_in_first_version: false`；
-  `run_daily()` 对未注册处理器的步 **记 `gap` + 置 `blocked`**（`pipeline.py` 主流程），
-  而 `_register_default_steps()` **从不注册 7/8 步的处理器**（只注册 1–6 + hook 接口）
-  ⇒ **`blocked` 恒为真 ⇒ `status` 恒为 `failed` ⇒ 真仓库永远没有一次成功运行**。
-- **后果**：真数据上 `last_valid_result_ref` 恒为 `None`、`degrade_first_day_exempt=2` **是正确的**
-  （确实没有可保留的旧结果），但这意味着**"有成功运行却丢引用 ⇒ FATAL"这一半只能在受控输入上验证**
-  （§2.2 / §2.5），**无法在真仓库上自然发生**——直到 step 7/8 被实现或 `blocking` 语义被裁定。
-- **为何不改**：`rules/**` 是 0444 只读设计区；`chain_steps.py` 不在本单授权内；
-  且"7/8 步未实现 ⇒ blocked"是 `rules/pipeline.yaml` + `T-08` 的**既有设计裁决**，
-  不是本单可自裁的事。**⇒ 已按派单要求"停下来报"（留待需求方裁定）。**
-- **旁证（同族缺口）**：`scripts/tasks/gap_to_task.py::check` 要求**终态 `done` 必须 `output_refs` 非空**
-  （否则判"空执行" `G1-04`）。本单补齐 `output_refs = 本轮真正新写入` 之后，
-  "成功运行且本次无新增产出"（幂等重跑日）会是 `done + output_refs=[]` ⇒ 该守卫会 FATAL。
-  **这是既有行为**（本单之前 `done` 行恒 `output_refs=[]`，更严重），且与 `G-44`
-  （"幂等被当成没做完"）**同族**：`StepOutcome.skipped` 的语义需要在 `output_refs` 上有一个
-  明确口径（是否把"考察过、均已存在"计入）。**本单不改**（属 `G-44` 的裁定范围）。
+> **本条不是「我的实现受限」，而是设计声明与现实自相矛盾。**我这里的实测只是把矛盾**钉成机器证据**。
 
-### ④-2 `output_refs` 在"失败运行"上的语义是**本单的取舍**（非设计逐字规定）
+**（a）设计真相源原文逐条**（`system/rules/pipeline.yaml`，由 `yaml.safe_load` 读出，非人工转录）：
+
+| step | name | `blocking` | `implemented_in_first_version` |
+|---|---|---|---|
+| 1–6 | `ingest_public_information` / `trace_dedup_verify` / `update_company_and_industry_relations` / `revise_growth_and_moat_judgment` / `update_financial_and_valuation_assumptions` / `compare_company_vs_benchmark_expected_return` | **True** | **True** |
+| **7** | `publish_recommendations` | **True** | **False** |
+| **8** | `continuous_verification_and_history` | **True** | **False** |
+
+**（b）矛盾在代码里的落点**（可复现）：
+
+```
+$ grep -rn "implemented_in_first_version" system/
+system/scripts/orchestrate/ingest_step.py:4:      （注释）
+system/scripts/orchestrate/pipeline.py:152:        （docstring）
+system/scripts/orchestrate/chain_steps.py:6:       （docstring）
+system/tests/injection/test_chain_steps_wiring.py:5:（docstring）
+$ grep -rn 'cfg.get("blocking")' system/scripts/orchestrate/pipeline.py
+215 / 225 / 249 / 302 / 324          ← blocking 被真读
+```
+
+★ **`implemented_in_first_version` 有零个代码消费者**——它只出现在注释与 docstring 里，
+**没有任何一行代码读它**。⇒ 这一列在首版**写 True 还是写 False，行为完全相同**。
+⇒ 与批次 13 的 `D1`（声明与现实矛盾）**同族**：声明了一条语义，实现里根本没有对应分支。
+
+**（c）由此产生的必然链条**（本单实测）：
+
+```
+step 7/8 blocking=True 且无处理器
+  ⇒ run_daily() 对未注册处理器的步记 gap
+  ⇒ assert_steps_complete() 判「<name> 未注册且未显式记 gap（不得静默跳过）」（pipeline.py:496）
+     —— 或按 blocking 置 blocked（pipeline.py:324）
+  ⇒ result.blocked 恒为 True
+  ⇒ _write_check_record 写出 status=TaskStatus.failed 恒成立
+  ⇒ facts/tasks.jsonl 里**永远没有一行 status=done 的 check 行**
+```
+
+**（d）对本判据的后果**：真数据上 `last_valid_result_ref` 恒 `None`、`degrade_first_day_exempt=2` 是**正确的**
+（确实没有可保留的旧结果），但这意味着**"有成功运行却丢引用 ⇒ FATAL"这一半在真仓库上无法自然发生**，
+只能在受控输入上验证（§2.2 `audit_c1` exit 0→1 / §2.4 / §2.5 端到端）。
+⇒ 判据两半的**判别力本身没有放松**（§2.2 与 §2.3 两向都证了），受限的是**真数据的可用形态**。
+
+**（e）为啥这是设计层的事，不能在本单修**：
+
+1. **铁律「卡死的信号 = 被关掉的信号」**：`blocked` 恒真 ⇒ `blocked` **失去判别力**
+   —— 一个恒为真的信号等价于没有信号，与本单刚修的 `G-43`（判据恒空转）**是同一类病**。
+2. `implemented_in_first_version` 零消费者 ⇒ 该列的**存在意义为零**，这是声明侧缺陷。
+3. 但修它要动 `system/rules/pipeline.yaml`（设计真相源），**属需求方裁定，不属本卡**。
+
+**（f）登记与建议**：已登记 **`T-18`**，交需求方裁定。
+team-lead 的推荐（记录备查）：**首版不把 `implemented_in_first_version: False` 的步计入 `blocking` 判定，
+但必须记 `gaps` 并显式标 `deferred_by_design`**——否则 `blocked` 恒真、判别力归零。
+
+★ **本单只如实登记，不自行改 `rules/pipeline.yaml`（0444 只读 + 属设计裁定）。**
+同理由：`chain_steps.py`（共享文件，不在本卡授权范围）本单**零改动**（§③-8 已证）。
+
+### ④-2 ★ `G1-04`「终态 `done` ⇒ 必须有产出」与「无变化日」的语义冲突（**已单独立卡，本单不改**）
+
+**（a）设计原文三条（逐字，冲突成立）**：
+
+| 出处 | 原文 |
+|---|---|
+| `02_已确认的投资规则/01_需求拆解.md:149`（`C123-2`） | 「**更新 ≠ 信号**：每日维护（采集/核验/复查），仅变化时产信号，**无变化写 `check_record`**」 |
+| `07_产业链传导与股票建议/01_需求拆解.md:51`（`N7.3-04`） | 「**无变化日不产生新信号，仅生成核查记录**」 |
+| `08_产品入口与每日运行/02_实现方案.md:78` | 「每日运行**必写** `check_record`（**无论有无变化**）」 |
+
+**（b）实现侧的冲突点**（`scripts/tasks/gap_to_task.py`）：
+
+```
+:43    TERMINAL_STATES = ("done",)          ← 只含 done，不含 failed
+:190   if status in TERMINAL_STATES and not (row.get("output_refs") or []):
+           → 判 G1-04「空执行」
+```
+
+★ 先排除一个**不存在**的假阳性：`TERMINAL_STATES` **只含 `done`**，**不含 `failed`**
+⇒ **失败行不会被这条误判**，别把"失败行也被判空执行"当成问题（本单复核过）。
+真正的问题是：**无变化日**（设计上**合法**）今天会长成 `done + output_refs=[]`
+⇒ 被判 `G1-04` 空执行 ⇒ **FATAL**。本单补齐 `output_refs = 本轮真正新写入` 之后，
+"成功运行但本次无新增产出"（幂等重跑日 / 无变化日）会**稳定**落进这个形状。
+（本单之前 `done` 行恒 `output_refs=[]`，**更严重**——只是当时没有一行 `done`，见 §④-1。）
+
+**（c）修法必须是"换成可判定的正向标记"，不是放松判据**（`R-06`）。
+判决条件（team-lead 已批准此形态）：
+
+> `done` 且 `output_refs` 为空 ⇒ **合法当且仅当** `check_record` **存在**
+> 且 `check_record.changed is False`（无变化日）；否则仍按 `G1-04` 判空执行。
+
+三条同时成立：① 每条 `done` 行**穷尽**落入"合法 / 违例"两态，无第三态、不靠任何名单（`R-06 ①`）；
+② **判别力不放松**——"报了完成、既不产出、`changed` 也不是 False（或干脆没有 `check_record`）"照样红；
+③ 字段全部**复用已有**（`check_record.changed` 由 `pipeline._write_check_record` 真实写出），**不新增真源**（`G-06`）。
+
+**（d）本单状态**：**不改**。已单独立卡 `T-19`，工作树 `ws-daily-nochange` / 分支 `ws/daily-nochange-exit`，
+交付正例（无变化日 ⇒ exit 0）+ 反例 A（`changed=True` ⇒ exit 1）+ 反例 B（缺 `check_record` ⇒ exit 1）。
+
+### ④-3 `output_refs` 在"失败运行"上的语义是**本单的取舍**（非设计逐字规定）
 
 设计区只逐字规定"失败 → **保留上次有效结果**"（`§E.1`）与"不得覆盖为无意义空值"（`§E.4`），
 **未逐字规定**"失败轮的部分写入是否进 `output_refs`"。本单取"**失败 ⇒ 空**"，理由：
@@ -489,7 +574,7 @@ $ grep -n "def _write_check_record\|def _state_path" system/scripts/orchestrate/
 **如需求方要"失败轮也如实列出部分写入"**，改动点只有一处（`pipeline.py` 的
 `output_refs=produced if valid_run else []`），且**不会**影响本判据（失败行不满足载体③的 `done` 前提）。
 
-### ④-3 载体①的语义边界（保留但已知其"弱"）
+### ④-4 载体①的语义边界（保留但已知其"弱"）
 
 载体①（`last_valid_result_ref` 非空 ⇒ 持有有效结果）是 `stage_gate` 的旧口径，本单**保留不删**
 （删即放松）。它的"弱"处：一条失败行**自带一个指针**并不等于它自己产出了结果。
@@ -497,17 +582,20 @@ $ grep -n "def _write_check_record\|def _state_path" system/scripts/orchestrate/
 **不用它**——只用 `is_valid_run_record()`，避免"指向一条失败运行的 `check_id`"。
 ⇒ 两处职责分工已写进 docstring；**未发现它导致任何误判**（§2.6 全绿，§2.2/2.3 两向对照成立）。
 
-### ④-4 未覆盖：并发/多写者
+### ④-5 并发非原子（**已登记 `G-52`（低 · `OPEN`）· 记下不改**）
 
 `_write_check_record` 的"读上一次成功运行 → 写本行"不是原子的。同一 `code_root` 上**并发**跑两次
 `run_daily` 时，两行可能都指向同一个旧 `check_id`（**不会**产生悬空引用，但第二个失败行的
 "上一次"可能不是紧邻的那次成功）。本项目当前是**单写者 + 会话锁**（`V-05`）语义，
-**无并发写入点**。⇒ 登记为**已知边界**，未改（也不该在本单引入锁机制）。
+**无并发写入点**；且 `pid + 存活` 守卫已能**响亮失败**（而不是静默错），在当前单机串行使用下够用。
+⇒ 登记 **`G-52`（低 / `OPEN`）**，**超出本卡授权，明确不改**
+——顺手改共享的会话锁 = 引入本单刚发现的**那类静默风险**（正是 `G-43` 的同族病）。
 
-### ④-5 未做的（明确不在本单范围）
+### ④-6 未做的（明确不在本单范围）
 
-- 未改 `chain_steps.py` / `rules/**`（见 ④-1）；
-- 未改 `gap_to_task.py`（见 ④-1 旁证）；
+- 未改 `chain_steps.py` / `rules/pipeline.yaml`（见 ④-1 —— 0444 只读 + 属设计裁定）；
+- 未改 `gap_to_task.py`（见 ④-2 —— 已单独立卡 `ws-daily-nochange-exit`）；
+- 未与会话锁/并发相关的任何改动（见 ④-5 —— `G-52` 记下不改）；
 - 未改 `registry/criterion_counterexamples.yaml`（该条目的 `blocked_hint`
   `"失败但未保留 last_valid_result_ref"` 逐字未变，登记**仍有效**且**现在才是真的**——
   `criterion_effectiveness_guard` 实测 `RESULT: PASS（0 violations）`）；
