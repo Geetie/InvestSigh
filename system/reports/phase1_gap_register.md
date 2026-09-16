@@ -353,5 +353,15 @@ blocked = True
 **`derived/` 非唯一真源，是可由 `facts/` + `method_version` 确定性重算的派生输出** → 已加入 `.gitignore`（`system/derived/*.jsonl`），`.gitkeep` 仍跟踪。
 ★ 不跟踪它**恰恰是防"双真源"**（`G-06`）：一旦入库就会出现"以文件为准还是以重算为准"的第二条口径；可复现性由 **`facts/` 的追加式不可变** + **`method_version`** 保证。
 
+### 11.5 批次 12 的发现（`G-RC-09` · `G9-1` · `G9-2` · `G-28` · `T-13`）
+
+| # | 缺口 | 严重度 | 状态 |
+|---|---|---|---|
+| **`G-RC-09`** | ★ **`verify.py --batch injection` 被宿主删除配额静默关掉**（`CONVENTIONS.md` 铁律：「卡死的门禁 = 被关掉的门禁」）。实测证据：`[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":10218,"threshold":9999,"scope":"turn"}` —— 阈值是**按 turn 计**的，越过之后**连单个用例目录都被拒删**，之后所有夹具 setup 直接 `E`，**看起来像"测试坏了"**。量化：夹具每份 `code_root` 副本 **271 项** × 合并后 **165 个用例** ≈ **44,715 项/轮**，远超 9,999。<br>★ 注意这**不是超时问题**（原 120s 不是瓶颈），是**配额**问题 —— 二者症状相似、处置完全不同（`V-03` 说的是超时码 124）。 | **高**（一个批次事实上不存在） | 🔄 **在修**（`ws-verify-shard`）：按用例数分片（**每片 ≤32 例 ≈ 8,672 项**）、`test_guards_reject.py`（单文件 41 例 ≈ 11,111 项，**本身即超阈值**）拆为两文件、并加**三条机器绑定**（分片目标 = 注入测试文件集合，穷尽不重不漏 + 每片用例数 ≤32 现算）。★ **代价如实登记：完整覆盖 `tests/injection` 现在需要 6 个轮次**（每轮一片）—— 这是宿主配额决定的，不是设计选择 |
+| **`G9-1`** | ★ **`daily_run::task_state_auditable` 已"绑定"但零检查**：AST 遍历全代码区，该 id **只出现 1 次** = `stage_gate.py:575` 那条空 `criterion()` 声明本身；行为证据：把 task `status` 置 `totally_bogus_status` → 阶段④ **`exit=0`**，违例集合与合规输入**完全相同**（各 0 条）。<br>⇒ **阶段④ 今天判出的 `PASS` 只有 3/4 是真的**（它声明 4 条 automated 判据）。这正是 `提示词 §一 底线 2`「真接线」点名的形态：**能通过 100% 覆盖率测试、却从不触发**。 | **高**（一个阶段的 PASS 被高估） | 🔄 **在修**（裁定：**必须补实现**，不许以 `ineffective` 收尾；规格 = `施工图 §2 阶段④` 的伪码 `all_tasks_have_status(run_window)`，`Ch8 §C.2`；反例 = `bogus_status` → 必须红） |
+| **`G9-2`** | **`expansion::review_append_only` 语义错位**：id 声明的是 append-only（`(success, failure, pending) ⊆ 记录集`），实际绑定的是「三层复盘齐备」。`{含 failure/pending}` 与 `{失败记录被选择性删除}` 给出**完全相同**的违例集合（各 2 条）。 | 中 | 🔄 **在修**（裁定：**按设计实现 append-only** —— `施工图 §2 阶段⑤` 逐字写的是 append-only，`delivery.yaml` 的 id 与设计一致，**错位的是被绑的检查**；改 id 措辞等于收窄已写死的验收标准 = 改设计，依 `施工图 §0` 第 4 条不由实现方决定）。另要求查清"三层齐备"是否有**自己的** id 承载 |
+| **`G-28`** | **门禁清单手写、不从真源派生**：`tests/guards/test_exit_code_contract.py::GUARDS` 自带 `assert len(GUARDS) == 20`，而 `run_all_gates.GATES` 实有 **24** 项 ⇒ 4 条守卫（`shell_var_guard` / `graph_integrity_guard` / `locator_check` / `criterion_effectiveness_guard`）**无退出码契约覆盖**。门禁 20→23 时新增的 3 项**零覆盖**正是这个洞造成的。 | 中 | `OPEN`（本批次 `ws-criterion-effectiveness` 如实报告并**主动避开**（避免与 `ws-guards-catchup` 冲突）——这个判断是对的）。修法：`GUARDS` 改为从 `run_all_gates.GATES` 派生 |
+| **`T-13`** | `facts/` 是否封闭为 18 表 | —— | ✅ **已裁定（需求方 2026-09-16）：扩表**（18 → 22）。四条依据**全部来自设计自己的方案比选**，不是偏好：`Ch4 §B.1` 否决折叠 · `Ch7 §B.3` 否决合并（给了 MSFT↔NVDA 反例）· `BusinessPosition` 实测**不是** Ch4 的 `business`（前者是覆盖位置对象）· 折叠的现存债可实测（`business_mechanism` 是自由文本串、`DriverModel` 缺 7 字段、`business_refs`/`driver_refs` 不存在 ⇒ `Ch4 §G.1` 六项深度**结构上不可达**）。详见 `phase1_open_tensions.md::T-13`。<br>⚠️ **文档侧待需求方回改**：`提示词 §三` / `施工图 §4` / `Ch9 §3.3.3` 的"18（不得增删改名）"字样属**设计区（只读）**，实现方**不得修改** ⇒ 在回改前存在**一处已批准且已知的代码-文档偏离**，以本裁定为准 |
+
 
 
