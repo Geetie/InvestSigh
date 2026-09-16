@@ -160,9 +160,21 @@ def rel(path: Path, root: Path) -> str:
 
     故此处**不再静默兜底**：不在 `root` 下 → 抛 `ValueError`（经 `run_checker`
     折叠为 `exit 2 输入异常`）。**程序写错必须响，不能变成一条安静的错路径。**
+
+    ★★ **返回 POSIX 分隔符（`as_posix()`），不用平台原生分隔符**（2026-09-17 实测修复）：
+
+    本函数是全仓**路径归一化的唯一源头**（`_is_exempt` / 豁免清单匹配 / 各守卫的
+    违例定位都经它）。若返回平台原生形式，Windows 上得到 `scripts\\orchestrate\\x.py`，
+    而 `config/placeholder_exemptions.yaml` 里登记的是 `scripts/orchestrate/x.py`
+    ⇒ **豁免集合失配、豁免机制整体静默失效**，门禁报出**已登记豁免**的行
+    （实测：`no_placeholder_guard` 对 `chain_steps.py` 的已豁免项恒红）。
+
+    这与 `D-4`（参数顺序写反 ⇒ 免扫整体失效）**同型**：**豁免/匹配类机制的失效
+    在输出上与"真的违规"完全同形**（`G-62` 静默等价态）。故归一化必须发生在源头，
+    而不是让每一个消费方各自 `replace("\\\\","/")` —— 那种写法**必然漏掉一两处**。
     """
     try:
-        return str(path.relative_to(root))
+        return path.relative_to(root).as_posix()
     except ValueError as exc:
         raise ValueError(
             f"rel(path, root) 要求 path 位于 root 之下；实际 path={path} root={root}"
