@@ -1482,7 +1482,7 @@ routing.key / binding_field / metric_owner_field 0          ★ 零
 2. 本节结论对应 §15 开头的**快照 SHA**；13-A 工作区**正在被编辑**（我在核查中发现同一键的命中数在两分钟内从 1 变 0 —— 因为那是 `_fixtures.py` 里的**夹具副本**且该文件正被改动）⇒ 13-A 面**须在提交后复跑**。
 
 **未做（如实登记，不冒充已核）**
-3. **未跑**任何探针去"真的把一个键改成错值再看门禁变不变"（那需要可写副本 + 逐门禁跑；`rules/**` 0444 且我按纪律不写被审区）⇒ (b) 的判定是**静态**的（"无任何代码路径读该键"是**穷尽式搜索**结论，强；"无检查依赖其语义"是**由前句推出**）。**若要更硬，需在 scratch root 上做一次"改值 ⇒ 跑门禁"的实测**（建议并入批次 14）。
+3. ~~**未跑**任何探针去"真的把一个键改成错值再看门禁变不变"~~ ⇒ ★ **已做，见 §15.6**（我先把这条写成"未做"，随后补跑了差分实验；**此处保留原文并划掉**，不偷偷改写）。仍**未做**的是：**其余 8 道门禁**（`rules_lock_guard` 之外还有 `registry_schema_guard`/`freeze_guard`/`injection_guard`/`schema_sync_guard`/`criterion_effectiveness_guard`/`verification_policy_guard`/`shell_var_guard`/`graph_integrity_guard`）**未逐道跑差分** —— 理由是**静态已证**"无任何代码路径读这些键"（穷尽式搜索），**任何**检查都不可能有判别力；故剩余 8 道**由该结论覆盖**，不再逐个跑（并**如实标注这是推断而非实测**）。
 4. `no_placeholder_guard` 覆盖 `rules/**` 这条，我是**代码审查 + `scanned files: 136`** 得出的，**不是**"逐文件列出被扫清单"的实测。
 
 ---
@@ -1524,3 +1524,59 @@ $ git grep -nE 'RULE_KEY_TAGS|_rule_binding_violations|SCENARIO-RULE-BINDING' ma
 ⇒ `G-55`（`scenario_tags` ↔ `ScenarioTag` 零绑定）在**真源上仍未闭合**；`bef9628` 没动它。
 
 **`#69` 状态**：13-A 仍**未提交**（`main..ws/ch4-valuelayer` 空；`UU` 两个文件）⇒ A/B 的 13-A 面**仍差"提交后按 hash 重跑"**。
+
+### §15.6 ★ 追加：**(b)=0 的差分实验（把 §15.4 第 3 条的"未做"补上）—— 可执行证据，不是推断**
+
+**方法**（照项目自己的"反例是否 load-bearing"口径）：在 **scratch root**（`/tmp`，**不碰被审区**）里跑同一道门禁**两次**，只改 `rules/metric-sets.yaml` 的一个变量：
+
+```
+$ S=$(mktemp -d); mkdir -p "$S/rules" "$S/schema/jsonschema" "$S/registry"
+$ cp rules/*.yaml "$S/rules/"; cp schema/jsonschema/facts.schema.json "$S/schema/jsonschema/"; cp registry/*.yaml registry/*.json "$S/registry/"
+
+=== A) 真件副本（未改）===
+$ python3 scripts/checks/conflict_scan.py "$S" --no-report ; echo $?
+  scanned l3_config_files: 21          ← ★ 其中含 rules/metric-sets.yaml：门禁**确实读了这个文件**
+RESULT: PASS（0 violations）
+0
+$ python3 scripts/checks/no_placeholder_guard.py "$S" --no-report ; echo $?
+  scanned files: 22
+RESULT: PASS（0 violations）
+0
+
+=== B) 把 9 个键全改成「**合法但错**」的值，其中 4 处**与代码/设计直接矛盾** ===
+  binding_guard.entry                          : validate_binding          → definitely_not_a_function
+  binding_guard.rule_model_class_mismatch      : raise MetricSetMismatch   → do_absolutely_nothing
+  binding_guard.rule_metric_owner_must_be_own_business: true              → false      ← 与 rollup 实现矛盾
+  binding_guard.cross_business_reference       : forbidden                 → allowed    ← 与 rollup 实现矛盾
+  metric_item_fields                           : [name, unit, source_class, linked_account] → [zzz]
+  segment_evidence.blocks_financial_link       : true                      → false      ← 与 §B.2 矛盾
+  segment_evidence.field                       : segment.pending_evidence  → nope.nope
+  conversion_chain_generic_stages              : [获取,交付,使用,变现]      → [A,B]
+  conversion_chain_per_model_class.hardware    : 订单→排产/出货→…            → 乱写一串
+  extension_policy.new_model_class_requires_code_change: false            → true       ← 与 §C.3 矛盾
+  routing.key / binding_field / metric_owner_field: model_class / business.metric_set_id / business_id
+                                                                          → not_a_field / not.a.field / not_a_field
+
+$ # 变更已落盘校验（避免"其实没改成"的假实验）
+★ 变更已落盘校验：binding_guard.entry = definitely_not_a_function | routing.key = not_a_field
+  | extension_policy.new_model_class_requires_code_change = True | metric_item_fields = ['zzz']
+
+$ python3 scripts/checks/conflict_scan.py "$S" --no-report ; echo $?
+RESULT: PASS（0 violations）
+0
+$ python3 scripts/checks/no_placeholder_guard.py "$S" --no-report ; echo $?
+RESULT: PASS（0 violations）
+0
+
+$ diff <A的输出> <B的输出>
+★ 逐行完全相同（两份均 PASS / 0 violations）
+```
+⇒ **结论（可执行）**：把 9 个键改成**最恶毒**的错值（含 4 处直接与代码矛盾），这两道**确实读了该文件**的门禁**一行输出都不变** ⇒ 它们对这些键的**语义零判别力**，**(b) 的判词成立为实测结论**，不再只是"由静态搜索推出"。
+★ 这也顺带证伪了一个可能的乐观猜测："虽然没人读，但至少 `conflict_scan` L3 会挡住乱改" —— **挡不住**（L3 只比禁词，`not_a_field` 不是禁词）。
+
+**★★ 我在做这个实验时踩了两个坑，如实登记（否则后人照抄会得到假结论）**：
+1. **第一次 B 跑出来"完全相同"是无效的** —— 我漏了 `rules/*.yaml` 是 **0444**，`cp` 把只读位一起复制过去，`write_text` 抛 `PermissionError`，**变更根本没落盘**，所以 A/B 当然一样。修法：`chmod u+w` 后再改。⇒ **教训：差分实验必须先"校验变更已落盘"**（我后来加了 `★ 变更已落盘校验` 那段打印，就是为此）。
+2. **更早一次 scratch 只放了 `metric-sets.yaml`**，`conflict_scan` 直接 `[INPUT-ERROR] … 缺少禁词表 … rules/banned_tokens.yaml`（`exit=2`）。那次 A/B 也"diff 完全相同"，但**同样是假结论**（两次都 `exit=2`）⇒ **教训：`exit=2` 是输入错误，此时"结果一致"毫无意义，必须先把输入备齐**。
+⇒ 两条都属"**看起来很干净的结论其实什么都没测**"，与本报告 §11.2 的 `grep` 假阴性同类 ⇒ **写进报告备查**。
+
+★ **边界（仍未做）**：**其余 8 道门禁未逐道跑差分**；依据是"无任何代码路径读这些键"（穷尽式搜索）⇒ 任何检查都不可能对这些键有判别力。**这是推断**，我如实标注，并建议批次 14 若要更硬可补齐（成本低：同一 scratch 手法）。
