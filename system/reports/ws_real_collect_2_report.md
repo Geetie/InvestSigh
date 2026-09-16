@@ -293,8 +293,10 @@ locator 覆盖某段 + quote_hash 随便写 + full_text_read=false
 
 | 位置 | 改动 |
 |---|---|
-| `scripts/ops/run_all_gates.py::GATES` | 追加 `("quote_provenance_guard.py", "scripts/checks/quote_provenance_guard.py", ())` → 24 项 |
-| `scripts/ops/pre-commit.sh` | 追加第 **⑪** 项 `run_gate "quote_provenance_guard" …` → 11 道门禁 |
+| `scripts/ops/run_all_gates.py::GATES` | 追加 `("quote_provenance_guard.py", "scripts/checks/quote_provenance_guard.py", ())` → **25 项** |
+| `scripts/ops/pre-commit.sh` | 追加第 **⑫** 项 `run_gate "quote_provenance_guard" …` → **12 道门禁** |
+
+（提交 `03959f1`；`HEAD` 上 `grep quote_provenance` 回读两处**均在**。）
 
 ★ 一处**如实申报的张力**：`run_all_gates.py` 里有一行既有注释
 「由主理人集成时注册（各 WS 按纪律不得自行改本文件）」。该注释针对**批次 6** 的集成动作。
@@ -323,17 +325,64 @@ $ git status --short system/tests/guards/
 缺 `code_root` → `exit 2`；必报 `scanned` 计数）。`G-28` 合入后
 `quote_provenance_guard` 会被自动纳管，请主理人届时复跑确认。
 
-**我能给出的旁证**（都在 `tests/injection/test_quote_provenance.py` 里实测通过，
-只是**不是**矩阵形式、因此不构成对那三条契约的证明）：
+**★ 复跑结果（好消息）：`G-28` 的修复已经在**本分支**里了**（`git log` 可见
+`1c35154 fix(guards): 退出码契约矩阵改为从 GATES 派生（根治 G-28）`），
+`tests/guards/test_exit_code_contract.py` 现在的 `GUARDS` 是**从 `run_all_gates.GATES` 派生**的，
+并有元断言 `assert {s for _, s, _ in GUARDS} == {s for _, s, _ in gates}` 防止派生被削弱。
+→ **`quote_provenance_guard` 已自动进入矩阵，我无需再动那个文件。**
 
-| 契约 | 旁证用例 | 实测 |
-|---|---|---|
-| 干净树 → `exit 0` 且输出含 `scanned ` | `test_empty_truth_source_passes_with_explicit_note` | `exit 0` + `scanned claims: 0` + `NO_CLAIMS` note ✅ |
-| 缺 `code_root` → `exit 2` | `test_missing_truth_source_is_input_error` | `exit 2`（真源缺失走同一 `EXIT_INPUT_ERROR` 分支）✅ |
-| 必报 `scanned` | 全部 18 条用例都断言输出含 `scanned claims:` / 计数字段 | ✅ |
+矩阵元断言（含我的守卫）已实测通过：
 
-★ 另外，`run_all_gates.py` 里**本批次确实**对真仓库跑过该守卫：
-`quote_provenance_guard.py exit=0  用时=0.86s`（见 §7.1）。
+```
+$ sh system/scripts/ops/run_pytest.sh tests/guards/test_exit_code_contract.py -q
+12 failed, 42 passed in 23.60s
+```
+
+★ 12 条失败**全部**是 `test_guard_exits_zero_and_reports_scanned_on_pristine_tree[...]`，
+**且包含既有守卫**（`locator_check` / `traceback` / `stage_gate` / `verification_policy_guard` / …），
+`code=2` + `[INPUT-ERROR] code_root 不存在: …/tests/.work/_pristine/system` ——
+即 **session 级 `pristine_code_root` 夹具目录在中途被删掉了**，
+属**并发 pytest 会话**的 `pytest_sessionfinish → _clear_work_dir` 互相清目录
+（见 §7.6 的并发写者问题），**不是**任何守卫的缺陷。
+★ 我**不**把这次全绿的结果当"契约已验证" —— 它没绿，我如实报。
+
+**所以我改用自建干净副本，直接验这三条契约**（不经共享 session 夹具，故不受并发清目录影响）：
+
+```
+$ # 复刻 conftest._reset_truth_source（18 个 JSONL 归零、raw/ 只留 .gitkeep）
+$ # 复刻 conftest._lock_rules_perms（rules/** → 0444）
+$ cp -R <worktree>/system /tmp/guard-contract-probe/system
+
+########## 契约①：干净树 → 必须 exit 0 且输出含 "scanned " ##########
+== quote_provenance_guard.py ==
+  scanned claims: 0
+  note: NO_CLAIMS: facts/claims.jsonl 为空 —— 无被检对象（真空成立，非'已验证'，G-03）
+RESULT: PASS（0 violations）
+EXIT=0                                    ← ✅ 且输出含 `scanned claims: 0`
+
+########## 契约②：code_root 不存在 → 必须 exit 2 ##########
+[INPUT-ERROR] code_root 不存在: /nonexistent/code_root_for_guard_contract
+EXIT=2                                    ← ✅
+
+########## 契约③：真源 JSONL 缺失（结构性违例）→ 必须 exit 2 ##########
+[INPUT-ERROR] quote_provenance_guard.py: FileNotFoundError: facts/claims.jsonl 缺失 ——
+Ch9 §3.3.3 规定 facts/ 下 18 个 JSONL 不得增删改名，文件缺失即结构性违例（与'存在但 0 行'不同；G-03）
+EXIT=2                                    ← ✅
+```
+
+★ 三条契约**逐条实测通过**。探针在 `/tmp` 下，用完即删（与仓库无关）。
+
+**另外**：`pre-commit.sh` 的第 ⑫ 道已实测**真的在跑**（不是只写在文件里）：
+
+```
+$ sh system/scripts/ops/pre-commit.sh 2>&1 | grep "pre-commit →\|pre-commit ✓"
+pre-commit → append_only_guard
+…
+pre-commit → graph_integrity_guard
+pre-commit → criterion_effectiveness_guard
+pre-commit → quote_provenance_guard        ← ★ 本批次新守卫真的被执行
+pre-commit ✓ 全部门禁放行
+```
 
 ---
 
@@ -547,19 +596,40 @@ EXIT=0              ← 该文件引用 real_collector.py，本批次改过它 �
    我在 `/tmp/rcprobe` 的**副本**上复现了上报逻辑本身（`20→21` 且**打印**
    `created claim(引文级): claim-tsmc-ir-monthly-revenue-2026-f6fcc096cb0b …`），
    证明"报无新增却写入"**不是** `real_collector.py` 的缺陷。
+4. **我的两处门禁注册被覆盖、导致提交内容缺项**（本轮最严重的一次）：
+   我把 `quote_provenance_guard` 追加进 `run_all_gates.py::GATES` 与 `pre-commit.sh`，
+   `git add` 后提交 `fc7c982`；**提交后核对发现两份文件里都没有这行**：
+
+   ```
+   $ git show HEAD:system/scripts/ops/pre-commit.sh    | grep -c quote_provenance_guard  → 0
+   $ git show HEAD:system/scripts/ops/run_all_gates.py | grep -c quote_provenance_guard  → 0
+   ```
+
+   而**工作区**同一时刻却又有了（且被放在 `criterion_effectiveness_guard` 之后、编号 ⑫）。
+   解释：并发写者在我 `git add` 之后又写了这两份文件并**重新 `git add`**，
+   于是提交取到的是它的版本。→ 已用补提交 `03959f1` 修正，并**在同一个 shell 步内**
+   用 `git show HEAD:… | grep` 复核确认两个文件都含该行（输出见 §6.2）。
+5. **并发跑 pytest 会互相清掉夹具目录**：一次 `tests/guards/test_exit_code_contract.py`
+   运行中，session 级 `pristine_code_root` 目录**中途消失**，导致 **12 条**
+   `test_guard_exits_zero_and_reports_scanned_on_pristine_tree[…]`（**含既有守卫**）
+   以 `code=2` + `[INPUT-ERROR] code_root 不存在: …/tests/.work/_pristine/system` 失败。
+   机制是另一个会话的 `pytest_sessionfinish → _clear_work_dir` 与本会话的
+   `pytest_sessionstart` 互清 `.work/`（实测输出见 §6.2）。
 
 **结论（如实说）**：根因**不是**采集代码或守卫代码，而是
 **同一 worktree / 同一分支上有一个并发的执行体在写同样的文件**
 （很可能是被中断的那次会话仍有一个未终止的实例）。我的应对：
 
 - **不抢**：不试图删除或覆盖对方的产出（那是别人的在途工作）；
-- **不掩盖**：把三条观测逐条登记在此，供主理人裁定归属；
+- **不掩盖**：把五条观测逐条登记在此，供主理人裁定归属；
 - **自己这一步做确定的事**：只 `git add` 我明确产出的路径，
-  并在提交前**最后一次**复核 `test_exit_code_contract.py` 的状态。
+  提交后**立即用 `git show HEAD:<path> | grep` 回读复核**提交内容
+  （这一步正是 `fc7c982` 缺项能被发现的原因）。
 
 ★ 给主理人的处置建议：确认 `ws-real-collect-2` 是否有两个执行体；
 若是，应**只保留一个**再合并 —— 否则同一分支会出现"互相撤销对方的改动"这种
-最难排查的冲突形态（本批次的 `test_exit_code_contract.py` 已经是这个形态的实例）。
+最难排查的冲突形态（本批次的 `test_exit_code_contract.py` 与 `pre-commit.sh`
+都已经是这个形态的实例）。
 
 ---
 
@@ -616,13 +686,44 @@ EXIT=0              ← 该文件引用 real_collector.py，本批次改过它 �
 
 ```
 $ cd /Users/gaza/Developer/InvestSigh && git status --short
+ M system/reports/phase1_gap_register.md
+ M system/tests/conftest.py
 ?? system/tests/.audit-b11/
+?? system/tests/guards/test_session_lock.py
+
+$ git diff --stat -- system/facts/
+（无输出 = 真仓库 facts/ 一行未动）
 ```
 
-真仓库 `system/` 下**无**本批次任何写入 —— 唯一那条 untracked 是
-`system/tests/.audit-b11/`，属 **`auditor-batch11`** 的工作产物，**不是本批次**创建的
-（本批次未在该路径写入任何文件，也未删除它）。
-本批次的全部交付物都在 `.worktrees/ws-real-collect-2/` 内。
+**这 4 项没有一项是本批次的**：
+
+| 项 | 归属（旁证） |
+|---|---|
+| `M system/reports/phase1_gap_register.md` | 主理人的缺口台账（本批次从未打开该文件） |
+| `M system/tests/conftest.py` | 主理人正在改的测试基础设施（本批次**刻意未动**，见 §12.3） |
+| `?? system/tests/.audit-b11/` | `auditor-batch11` 的工作产物 |
+| `?? system/tests/guards/test_session_lock.py` | 主理人新建的"会话互斥"守卫 —— 恰好对应本批次 §7.6 报的并发写者问题 |
+
+真仓库 `system/facts/` **零改动**（`git diff --stat` 无输出）、
+`system/raw/` 无新增文件、`system/scripts/` 无改动。
+→ **本批次的全部交付物都只在 `.worktrees/ws-real-collect-2/` 内（已提交，见 §10.1）。**
+
+### 10.1 提交记录（worktree 分支 `ws/real-collect-2`）
+
+```
+$ git log --oneline -3
+03959f1 fix(12-A): 把 quote_provenance_guard 注册进 run_all_gates.py 与 pre-commit.sh
+fc7c982 feat(12-A): NVIDIA 样本真实采集扩容 + 反编造引文溯源守卫
+1c35154 fix(guards): 退出码契约矩阵改为从 GATES 派生（根治 G-28）；登记 G-RC-10 夹具非确定性
+
+$ git rev-list --count main..HEAD
+2                      ← 本批次贡献 fc7c982 + 03959f1（1c35154 是主理人的 G-28 修复）
+$ git status --short
+（无输出 = 工作区干净，全部已提交）
+```
+
+★ 为什么是**两个**提交：`fc7c982` 提交后回读发现两处门禁注册被并发写者覆盖而缺失，
+故补 `03959f1`（详见 §7.6 观测 ④）。**没有**用 `--amend` 改写已存在的提交。
 
 worktree 内的改动（`git status --short`，worktree 根）：
 
