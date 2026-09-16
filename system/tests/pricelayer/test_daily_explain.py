@@ -446,3 +446,53 @@ def test_cli_flags_forced_recheck_key_removed(scratch: Path, run_script) -> None
     proc = run_script("scripts/pricelayer/daily_explain.py", scratch, "--no-report")
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "DAILY-RULE-BINDING" in proc.stdout
+
+
+# ── 主理人裁定 ③：`design_default` 必须带 note + 回落值必须绑定 ──
+
+
+def test_trigger_fallback_records_source_and_note(scratch: Path) -> None:
+    """★ 裁定 ③-1/③-2：缺 `review.yaml` ⇒ `design_default` + note 写明缺哪个文件。"""
+    trigger = load_recheck_trigger(scratch)
+    assert trigger.value_source == "design_default"
+    assert trigger.notes
+    assert "review.yaml" in trigger.notes[0]
+    assert trigger.keep_original_judgment_time is True
+
+
+def test_trigger_real_rules_records_rules_source_without_note(scratch: Path, real_rules) -> None:
+    """对照：真文件齐备 ⇒ `rules` 且**零 note**。"""
+    real_rules(scratch, "review.yaml")
+    trigger = load_recheck_trigger(scratch)
+    assert trigger.value_source == "rules"
+    assert trigger.notes == ()
+
+
+def test_trigger_missing_on_hit_key_records_note(scratch: Path, real_rules) -> None:
+    """★ 裁定 ③-2：阈值在、`on_hit.keep_original_judgment_time` 缺 ⇒ `rules` + note 点名该子键。"""
+    import yaml
+
+    real_rules(scratch, "review.yaml")
+    path = scratch / "rules" / "review.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["forced_recheck"]["on_hit"] = {"action": "enqueue_recheck_task"}
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    trigger = load_recheck_trigger(scratch)
+    assert trigger.value_source == "rules"
+    assert any("keep_original_judgment_time" in n for n in trigger.notes), trigger.notes
+    assert trigger.keep_original_judgment_time is True, "缺失子键取设计逐字回落值"
+
+
+def test_cli_flags_keep_original_judgment_time_drift(scratch: Path, real_rules, run_script) -> None:
+    """★ 裁定 ③-3：`keep_original_judgment_time` 改假而代码回落值为真 → CLI **exit 1**（`T08`）。"""
+    import yaml
+
+    real_rules(scratch, "review.yaml")
+    path = scratch / "rules" / "review.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["forced_recheck"]["on_hit"]["keep_original_judgment_time"] = False
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/daily_explain.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "DAILY-RULE-BINDING" in proc.stdout
+    assert "keep_original_judgment_time" in proc.stdout

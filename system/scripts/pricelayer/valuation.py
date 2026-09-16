@@ -103,26 +103,74 @@ class ValuationError(PriceLayerError):
     """估值层的**输入 / 契约**错误（路由表结构非法、追溯链断裂等）。"""
 
 
-def load_unregistered_fallback(root: str | Path) -> tuple[str, str]:
-    """读 `unregistered_fallback.{method_class, mark}`（`Ch5 §D.1` 末句）。
+@dataclass(frozen=True)
+class UnregisteredFallback:
+    """`rules/valuation-methods.yaml::unregistered_fallback` 的解析结果（**带来源标注**）。
 
-    返回 `(method_class, mark)`。文件 / 键缺失 → 回落设计逐字默认值（`DEFAULT_METHOD_CLASS` /
-    `DEFAULT_UNREGISTERED_MARK`）。
+    - `value_source`：`"rules"` = 取自规则文件；`"design_default"` = 文件/键缺失，取
+      **设计逐字值**（`Ch5 §D.1` 末句的 `generic` + "并标注"）。
+    - `notes`：**`value_source == "design_default"` 时必非空** —— 逐条写明缺的是什么
+      （主理人裁定 ③-2：`design_default` 必须打 note，否则单独特调本函数就看不出"缺键"）。
+    """
+
+    method_class: str
+    mark: str
+    value_source: str = "design_default"
+    notes: tuple[str, ...] = ()
+
+
+def load_unregistered_fallback(root: str | Path) -> UnregisteredFallback:
+    """读 `unregistered_fallback.{method_class, mark}`（`Ch5 §D.1` 末句）—— **唯一读口**。
+
+    文件 / 键缺失 → 回落**设计逐字值**（`DEFAULT_METHOD_CLASS` / `DEFAULT_UNREGISTERED_MARK`，
+    出处见各自 docstring）并标 `value_source="design_default"` **且记一条 note**（裁定 ③-1/③-2）。
     ★ **不在代码里内置该参数**（`Ch11 §D.2`）：规则文件改了回落口径，本函数即跟着变；
-      `_rule_binding_violations` 另做"代码默认值 == 文件真值"的绑定断言。
+      `_rule_binding_violations` 另做"代码默认值 == 文件真值"的绑定断言（裁定 ③-3）。
     """
     from scripts._common import _cached_yaml
 
+    def _fallback(reason: str) -> UnregisteredFallback:
+        return UnregisteredFallback(
+            method_class=DEFAULT_METHOD_CLASS,
+            mark=DEFAULT_UNREGISTERED_MARK,
+            value_source="design_default",
+            notes=(
+                f"NO_UNREGISTERED_FALLBACK: {reason} —— 回落设计逐字值 "
+                f"method_class={DEFAULT_METHOD_CLASS!r} / mark={DEFAULT_UNREGISTERED_MARK!r}"
+                "（Ch5 §D.1 末句：「未注册类型归入 generic **并标注**」）（非'已核'）",
+            ),
+        )
+
     path = Path(root) / VALUATION_METHODS_YAML
     if not path.exists():
-        return DEFAULT_METHOD_CLASS, DEFAULT_UNREGISTERED_MARK
+        return _fallback(f"{VALUATION_METHODS_YAML} 不存在")
     doc = _cached_yaml(path) or {}
     node = doc.get(UNREGISTERED_FALLBACK_KEY)
     if not isinstance(node, Mapping):
-        return DEFAULT_METHOD_CLASS, DEFAULT_UNREGISTERED_MARK
-    method_class = str(node.get("method_class") or "") or DEFAULT_METHOD_CLASS
-    mark = str(node.get("mark") or "") or DEFAULT_UNREGISTERED_MARK
-    return method_class, mark
+        return _fallback(f"{VALUATION_METHODS_YAML} 缺/非法键 {UNREGISTERED_FALLBACK_KEY!r}")
+    notes: list[str] = []
+    method_class = str(node.get("method_class") or "")
+    mark = str(node.get("mark") or "")
+    if not method_class:
+        method_class = DEFAULT_METHOD_CLASS
+        notes.append(
+            f"NO_UNREGISTERED_FALLBACK_KEY: {VALUATION_METHODS_YAML}:: "
+            f"{UNREGISTERED_FALLBACK_KEY}.method_class 缺失 —— 取设计逐字回落值 "
+            f"{DEFAULT_METHOD_CLASS!r}（Ch5 §D.1）（非'已核'）"
+        )
+    if not mark:
+        mark = DEFAULT_UNREGISTERED_MARK
+        notes.append(
+            f"NO_UNREGISTERED_FALLBACK_KEY: {VALUATION_METHODS_YAML}:: "
+            f"{UNREGISTERED_FALLBACK_KEY}.mark 缺失 —— 取设计逐字回落值 "
+            f"{DEFAULT_UNREGISTERED_MARK!r}（Ch5 §D.1「并标注」）（非'已核'）"
+        )
+    return UnregisteredFallback(
+        method_class=method_class,
+        mark=mark,
+        value_source="rules",
+        notes=tuple(notes),
+    )
 
 
 def _rule_binding_violations(root: Path) -> list[str]:
@@ -150,19 +198,28 @@ def _rule_binding_violations(root: Path) -> list[str]:
                 f"{relpath} 缺本模块实际读取的键 {key!r} —— 声明与实现脱节（Ch11 §D.2）"
             )
 
-    fallback, mark = load_unregistered_fallback(root)
-    if fallback != DEFAULT_METHOD_CLASS:
+    fallback = load_unregistered_fallback(root)
+    if fallback.value_source != "rules":
+        # 规则文件在（上面已 `path.exists()` 过）却读不到值 ⇒ 键缺失/非法；此时**不得**拿
+        # 回落值去和代码默认值比 —— 那会把"文件里根本没写"判成"一致"（静默通过）。
         violations.append(
-            f"{VALUATION_METHODS_YAML}:: {UNREGISTERED_FALLBACK_KEY}.method_class={fallback!r} "
-            f"与代码默认值 {DEFAULT_METHOD_CLASS!r} 不一致 —— "
-            "未注册回落口径改了而代码没改（Ch5 §D.1 / Ch11 §D.2）；"
-            "调用方应传 load_unregistered_fallback(root) 的返回值"
+            f"{VALUATION_METHODS_YAML}:: {UNREGISTERED_FALLBACK_KEY} 读不到值"
+            f"（{fallback.notes[0] if fallback.notes else '原因未标注'}）—— "
+            "**不**按回落值判'一致'（Ch11 §D.2；缺键本身即违例）"
         )
-    if mark != DEFAULT_UNREGISTERED_MARK:
-        violations.append(
-            f"{VALUATION_METHODS_YAML}:: {UNREGISTERED_FALLBACK_KEY}.mark={mark!r} "
-            f"与代码默认标注 {DEFAULT_UNREGISTERED_MARK!r} 不一致（Ch5 §D.1「并标注」）"
-        )
+    else:
+        if fallback.method_class != DEFAULT_METHOD_CLASS:
+            violations.append(
+                f"{VALUATION_METHODS_YAML}:: {UNREGISTERED_FALLBACK_KEY}.method_class="
+                f"{fallback.method_class!r} 与代码默认值 {DEFAULT_METHOD_CLASS!r} 不一致 —— "
+                "未注册回落口径改了而代码没改（Ch5 §D.1 / Ch11 §D.2）；"
+                "调用方应传 load_unregistered_fallback(root).method_class"
+            )
+        if fallback.mark != DEFAULT_UNREGISTERED_MARK:
+            violations.append(
+                f"{VALUATION_METHODS_YAML}:: {UNREGISTERED_FALLBACK_KEY}.mark={fallback.mark!r} "
+                f"与代码默认标注 {DEFAULT_UNREGISTERED_MARK!r} 不一致（Ch5 §D.1「并标注」）"
+            )
 
     compute = doc.get(VALUATION_COMPUTE_KEY)
     if isinstance(compute, Mapping):
@@ -500,19 +557,9 @@ def check(root: str | Path) -> Any:
     for text in _rule_binding_violations(root_path):
         report.violations.append(Violation("VALUATION-RULE-BINDING", text))
 
-    baselines = read_records(root_path, "baselines")
-    report.scanned["baselines"] = len(baselines)
-    if not baselines:
-        report.notes.append(f"{NOTE_NO_BASELINE_ROWS}: facts/baselines.jsonl 无行（非'已验证'）")
-        return report
-
-    from scripts.compute.store import read_rows
-
-    derived_ids = {
-        str(row.get("derived_id")) for row in read_rows(root_path, "derived_values") if row.get("derived_id")
-    }
-    report.scanned["derived_values"] = len(derived_ids)
-
+    # ★ **规则派生值必须在任何 `facts/` 提前返回之前读并上报**（主理人裁定 ③-2）：
+    #   否则"行情/估值数据为空"这条早退会让"这个值其实来自设计回落、不是规则"这件事
+    #   永远不出现在 report 里 —— 正是本项目最忌的静默降级（`G-03` 同族）。
     routing_loaded = True
     routing: dict[str, tuple[str, ...]] = {}
     try:
@@ -525,9 +572,27 @@ def check(root: str | Path) -> Any:
         )
     report.scanned["routing_model_classes"] = len(routing)
     # ★ 未注册回落口径**读规则文件**（`unregistered_fallback.method_class`），不硬编码
-    #   （`Ch11 §D.2`）。规则文件缺失时回落设计逐字值；与文件真值的一致性由
-    #   `_rule_binding_violations`（已在 `check` 开头跑过）断言。
-    fallback_method_class, _fallback_mark = load_unregistered_fallback(root_path)
+    #   （`Ch11 §D.2`）。规则文件缺失时回落设计逐字值 **并声明来源 + 打 note**；
+    #   与文件真值的一致性由 `_rule_binding_violations`（上面已跑）断言。
+    fallback_spec = load_unregistered_fallback(root_path)
+    fallback_method_class = fallback_spec.method_class
+    report.scanned["unregistered_fallback_value_source"] = (
+        1 if fallback_spec.value_source == "rules" else 0
+    )
+    report.notes.extend(fallback_spec.notes)
+
+    baselines = read_records(root_path, "baselines")
+    report.scanned["baselines"] = len(baselines)
+    if not baselines:
+        report.notes.append(f"{NOTE_NO_BASELINE_ROWS}: facts/baselines.jsonl 无行（非'已验证'）")
+        return report
+
+    from scripts.compute.store import read_rows
+
+    derived_ids = {
+        str(row.get("derived_id")) for row in read_rows(root_path, "derived_values") if row.get("derived_id")
+    }
+    report.scanned["derived_values"] = len(derived_ids)
 
     checked = 0
     for row in baselines:

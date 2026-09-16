@@ -493,6 +493,29 @@ python scripts/ops/run_all_gates.py . --timeout 30
 缺键响亮 + 不内置默认值）。唯一差异：`_rules.py` 在**读口**抛错，本流在**门禁**响亮（`*-RULE-BINDING` 把键列为必需 ⇒ exit 1，
 用例②实测）。若裁定统一，本流改动面 = 4 个 `load_*` 各加一处 `raise`（键名表已是常量）。
 
+### 12.2 主理人裁定 ③ 的落地（第三轮）：口径**保持现状** + **三条约束**全部落地
+
+裁定：**不**统一到 `_rules.py` 的"读口即抛错"，**保持**"读口宽松 + 门禁响亮"（`/tmp/ch5_demo_rules.py`
+这类无完整工程树的路径正是它在服务的），但加三条约束：
+
+| 约束 | 落地 |
+|---|---|
+| ① 回落值必须**设计逐字** + docstring **标设计节号** | 新增命名常量 `DESIGN_MUST_SHOW_MULTIPLE`（`Ch5 §B.1`）/ `DESIGN_RECORD_METHOD_VERSION`（`§E.4`）/ `DESIGN_KEEP_ORIGINAL_JUDGMENT_TIME`（`§F.5`/`T08`）；其余常量逐个补出处；**不再有裸字面量回落** |
+| ② 必须输出 `value_source ∈ {rules, design_default}` + `design_default` **必打 note** | 四个读口全具备；缺文件/缺键/子键缺**三种成因各出不同 note**；并把 `notes` **上报进 report**（不只活在对象上）。★ 顺带修掉 **2 处真实缺陷**：`valuation.check` 的读口在 `if not baselines: return` **之后** ⇒ 空样本时 note 被**静默吞掉**（已前移 + 回归锁用例）；`scenario_guard` 的 `root is None` 与 `promotion.record_method_version` 缺省是**无 note 的静默默认**（已补） |
+| ③ `*-RULE-BINDING` 断言**"回落值 == 真文件里的值"** | 新增 6 条绑定：`scenario` ⑥取值域/⑦`when`+`record_method_version`、`solver` ③`must_show_multiple`（**此前漏绑**）、`daily` ③`keep_original_judgment_time`（改**双向漂移**断言）、`valuation`（"读不到值"与"值不一致"**分开**，不让缺键被回落值掩盖） |
+| ★ 刻意**不**绑的一项（诚实登记） | `DEFAULT_SCENARIO_METHOD_STATUS` **不得**绑到文件的 `scenario_method_status`：前者是"尚未转正时的默认值"、后者是**当前状态**（转正后合法变 `neutral`），**不是同一事实**，绑了正常转正即**假红**。另有 `test_design_status_default_is_deliberately_not_bound` 固化该选择 |
+
+★ 另修夹具层隐患：`real_rules` 现在统一把**副本** `chmod 0644`（真文件仍 0444）——
+此前"宿主是否保留只读位"的环境差异会让注入用例**有时写得进、有时 `PermissionError`**（本会话实测到过）。
+
+**证据（不建/不删文件的直连探针，`G-60` 窗口内亦安全）**：缺文件 ⇒ `design_default` + 1 条点名缺件的 note；
+真文件 ⇒ `rules` + 0 note；出口面 `display_value_source / recheck_value_source / unregistered_fallback_value_source = 0`（缺规则）
+与 `= 1`（真规则）；绑定判据 **4 个对照 0 违例 + 6 个反例各 1 违例**；`pre-commit ✓ 全部门禁放行`（0 FATAL）。
+
+**★ 诚实声明（`G-60` 排他窗口）**：本轮**未跑 pytest**（主理人指定窗口只给 `ws-degrade-contract`）。
+上述证据全部是**直连探针**（`py_compile` + 直接调读口/判据函数 + 守卫 CLI），**不含任何夹具批次读数**。
+新增的 pytest 用例（`test_solver` / `test_daily_explain` / `test_scenario_guard` / `test_valuation` 共 +13 例）
+**尚未执行** —— 窗口关闭后随 `verify.py --batch pricelayer` 一并复跑，届时在此处补报。
 **待裁定 / 缺口（修订后；1 / 3 / 5 三项已由主理人答复，此处记答案不记问题）**：
 ① 两个规则文件**已由 `ws-ch2-rules` 装入**（`bb32863`）+ `bef9628` 补 `solution_set_display`，本流已按真键名读；
 ② `§E.2` 子串判据 vs `R-06 ①`（本流已改词元等价 + 结构判据）仍待主理人裁定是否修订设计表述；
