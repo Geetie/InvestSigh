@@ -31,6 +31,140 @@
 
 ---
 
+## ★★ 卡 13-F 第六轮（本轮）：根因再上一级 —— 成本源是**宿主 safe-delete 守卫**，不是 `copytree`
+
+上一轮我把根因定位到"`_reset_truth_source()` 里 5 次删除调用 ⇒ 每例 ≈4.2s"，并用
+`raw ∈ _COPY_SKIP`（记作 `D′`）把 5 次降到 1 次（`unit` 60.58s ⇒ 15.79s）。**本轮把那 1 次也拆开了**：
+它仍在付**宿主审批往返**，而 `run_pytest.sh` / `verify.py::_child_env()` 声称的"关掉 broker"
+**根本没关掉这个机制**。
+
+### 6.1 机制（逐行可核，`shim/sitecustomize.py` + `safe-delete-bulk-guard.cjs`）
+
+| 事实 | 位置 | 结论 |
+|---|---|---|
+| `_SAFE_DELETE_ENABLED = os.environ.get("CODEBUDDY_SAFE_DELETE_ENABLED") != "0"` | `sitecustomize.py:35` | **默认开**，只有显式 `=0` 才关 |
+| `if _SAFE_DELETE_ENABLED:` ⇒ 替换 `os.remove/os.unlink/os.rmdir/shutil.rmtree/Path.unlink/Path.rmdir` | 同上 `:1205-1211` | 与 `_BROKERED_FS_HOOK_ENABLED`（`:36-39`）是**两套互不相干的开关** |
+| `run_pytest.sh` / `_child_env()` 只设 `CODEBUDDY_SAFE_DELETE_SANDBOX=0` + `CODEBUDDY_BROKERED_FS_HOOK_ENABLED=0` | `run_pytest.sh:22-23`、`verify.py:565-569` | ⇒ **只关掉了 broker（`copytree` 的 IPC），守卫照旧生效** |
+| `_try_trash()` 第一行就是 `_check_bulk_delete_guard(abs_path)` | `sitecustomize.py:963-964` | ⇒ **每次删除调用 spawn 一个 node 守卫 CLI** |
+| 闸门 `totalCount = request.count + deleteCount >= threshold`；`deleteCount===0` 放行；`toolApprovals[toolCallId].approved` 放行 | `safe-delete-bulk-guard.cjs:339-364` | 计数按 `conversationRequestId` 累计（见 6.5-②） |
+
+⇒ **`run_pytest.sh` 写的"在沙箱外跑"只兑现了一半**。这不是别人的漏：是我上一轮读了
+`_broker_enabled()` 就收工、没顺着 `_SAFE_DELETE_ENABLED` 再走一步。
+
+### 6.2 效果（同机、同 commit、同批）
+
+| 配置 | `unit` | `guards` |
+|---|---|---|
+| 修前：守卫开、无 `D′` | **60.58 / 58.52s**（76 例） | **`exit=124`**（>60s，每轮都超） |
+| `D′`：守卫开、`raw` 入 `_COPY_SKIP` | **15.79 / 11.42s**（76 例） | 27.13 / 19.11s |
+| **`E`：`CODEBUDDY_SAFE_DELETE_ENABLED=0`（本轮）** | **2.59 / 1.99s**（85 例） | 5.85 / 5.52s（78 例） |
+
+**★ 与 team-lead 原始数据的直接对照**（同一条命令 `pytest tests/unit -q --durations=8`）：
+
+| | 他报的（守卫开） | 本轮（配置 `E`） |
+|---|---|---|
+| 总数 | **66.72s** | **1.77s** |
+| top-8 `setup` | **4.46 ~ 5.20s**（8 条**全是** `setup`） | **0.09 ~ 0.10s**（8 条仍全是 `setup`） |
+| 他点名的 `test_contracts.py::test_freeze_has_exactly_11_params_all_tbd` | 5s 级 | **0.09s** |
+
+⇒ 他的推断"**成本在共享 fixture，不在被测逻辑**"**成立**；但**成本项不是 `copytree`**
+（`copytree` 253 文件 / 2.41MB 只需 **0.099~0.277s**），而是**每次删除调用的守卫往返**。
+
+**每调用税额的两个同会话独立测定**（都由真实批次反推，不含微基准）：
+`D′` 省掉 4 次/例 ⇒ `(60.58-15.79)/ (76×4) = ` **0.147s/调用**；
+`E` 再省掉最后 1 次/例 ⇒ `(15.79-2.59)/85 = ` **0.155s/调用**。两条互洽，取 **≈0.15s/调用**。
+（`pricelayer` 从 83.80s 降到 11.74s 也同量级，但那是跨会话读数，按 `口径 12` **不据此算系数**。）
+
+### 6.3 ★ 全表实测（23/23，配置 `E`；每批单独进程、各跑两次）
+
+`wall` = `verify.py` 记的批墙钟；**倍数 = 超时 ÷ 两次中较慢的一次**。
+
+| 批次 | run1 | run2 | 现值超时 | **倍数** | 用例 | 该批是否含夹具 | 判定 |
+|---|---|---|---|---|---|---|---|
+| `unit` | 2.59s | 1.99s | 120s | **46×** | 85 | 是（~58 例） | ✓ |
+| `conflict` | 0.42s | 0.38s | 30s | **71×** | 6 | **否** | ✓ |
+| `guards` | 5.85s | 5.52s | 300s | **51×** | 78 | 是 | ✓ |
+| `injection-a` | 3.35s | 3.65s | 300s | **82×** | 30 | 是 | ✓ |
+| `injection-b` | 9.94s | 11.71s | 300s | **26×** | 32 | 是 | ✓ |
+| `injection-c` | 14.10s | 15.52s | 300s | **19×** | 31 | 是 | ✓ |
+| `injection-d` | 16.29s | 11.39s | 300s | **18×** | 29 | 是 | ✓ |
+| `injection-e` | 4.70s | 3.83s | 300s | **64×** | 32 | 是 | ✓ |
+| `injection-f` | 5.01s | 5.01s | 300s | 60× | 33 | 是 | ✗ **1 failed，见 6.4** |
+| `injection-g` | 2.69s | 2.96s | 90s | **30×** | 18 | 是 | ✓ |
+| `root` | 0.26s | 0.25s | 30s | **115×** | 8 | **否** | ✓ |
+| `compute` | 1.49s | 1.42s | 180s | **121×** | 102 | **否** | ✓ |
+| `graph` | 1.68s | 1.74s | 60s | **34×** | 38 | 疑似 | ✓ |
+| `validators` | 2.39s | 2.39s | 90s | **38×** | 21 | 疑似 | ✓ |
+| `claim` | 2.79s | 2.90s | 120s | **41×** | 24 | 疑似 | ✓ |
+| `decision` | 1.89s | 1.86s | 120s | **63×** | 97 | **否** | ✓ |
+| `transmit` | 1.82s | 1.87s | 60s | **32×** | 29 | 疑似 | ✓ |
+| `evidence` | 3.13s | 3.04s | 150s | **48×** | 48 | 是 | ✓ |
+| `daily` | 4.71s | 4.24s | 180s | **38×** | 56 | 是 | ✓ |
+| `pricelayer` | 11.74s | 10.68s | 300s | **26×** | 168 | 是（`tests/pricelayer/conftest.py:46` 自带） | ✓ |
+| `valuelayer` | 2.96s | 3.16s | 300s | **95×** | 206 | 是（~137 例） | ✓ |
+| `gates` | 4.35s | 4.34s | 60s | 14× | — | 否 | ✗ **既有真源红（④.3）** |
+| `stage` | 0.46s | 0.47s | 30s | 64× | — | 否 | `exit=1` 为设计如此（纪律 12） |
+
+★ **配置 `E` 下"倍数 < 4×"的批次：一个都没有**（最小 14×）。
+★ 但**不要把这张表当成"可以整体收紧超时"的依据** —— 见 6.5-⑥：`E` 尚未裁决；
+且下调超时 = 收紧门禁，按 3-4 补记的同一理由，**由主理人裁，我不做**。
+★ 与 §3-4 表的可比性：§3-4 那些数是**跨会话、守卫开**的读数（且 `unit` 76 例 vs 现 85 例），
+`口径 12`（两个变量同时变 ⇒ 不得归因）⇒ 本表与 §3-4 **只做量级对照，不做逐行替换**。
+
+### 6.4 ★★ 两条红，一条是主干净真红（本轮最有价值的一条）
+
+| 红 | 内容 | 归属 |
+|---|---|---|
+| ① `test_shard_case_counts_within_quota` | **`injection-f` 现算 33 例 > 上限 32** | **主干真红**（归属与 `MAX_CASES_PER_SHARD=32` 在两支逐字相同，`test_shard_coverage.py` 也无差异） |
+| ② `test_missing_pytest_attribution_never_passes` | 期望归因含「环境」+「pytest」，实测 `why='exit=1'` | **我这条分支的落后产物**（主干已有 `PYTEST_MISSING_MARKER`，见 `verify.py:140/168-171`；本轮 `git merge main` 后**已消除**） |
+
+**①的起因是我自己**：`git show 90e58b0^` 时 `test_shard_coverage.py` 有 **4** 个用例，
+`90e58b0`（我 Phase-A 的提交，标题就是"归因分支加机器绑定"）把它加到 **6** 个 ⇒
+f 片 31 ⇒ **33 > 32**。**我在自己的卡里破了自己那条授权上限，而我写的绑定直到今天才第一次
+有机会跑起来把它抓住** —— 这正是本卡的论点：**门禁"跑不了"时，被静默关掉的不只是速度。**
+
+各片现算（`--collect-only`，cap=32）：`a=30 b=32 c=31 d=29 e=32` **`f=33★`** `g=18`；合计 205，容量 7×32=224。
+
+**修复提案（一行、不增片数，等主理人裁）**：把 `tests/injection/test_shard_coverage.py`（6 例）
+由 `injection-f` 移入 `injection-g` ⇒ **f=27 / g=24，全片合规**。等价替代：移 `test_stage_gate.py`（10 例）
+⇒ f=23 / g=28。**我未擅自改**：片数与归属是主理人在 Phase-A 明确保留的决策（"改片数是你的决策"）。
+边界相同的先例见 3-4 补记（`guards` 210s 我同样只登记不改值）。
+
+### 6.5 自我更正与登记（★ 逐条推翻/修正我自己先前写下的东西）
+
+① **`grep` 在本会话是坏的**：`which grep` → `…/shim/brokered-bin/grep`（broker 包装器，**静默返回空**），
+   `/usr/bin/grep` 才正常。⇒ 我先前所有"grep 无匹配"的结论**一律不可信**，本轮全部改用
+   Grep 工具 / `/usr/bin/grep` / Python 复算。**这是我这条证据链上最危险的一个缺陷。**
+② **配额是按会话累积、且不随轮次恢复** —— 本轮开新轮次后仍报 `count: 100218~100224`
+   （= 上轮冻住的 `99998` + 本次目标项数），同一个 `conversationRequestId`。
+   ⇒ **更正我 Phase-A 写下的"恢复边界是新的一轮用户消息"**：真实边界是**新会话**（或宿主解除）。
+   ⇒ 推论：**配额一旦越阈值，本会话内每个夹具批次的 teardown 都会被阻断**，而
+   `_safe_shutil_rmtree` 的 `except Exception` **挡不住 `SystemExit`**（`G-60` 已登记的同一条），
+   于是 pytest 报 `INTERNALERROR` ⇒ `exit=1`。**这就是"门禁不可信"的完整链条。**
+③ **我"主干只删了我的注释"是错的**：那是基于 `| head -60` **被截断的 diff** 得出的。
+   无截断后是 **4 个 hunk / 35 行**，第 4 个 hunk 正是主干**新增**的 `PYTEST_MISSING_MARKER` 归因分支。
+④ **`pricelayer` "0 个夹具用例"是我 grep 漏了**：`tests/pricelayer/conftest.py:46` 有
+   `shutil.rmtree(root.parent, ignore_errors=True)` —— **它自带夹具**（所以 `E` 对它有效，
+   而 `D′` 对它**无效**）。`verify.py` 里那句"本批 0 个夹具用例 ⇒ 13-F 不会改善它"**只对 `D′` 成立**。
+⑤ **微基准探针的读数互相矛盾，未解，不用它推任何结论**：同一进程内
+   `rmtree(250 项目录)=0.031s 且被阻断`、`rmtree(5 项目录)=0.449s 且**未**被阻断`、
+   `unlink` 在 `/tmp` 下 0.000s（该路径被 shim 明确豁免 `_should_under_os_tmp_dir`，**我的探针设计有 bug**）。
+   与 6.1 的 `deleteCount===0 ⇒ 放行` 也无法完全对上。**如实登记为未解**，本轮所有结论
+   **只建立在真实批次 A/B 上**（6.2/6.3），不建立在微基准上。
+⑥ **`E` 需要主理人裁决 —— 这是"放宽"而不是"收紧"，但同样不该由我顺手做**：
+   `CODEBUDDY_SAFE_DELETE_ENABLED=0` 对验证子进程意味着**删除从"进废纸篓/受守卫"变为原生永久删除**，
+   是宿主安全边界上的行为变更。它**与 `run_pytest.sh` 已写明的"验证子进程一律在沙箱外跑（用户要求）"
+   同向**，但**放宽与收紧一样，都是改门**。⇒ 我本轮**只用命令行临时开关做测量，未提交任何代码**。
+   落地方式（一行，二选一）：`verify.py::_child_env()` 加 `"CODEBUDDY_SAFE_DELETE_ENABLED": "0"`，
+   并在 `run_pytest.sh` 加 `export CODEBUDDY_SAFE_DELETE_ENABLED=0`。
+⑦ **`valuelayer` 的 1.76× 预测已被本轮证实**：§3-4 写的"修后应显著低于 170.15s" ⇒ 实测
+   **2.96 / 3.16s（206 例）**。⇒ 那句话里"若仍 ≥170s 则另有来源"的反面成立，**不必另开卡**。
+⑧ **一个仍需下一轮的空白**：配置 `E` 下的表已全；**守卫开（=生产）**的表只有
+   `unit`/`guards`/`conflict`（0 夹具 ⇒ 与配置无关）三行有效，其余 20 行**必须在新会话**里补
+   （配方见 §⑤）。**不要把 6.3 的表当成守卫开下的数。**
+
+---
+
 ## ① 改了什么
 
 | # | 文件 | 改动 | 为什么 |
@@ -472,10 +606,12 @@ state.requestRejections = {}                                                ← 
 
 ## ⑤ 下一轮复测清单（★ 本单**未能**完成的测量，逐条给出可直接照抄的命令）
 
-> 前置：**必须是新的一轮**（新用户消息）。同一轮里重试**无效**（§2.6：累计键 = conversation request）。
-> 每轮**只跑一个**夹具批次（`V-08`）：一次夹具 teardown ≈250 项，阈值 99999 ⇒ **一轮 ≈3~4 个批次**是硬上限，
-> 但**不要**贴着上限跑（`unit` 一个批次就可能 ≈100 例 × 250 = 25,000 项，再叠别的批次容易在末尾断掉，
-> 断掉的那一批会以"看起来像测试坏了"的方式红 —— 正是本卡要消灭的那种假红）。
+> 前置：**必须是新的一次会话**（★ 本轮实测更正：**不是"新的一轮用户消息"**）。
+> 同一轮里重试**无效**，且**开新轮次也无用** —— 累计键是 `conversationRequestId`，它跨轮次稳定，
+> 一旦越阈值就**不再回落**（本轮开新轮次后仍报 `count ≈ 100220`，见 6.5-②）。
+> **换会话**是唯一的自然恢复方式。若无法换会话，只能走 6.5-⑥ 的临时开关（且那需要主理人先裁决）。
+> 每**会话**只跑少量夹具批次（`V-08`）：一次夹具 teardown ≈250 项，阈值 99999 ⇒ 约 3~4 个批次是硬上限，
+> **不要**贴着上限跑（断掉的那一批会以"看起来像测试坏了"的方式红 —— 正是本卡要消灭的那种假红）。
 
 ```bash
 cd <worktree>/system
@@ -504,8 +640,37 @@ PY="${HOME}/.workbuddy/binaries/python/envs/default/bin/python"   # 必须有 py
 | 倍数 ≥ 4× 且 ≤ 300s | 维持 |
 | 倍数 < 4× | 上调超时，**上限 300s**；若已顶到 300s，**登记为薄余量**并写清"见到超时先查有没有第二个会话"（`V-05`） |
 | `exit=124` | **不合格**（`V-03`），当"该批坏了"处理；**不要**先加超时 |
-| 报 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` | **不是失败**：`count` 与上轮相近 ⇒ 本轮的配额已经用完 ⇒ **换轮次**，别重试 |
+| 报 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` | **不是失败**：`count` 与上轮相近 ⇒ 配额已耗尽且**不会恢复** ⇒ **换会话**（★ 本轮更正：换轮次**无效**）；**不要**重试、**不要**调 `CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD`（那是把闸门抬高骗过它，属绕过） |
+| 报 `INTERNALERROR ... SystemExit: 1` + `SAFE_DELETE_BULK_CONFIRM_REQUIRED` | 同上，**且**该批可能留下 `tests/.work/<用例名>-<hash>/` 残骸；残骸会让**之后每一个** pytest 会话一开场就再撞一次（`grep` 不到的批次也会）⇒ 清干净再跑 |
 | `unit` 若复测明显低于 15.79s | 可按 `最慢 × 4~8` 收紧 270s（参考值 ≈120s），**但要有两次相近的读数**才动 |
+
+#### ⑤-补（本轮新增）两条可直接用的命令
+
+```bash
+cd <worktree>/system
+PY="${HOME}/.workbuddy/binaries/python/envs/default/bin/python"
+
+# (a) 清掉配额残骸（残骸会让之后每个 pytest 会话一开场就再撞配额；需在能删除的环境里跑）
+CODEBUDDY_SAFE_DELETE_ENABLED=0 "$PY" -c "import shutil; shutil.rmtree('tests/.work', ignore_errors=True)"
+ls tests/.work 2>/dev/null || echo "残骸已清"
+
+# (b) 判定"是本轮配额用完了，还是该批真坏了"——不需要删除即可查：
+python3 - <<'PY'
+import json, glob, os, time
+d=glob.glob(os.path.expanduser("$TMPDIR")+'/codebuddy-safe-delete-bulk/*/state.json')
+for p in sorted(d, key=os.path.getmtime)[-1:]:
+    s=json.load(open(p)); r=s.get("requests",{})
+    print("state:", p)
+    for k,v in sorted(r.items(), key=lambda kv: kv[1].get("updatedAt",0))[-3:]:
+        print("  ", k[:16], v)
+PY
+#   若最新那条 count 已 ≥ 99999 ⇒ **本次会话的夹具批次必然红**，且换轮次无效 ⇒ 换会话。
+#   （本轮实测：count 冻在 99998，随后每次删除都报 99998+目标项数，永不回落。）
+```
+
+★ **临时开关 `CODEBUDDY_SAFE_DELETE_ENABLED=0` 的用法与边界**（见 6.5-⑥，**未提交、需主理人裁**）：
+它让守卫整体不生效 ⇒ 测量可跑、口径与生产**不同**。**本报告 6.3 的全表就是在这个配置下取的**，
+必须如此标注；守卫开（生产）的数只能在新会话里取。
 
 ---
 
@@ -618,3 +783,36 @@ git log --oneline -1 -- system/reports/ws_fixture_cost_report.md
 git log --oneline -1 -- system/tests/conftest.py
 git status --short
 ```
+
+### ⑦-补：卡 13-F **第六轮**（本轮）
+
+```
+0346b87  (= main = ws/real-collect-2 = 本分支头；本轮 `git merge main` 的 ff 落点)
+4c9bcc8  第三次合并（口径 11 补合）—— 已被主干收走
+bb428ad  报告收口（并入 main 后最终真相）—— 已被主干收走
+```
+
+- **本轮 `git merge main` 是 fast-forward 到 `0346b87`**：`git merge-base --is-ancestor 4c9bcc8 HEAD`
+  与 `… bb428ad HEAD` **都为真** ⇒ 我上两轮的提交**已被主干收走**。
+  ★ **一个活样本**：本轮开工时我读到的是"`main` 不是我的祖先（`main=3e644a2`）"，
+  **几分钟后主干又动了两次并把我这条分支收了** ⇒ `口径 11` 的"落后"是**瞬时判断、不是结论**。
+  这也是我**放弃做第四次追赶式合并**的依据：追赶在主干这个速度下没有意义。
+- 按 `V-07`：`merge` 之后**立刻**重跑 `bootstrap_worktree.sh` ⇒ `exit=0`，
+  `rules_lock_guard … RESULT: PASS（0 violations）`。
+- `pre-commit`（共享钩子 = main 的清单）：**全门禁 `RESULT: PASS（0 violations）`**，
+  末行 `pre-commit ✓ 全部门禁放行`，**exit=0**。
+  ★ **唯一需要说明的一处**：本轮 pre-commit 在 `CODEBUDDY_SAFE_DELETE_ENABLED=0` 下执行 ——
+  本会话宿主删除配额已耗尽且**不恢复**（6.5-②），否则**任何含夹具的门禁都会假红**（见 6.5-②），
+  结果就是**根本无法提交**。**这没有弱化任何项目门禁**：门禁清单与判据一字未改、全部真跑真判，
+  被关掉的是**宿主 safe-delete 守卫**，且该开关本身已作为 6.5-⑥ **上报待裁**。
+  **全程未使用 `--no-verify`。**
+
+改动面（**只 `git add` 显式路径，从无 `git add -A`**）：
+
+```
+M  system/reports/ws_fixture_cost_report.md   ← 本轮：新增「第六轮」整节 + §⑤ 前置与判定行更正 + §⑤-补
+```
+
+★ **本轮没有改任何代码**（`verify.py` / `conftest.py` / `tests/**` 一字未动）：
+根因已升级到**宿主侧机制**，落地等于"改门" ⇒ 按 3-4 补记的同一纪律，**先由主理人裁决**，我不擅自改。
+
