@@ -32,6 +32,23 @@ def test_handler_returns_step_outcome_with_produced_ids(scratch: Path) -> None:
     assert outcome.degraded is False
 
 
+def test_handler_produced_empty_on_idempotent_second_run(scratch: Path) -> None:
+    """★ C-03：幂等**第二次**运行 → `produced == []`（G1-05 空执行守卫不得被击穿）。
+
+    `produced` 必须是**本次真正新增落库**的对象引用，而非"全部重算 id"——
+    曾用 `report.derived_ids`，导致 `values_written=0` 的运行仍回传非空 `produced`。
+    """
+    _prepare(scratch, with_prices=True)
+    handler = step.make_derived_handler(scratch)
+    first = handler(date(2026, 9, 16), "full")
+    assert first.produced, "首轮应真正落库并回传对象引用"
+    rows_after_first = store.read_rows(scratch, store.DERIVED_VALUES_STEM)
+    assert {r["derived_id"] for r in rows_after_first} == set(first.produced), "首轮 produced = 实际落库集合"
+    second = handler(date(2026, 9, 16), "full")
+    assert second.produced == [], "幂等重跑未新增落库 → produced 必须为空"
+    assert len(store.read_rows(scratch, store.DERIVED_VALUES_STEM)) == len(rows_after_first), "第二轮不新增行"
+
+
 def test_handler_marks_degraded_when_inputs_missing(scratch: Path) -> None:
     _prepare(scratch, with_prices=False)
     outcome = step.make_derived_handler(scratch)(date(2026, 9, 16), "full")

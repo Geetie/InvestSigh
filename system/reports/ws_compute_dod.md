@@ -59,7 +59,8 @@
 - [ ] `returns.compute_total_return` ↔ `Ch9 §3.4.9`（先复权 → 再总回报）+ `Ch3 §D.2`
 - [ ] `growth.assess_growth_quality` ↔ `Ch4 §D.3`（四项分档，**不压成单一分数**）
 - [ ] `valuation.compute_value_per_share_range` ↔ `Ch5 §D.2`（formula+operands+method_version+share_count+compute_date）+ `§D.6`（区间宽度；`probability` 默认 `null`）+ `§D.3`（顺序约束，禁倒填）
-- [ ] `DerivedValue` ↔ `schema/models.py::DerivedValue`（**复用**，不自造）；`numerics` ↔ `NumericClaim`（9 字段复用）
+- [ ] `DerivedValue` ↔ `schema/models.py::DerivedValue`（**复用**，不自造）；数值保真走 `Decimal`（`DerivedValue.value` + `formula` + `operands`）
+  - 更正（`ws/compute` 静默缺陷批次）：原此处写"`numerics` ↔ `NumericClaim`（9 字段复用）"属**清单与代码脱节**——计算层只产 `DerivedValue`，代码中不存在 `numerics` / `NumericClaim` 引用。`NumericClaim`（`Ch9 §3.4.5` 9 字段）是**证据/声明层**（`facts/` 里 `is_derived` 的引用型数字）的模型，非计算层返回值；二者职责不同，计算层**不应**产出 `NumericClaim`。故删去该子项。
 
 ## 关键设计决策（预先声明）
 
@@ -69,7 +70,7 @@
 | D2 | 缺口对象 = 计算层自有 `ComputeGap`（`derived/` 自有 JSONL）；**不进 `facts/`** | `Ch9 §3.3.3`（18 JSONL 不得增删改名） |
 | D3 | 基准收益：**调用** `return_guard.benchmark_return()`，不复制口径断言 | `G-06` 唯一真源；纪律 11 |
 | D4 | 文件锁**复用** `schema.store._file_lock`（同 `index/.locks/`）；**不新增**第二条锁路径 | 纪律 11 / `Ch9 §3.10 J6` |
-| D5 | 幂等：`(derived_id, method_version)` 已存在则**跳过追加**（重跑同日不重复） | `Ch9 §3.5` 阶段④幂等键（`company_id`, `version`, `method_version`）；`N9.2-11` |
+| D5 | 幂等：`(derived_id, version, method_version)` 已存在则**跳过追加**（重跑同日不重复）；`version` 变（上游重述）→ **新增行** | `Ch9 §3.5` 阶段④幂等键（`company_id`, `version`, `method_version`）；`N9.2-11` |
 | D6 | 配置读取走 `_common._cached_yaml()`；包 `__init__` **惰性导入**（PEP 562） | `CONVENTIONS.md P-02/P-03` |
 | D7 | 行情输入由**调用方注入**（`PricePoint` 序列）；计算层不联网、不猜数 | `Ch9 §2.4.3`（模型抽取输入、程序算数） |
 

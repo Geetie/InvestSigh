@@ -66,6 +66,17 @@ def test_require_nonzero_raises_undefined_not_zero_division() -> None:
     require_nonzero(Decimal("1"), "shares", subject="subj")  # 非零放行
 
 
+def test_require_nonzero_none_is_missing_not_typeerror() -> None:
+    """★ C-01：`None`（缺失）→ `MissingInput`（缺口类），**不得**静默放过后炸成裸 `TypeError`。
+
+    `None` 与 `0` 语义分开：`None`=输入缺失（`Ch9 §3.5` 阶段④）；`0`=该计算无定义（除零）。
+    """
+    with pytest.raises(MissingInput):
+        require_nonzero(None, "rate（汇率）", subject="subj")
+    with pytest.raises(UndefinedComputation):
+        require_nonzero(Decimal(0), "rate（汇率）", subject="subj")
+
+
 def test_safe_compute_turns_missing_into_gap_object() -> None:
     """AC-05：输入缺失 → **缺口对象**（不置 null、不置 0）。"""
     outcome = safe_compute(

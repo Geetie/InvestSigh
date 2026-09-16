@@ -11,7 +11,7 @@ from decimal import Decimal
 import pytest
 
 from scripts.compute import core, fx, growth, margin, shares
-from scripts.compute.contract import UndefinedComputation
+from scripts.compute.contract import ComputeGap, MissingInput, UndefinedComputation, safe_compute
 from schema.models import Period
 
 PERIOD = Period(
@@ -165,14 +165,20 @@ def test_growth_quality_is_graded_not_single_score() -> None:
     assert growth.VALUE_DESTRUCTIVE_FLAG in low.flags
 
 
-def test_growth_quality_value_destructive_flag_when_roiic_below_wacc() -> None:
-    medium = growth.assess_growth_quality(
+def test_growth_quality_roiic_below_wacc_forces_low() -> None:
+    """`Ch4 §D.3` 伪码：`if roiic < wacc: return GrowthQuality("low", flag=…)`。
+
+    ROIIC < WACC（毁灭价值）→ **唯一下档 `low`**（曾误判 `medium` + 仅打标志）。
+    反向对照见 `test_growth_quality_is_graded_not_single_score` 的 `high` 分支
+    （roiic≥wacc 且四项无负 → `high`）。
+    """
+    result = growth.assess_growth_quality(
         roiic=Decimal("0.05"), wacc=Decimal("0.10"),
         cash_conversion=Decimal("0.9"), working_capital_change=Decimal("0"),
         financing_dependence="none", subject="s",
     )
-    assert medium.grade == "medium"
-    assert growth.VALUE_DESTRUCTIVE_FLAG in medium.flags
+    assert result.grade == "low"
+    assert growth.VALUE_DESTRUCTIVE_FLAG in result.flags
 
 
 def test_growth_quality_rejects_unknown_financing_dependence() -> None:
@@ -182,3 +188,50 @@ def test_growth_quality_rejects_unknown_financing_dependence() -> None:
             cash_conversion=Decimal("0.95"), working_capital_change=Decimal("0"),
             financing_dependence="unknown-value", subject="s",
         )
+
+
+# ─────────────────────── C-01：`None`（缺失）→ 缺口对象，不冒泡裸 TypeError ───────────────────────
+
+
+def test_none_inputs_are_missing_not_typeerror() -> None:
+    """★ C-01：`None`（缺失）型数值输入 → `MissingInput`（缺口类异常），**不得**裸 `TypeError`。
+
+    覆盖 AC-05 明列的"缺汇率"等四个调用点（`fx` ×2 / `margin` / `growth`）+ `shares`（同型守卫）。
+    """
+    with pytest.raises(MissingInput):
+        fx.convert_amount(
+            Decimal("100"), None, subject="s", from_currency="USD", to_currency="CNY", operands=["a"]
+        )
+    with pytest.raises(MissingInput):
+        fx.compute_fx_adjusted_return(Decimal("0.10"), None, Decimal("7.5"), subject="s", operands=["a"])
+    with pytest.raises(MissingInput):
+        margin.compute_gross_margin(Decimal("60"), None, subject="s", operands=["a"])
+    with pytest.raises(MissingInput):
+        growth.compute_roiic(Decimal("50"), None, subject="s", operands=["a"])
+    with pytest.raises(MissingInput):
+        shares.compute_eps(Decimal("10"), None, subject="s", operands=["a"])
+    with pytest.raises(MissingInput):
+        core.compute_cagr(None, Decimal("121"), Decimal("2"), subject="s", operands=["a"])
+
+
+def test_none_inputs_fold_to_compute_gap_via_safe_compute() -> None:
+    """★ C-01：`safe_compute` 把 `None` 折叠成 **`ComputeGap`**（含 `missing[]`），不冒泡 `TypeError`。"""
+    outcome = safe_compute(
+        lambda: fx.convert_amount(
+            Decimal("100"), None, subject="p01", from_currency="USD", to_currency="CNY", operands=["a"]
+        ),
+        kind="fx_convert",
+        subject="p01",
+    )
+    assert isinstance(outcome, ComputeGap)
+    assert outcome.missing == ["rate（汇率）"]
+
+
+def test_none_reverse_control_valid_numbers_still_compute() -> None:
+    """反向对照：正常数值照常算出结果（`None` 守卫不误伤）。"""
+    assert fx.convert_amount(
+        Decimal("100"), Decimal("7.2"), subject="s", from_currency="USD", to_currency="CNY", operands=["a"]
+    ).value == Decimal("720.0")
+    assert margin.compute_gross_margin(Decimal("60"), Decimal("100"), subject="s", operands=["a"]).value == Decimal("0.6")
+    assert growth.compute_roiic(Decimal("50"), Decimal("500"), subject="s", operands=["a"]).value == Decimal("0.1")
+    assert shares.compute_eps(Decimal("10"), Decimal("100"), subject="s", operands=["a"]).value == Decimal("0.1")

@@ -55,6 +55,35 @@ def test_method_version_change_creates_new_row_not_overwrite(scratch: Path) -> N
     assert store.current_value(scratch, "dv-a", method_version="compute-v1")["value"] == "0.1"
 
 
+def test_version_change_creates_new_row_not_overwrite(scratch: Path) -> None:
+    """★ C-02：上游重述（同 `derived_id`/`method_version`、**新 `version`**）→ **新增行**，旧行逐字节不变。
+
+    `Ch9 §3.5` 阶段④ 幂等键 = `(company_id, version, method_version)`；缺 `version` 分量会把
+    上游重述静默沿用旧值（实测审计复现：重述后 `values_written=0` 且落库值不变）。
+    """
+    store.append_derived_values(scratch, [_derived("dv-a", "0.3449")], version="v1")
+    store.append_derived_values(scratch, [_derived("dv-a", "0.11325")], version="v2")  # 上游重述
+    rows = store.read_rows(scratch, store.DERIVED_VALUES_STEM)
+    assert len(rows) == 2, "上游重述必须新增行，新旧两行同时存在"
+    assert rows[0]["value"] == "0.3449" and rows[0]["version"] == "v1"    # 旧行未变
+    assert rows[1]["value"] == "0.11325" and rows[1]["version"] == "v2"   # 新行落库
+
+
+def test_same_version_rerun_is_idempotent(scratch: Path) -> None:
+    """反向对照：**同一** `version` 重跑 → `values_written = 0`（不重复追加）。"""
+    assert store.append_derived_values(scratch, [_derived("dv-a", "0.3449")], version="v2") == 1
+    assert store.append_derived_values(scratch, [_derived("dv-a", "0.3449")], version="v2") == 0
+    assert len(store.read_rows(scratch, store.DERIVED_VALUES_STEM)) == 1
+
+
+def test_append_derived_value_ids_returns_only_written(scratch: Path) -> None:
+    """★ C-03：`append_derived_value_ids` 只回**本次真正写入**的 id（同键重跑 → 空列表）。"""
+    first = store.append_derived_value_ids(scratch, [_derived("dv-a", "0.1"), _derived("dv-b", "0.2")])
+    assert sorted(first) == ["dv-a", "dv-b"]
+    second = store.append_derived_value_ids(scratch, [_derived("dv-a", "0.1"), _derived("dv-b", "0.2")])
+    assert second == []
+
+
 def test_gaps_are_persisted_and_idempotent(scratch: Path) -> None:
     gap = ComputeGap(
         gap_id="dv-gap-x-v1", subject="x", missing=["prices"], reason="缺行情",

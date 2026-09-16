@@ -74,13 +74,17 @@ def assess_growth_quality(
 ) -> GrowthQuality:
     """四项分项 → 分档（`Ch4 §D.3`）。**不合并成单一分数**，按分项计负分再分档。
 
-    - 分项 ①：`roiic < wacc` → 负向，并打 `value_destructive_growth` 标志。
+    ★ `Ch4 §D.3` 伪码**硬规则**：`if roiic < wacc: return GrowthQuality("low", flag=…)` ——
+      ROIIC 低于资金成本（毁灭价值）时**唯一下档为 `low`**，其余三项只进 `detail`，不再改变档位。
+
+    - 分项 ①：`roiic < wacc` → 负向，并打 `value_destructive_growth` 标志 →
+      **档位直接判 `low`**（对齐 `Ch4 §D.3` 伪码）。
     - 分项 ②：现金转化率 `< 0.8`（经验下限，作为**分档依据**而非门槛）→ 负向。
     - 分项 ③：营运资金变动 `> 0`（占用增加）→ 负向。
     - 分项 ④：融资依赖 `high` → 负向。
 
-    负分计数：`0` → `high`；`1` → `medium`；`≥2` → `low`。分档**不阻断**任何结论，
-    只供价值层与建议层参考（`Ch4 §D.3`）。
+    档位映射：`roiic < wacc` → `low`；否则负分计数 `0` → `high`；`1` → `medium`；`≥2` → `low`。
+    分档**不阻断**任何结论，只供价值层与建议层参考（`Ch4 §D.3`）。
     """
     if financing_dependence not in {"none", "low", "high"}:
         raise UndefinedComputation(
@@ -120,7 +124,12 @@ def assess_growth_quality(
     else:
         detail["financing_dependence"] = f"{financing_dependence} → 中性"
 
-    grade = "high" if negatives == 0 else ("medium" if negatives == 1 else "low")
+    # ★ 分档（`Ch4 §D.3`）：`roiic < wacc`（毁灭价值）→ 直接 `low`（伪码硬规则）；
+    #   否则按四项负分计数分档。此处**不把四项压成单一分数**（分项明细保留在 detail）。
+    if roiic < wacc:
+        grade = "low"
+    else:
+        grade = "high" if negatives == 0 else ("medium" if negatives == 1 else "low")
     return GrowthQuality(
         grade=grade,
         roiic=roiic,

@@ -15,11 +15,26 @@ from typing import Sequence
 
 from schema.models import DerivedValue
 
-from .contract import UndefinedComputation, derived_id_for, make_derived, require_nonzero
+from .contract import (
+    MissingInput,
+    UndefinedComputation,
+    derived_id_for,
+    make_derived,
+    require_nonzero,
+)
 
 
-def _require_positive_shares(shares: Decimal, *, subject: str) -> None:
-    """股数必须 > 0：== 0 → 除零类缺口；< 0 → 非法输入（同样拒绝，不静默取绝对值）。"""
+def _require_positive_shares(shares: Decimal | None, *, subject: str) -> None:
+    """股数必须 > 0：`None` → 缺失缺口；`== 0` → 除零类缺口；`< 0` → 非法输入（同样拒绝）。
+
+    ★ `None` 不得冒泡成裸 `TypeError`（`AC-05`：缺输入 → 缺口对象）。
+    """
+    if shares is None:
+        raise MissingInput(
+            f"{subject}: 股数缺失（未提供，Ch9 §3.5 阶段④：输入缺失 → 缺口对象）",
+            missing=["shares"],
+            subject=subject,
+        )
     if shares == 0:
         raise UndefinedComputation(
             f"{subject}: 股数为 0，每股指标无定义",

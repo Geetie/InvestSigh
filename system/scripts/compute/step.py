@@ -30,7 +30,10 @@ from typing import Any
 def make_derived_handler(root: str | Path, *, step_no: int = 5) -> Any:
     """构造 step ⑤/⑥ 的处理器：跑 `driver.run_derived(root)`，把产物引用回传编排器。
 
-    - `produced` = 本次落库的 `DerivedValue.derived_id`（**对象引用**，非文件名）；
+    - `produced` = **本次真正新增落库**的 `DerivedValue.derived_id`（对象引用，非文件名）。
+      ★ 不是"本次重算的全部 id"：幂等重跑（`values_written=0`）时 `produced` **必须为空**，
+      否则 `pipeline.py` 的 G1-05 空执行守卫（`elif not step.produced`）会被击穿——
+      一个什么都没落库的运行会被当成"这一步真干了活"。
     - `degraded` = 是否存在缺口对象（缺口是正常态，但**显式**标记，不静默）；
     - `signals_emitted` 恒为 `0`（计算不产交易信号，信号由 step 6 的建议产生）。
 
@@ -46,7 +49,7 @@ def make_derived_handler(root: str | Path, *, step_no: int = 5) -> Any:
 
         report = run_derived(root_path)
         return StepOutcome(
-            produced=list(report.derived_ids),
+            produced=list(report.written_derived_ids),
             degraded=bool(report.gap_ids),
             signals_emitted=0,
         )

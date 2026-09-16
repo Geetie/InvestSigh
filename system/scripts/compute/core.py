@@ -26,6 +26,7 @@ from .contract import (
     derived_id_for,
     make_derived,
     require_nonzero,
+    require_present,
 )
 
 
@@ -70,7 +71,11 @@ def compute_cagr(
     - `begin <= 0` → `UndefinedComputation`（零/负基数下**实**CAGR 无定义，不得给近似值）。
     - `end <= 0` → `UndefinedComputation`。
     - `years <= 0` → `UndefinedComputation`。
+    - 任一为 `None`（缺失）→ `MissingInput`（缺口对象，**不得**冒泡成裸 `TypeError`）。
     """
+    require_present(
+        {"begin": begin, "end": end, "years": years}, ("begin", "end", "years"), subject=subject
+    )
     if begin <= 0 or end <= 0:
         raise UndefinedComputation(
             f"{subject}: CAGR 要求 begin>0 且 end>0（实得 begin={begin}, end={end}）",

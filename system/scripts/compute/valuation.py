@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Sequence
 
@@ -30,6 +30,7 @@ from .contract import (
     derived_id_for,
     make_derived,
     require_nonzero,
+    require_present,
 )
 
 
@@ -95,7 +96,9 @@ def compute_value_per_share_range(
 
     - `net_debt` 可负（净现金）；净现金时**加回**（`EV - net_debt`）。
     - `shares <= 0` / `low > high` → 缺口或非法输入（明确拒绝，不静默）。
-    - `baseline_analyzed_at` 给出时执行顺序约束（`Ch5 §D.3`）。
+    - `baseline_analyzed_at` 与 `computed_at` **两者都必须给出**：顺序约束
+      （`Ch5 §D.3`：baseline 版本时间必须早于计算时间）**始终执行**；任一缺失 → `MissingInput`
+      （时间契约必须显式，**不得**用当前时间兜底，否则倒填不可检）。
     - `probability` **默认 `None`**（`Ch5 §D.6`）。
     """
     require_nonzero(shares_outstanding, "shares_outstanding（股数）", subject=subject)
@@ -111,16 +114,14 @@ def compute_value_per_share_range(
             missing=["low_multiple", "high_multiple"],
             subject=subject,
         )
-    if baseline_analyzed_at is not None or computed_at is not None:
-        require_baseline_before_compute(
-            baseline_analyzed_at,
-            computed_at,
-            subject=subject,
-        )
+    # ★ Ch5 §D.3 顺序约束**始终执行**：双 None 时曾静默跳过并以当前时间兜底（= 倒填不可检），
+    #   与 require_baseline_before_compute 自身 docstring 相反。现无条件调用。
+    require_baseline_before_compute(baseline_analyzed_at, computed_at, subject=subject)
+    assert computed_at is not None  # require_baseline_before_compute 已拒绝 None（Ch5 §D.3）
 
     equity_value = enterprise_value - net_debt
     per_share_base = equity_value / shares_outstanding
-    compute_moment = computed_at or datetime.now(timezone.utc)
+    compute_moment = computed_at
     low_value = per_share_base * low_multiple
     high_value = per_share_base * high_multiple
     low = make_derived(
@@ -160,8 +161,14 @@ def compute_implied_growth_ratio(
     """价格**隐含**增长率（`Ch9 §2.4.3` 排除清单：价格隐含增长率由程序算）：`r - CF/P`。
 
     - `price <= 0` / `cash_flow_per_share` 缺失 → 缺口。
+    - 任一输入为 `None`（缺失）→ `MissingInput`（缺口对象，**不得**裸 `TypeError`）。
     - 结果为**诊断**性质（价格隐含），不直接进出建议结论（`Ch5 §B.5`）。
     """
+    require_present(
+        {"discount_rate": discount_rate, "cash_flow_per_share": cash_flow_per_share, "price": price},
+        ("discount_rate", "cash_flow_per_share", "price"),
+        subject=subject,
+    )
     if price <= 0:
         raise UndefinedComputation(
             f"{subject}: 价格非正（{price}），隐含增长率无定义",
@@ -188,7 +195,12 @@ def compute_enterprise_value(
     operands: Sequence[str],
     computed_at: datetime | None = None,
 ) -> DerivedValue:
-    """企业价值 EV = 市值 + 净负债（净现金则减）。`Ch5 §D.2` 链的前置量。"""
+    """企业价值 EV = 市值 + 净负债（净现金则减）。`Ch5 §D.2` 链的前置量。
+
+    - `market_cap < 0` → `CaliberViolation`（响亮失败）。
+    - 任一输入为 `None`（缺失）→ `MissingInput`（缺口对象，**不得**裸 `TypeError`）。
+    """
+    require_present({"market_cap": market_cap, "net_debt": net_debt}, ("market_cap", "net_debt"), subject=subject)
     if market_cap < 0:
         raise CaliberViolation(f"{subject}: 市值不得为负（实得 {market_cap}）")
     value = market_cap + net_debt

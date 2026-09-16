@@ -33,7 +33,18 @@ METHOD_VERSION = "compute-v1"
 ★ 变更语义（`Ch9 §2.3` / 纪律 4 追加式不可变）：`method_version` 一变，
   **必须产生新的 `DerivedValue` 行**，**不得**就地覆盖旧行。旧行在其期间内仍是
   "当时有效判断"。持久化层（`scripts.compute.store`）以
-  `(derived_id, method_version)` 为幂等键实现"新增放行、重跑跳过"。
+  `(derived_id, version, method_version)` 为幂等键实现"新增放行、重跑跳过"。
+"""
+
+DEFAULT_VERSION = "v1"
+"""本计算层落库的**默认版本维度**（`Ch9 §3.5` 阶段④ 幂等键的 `version` 分量）。
+
+★ 依据：`Ch9 §3.5` 阶段④（估值）幂等键逐字 = `(company_id, version, method_version)`；
+  `version` 是**上游基线版本**（`(company_id, version)` 版本化基线，见 `Ch9 §3.1`）。
+  上游重述（`version` 变、`method_version` 不变）→ **必须落新 `DerivedValue` 行**，
+  旧行保留（追加式不可变）。故本层把 `version` 纳入落库幂等键；未显式给出时用
+  `DEFAULT_VERSION`（首版基线），调用方在**上游重述时必须显式传入新 `version`**，
+  否则陈旧值会被幂等键静默保留。
 """
 
 
@@ -164,8 +175,24 @@ def require_present(values: Mapping[str, Any], names: Sequence[str], *, subject:
         )
 
 
-def require_nonzero(value: Decimal, name: str, *, subject: str) -> None:
-    """分母/股本为 0 → `UndefinedComputation`（缺口对象，不抛 `ZeroDivisionError`）。"""
+def require_nonzero(value: Decimal | None, name: str, *, subject: str) -> None:
+    """分母/股本的守卫：`None` → `MissingInput`（缺失）；`== 0` → `UndefinedComputation`。
+
+    ★ `None` 与 `0` 语义**不同**，必须分开（`Ch9 §3.5` 阶段④）：
+
+    - `None` = **输入缺失**（"缺汇率"/"缺收入"）→ `MissingInput`（缺口对象）；
+    - `0`    = 输入存在但该计算**在此输入上无定义**（除零）→ `UndefinedComputation`（仍折叠为缺口对象）。
+
+    ★ 曾只判 `value == 0`：`None == 0` 为 `False` → `None` 被**静默放过**，随后算术
+      抛出**裸 `TypeError`**（不是缺口对象，也不响亮）—— 与 `AC-05`"缺汇率 → 缺口对象，
+      不得返回 `None`/`0`"直接冲突。故此处**先**拦 `None`，再拦 `0`。
+    """
+    if value is None:
+        raise MissingInput(
+            f"{subject}: {name} 缺失（未提供，不得默认估算，Ch9 §3.5 阶段④：输入缺失 → 缺口对象）",
+            missing=[name],
+            subject=subject,
+        )
     if value == 0:
         raise UndefinedComputation(
             f"{subject}: {name} 为 0，该计算无定义（Ch9 §2.4.3 边界）",
