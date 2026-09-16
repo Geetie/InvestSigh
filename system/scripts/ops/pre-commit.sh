@@ -89,11 +89,23 @@ if [ ! -d "$REPO_ROOT/system/scripts" ]; then
 fi
 
 # 解析 Python：优先环境变量，其次隔离 venv，最后退回 python3
+#
+# ★ 候选必须**同时覆盖两种 venv 布局**（2026-09-17 实测修复）：
+#   POSIX 布局 = `<venv>/bin/python`；Windows 布局 = `<venv>/Scripts/python.exe`。
+#   原先只列 POSIX 形式 ⇒ 在 Windows 上**全部候选都不命中** ⇒ 回落到 `python3`
+#   （宿主 Python，**没有装 yaml/pydantic**）⇒ 所有走 `_common._cached_yaml()` 的门禁
+#   一律 `ModuleNotFoundError: No module named 'yaml'` ⇒ **pre-commit 对每一次提交假红**。
+#   而 `requirements.txt` 的抬头注释早已写明这一族症状（「看起来像代码坏了，其实是环境缺包」）——
+#   区别只是那次是"手里没有清单"，这次是"有清单但解释器选错了"。
+#   ★ 后果的严重性：**天天误报的门禁一定会被关掉**（`V-07`）⇒ 必然有人 `--no-verify` 绕过
+#   ⇒ 纪律 9 的防线彻底失效。故必须在**解析层**根治，而不是让每个人 export 环境变量。
 PY="${WORKBUDDY_PY:-}"
 if [ -z "$PY" ]; then
   for cand in \
-    "$HOME/.workbuddy/binaries/python/envs/default/bin/python" \
-    "$REPO_ROOT/system/.venv/bin/python" \
+    "${HOME}/.workbuddy/binaries/python/envs/default/bin/python" \
+    "${HOME}/.workbuddy/binaries/python/envs/default/Scripts/python.exe" \
+    "${REPO_ROOT}/system/.venv/bin/python" \
+    "${REPO_ROOT}/system/.venv/Scripts/python.exe" \
     python3
   do
     if command -v "$cand" >/dev/null 2>&1; then PY="$cand"; break; fi

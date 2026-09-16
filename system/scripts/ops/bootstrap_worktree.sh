@@ -47,11 +47,18 @@ if [ ! -d "${RULES_DIR}" ]; then
 fi
 
 # 解析 Python：与 pre-commit.sh 同一优先级（环境变量 → 隔离 venv → python3）
+#
+# ★ 候选必须**同时覆盖两种 venv 布局**（2026-09-17 实测修复）：
+#   POSIX = `<venv>/bin/python`；Windows = `<venv>/Scripts/python.exe`。
+#   原先只列 POSIX 形式 ⇒ Windows 上全部落空 ⇒ 回落 `python3`（无 yaml）
+#   ⇒ `rules_lock_guard` 假红并提示"请勿用 --no-verify 绕过" —— 而真正的问题是**解释器选错了**。
 PY="${WORKBUDDY_PY:-}"
 if [ -z "${PY}" ]; then
   for cand in \
     "${HOME}/.workbuddy/binaries/python/envs/default/bin/python" \
+    "${HOME}/.workbuddy/binaries/python/envs/default/Scripts/python.exe" \
     "${REPO_ROOT}/system/.venv/bin/python" \
+    "${REPO_ROOT}/system/.venv/Scripts/python.exe" \
     python3
   do
     if command -v "${cand}" >/dev/null 2>&1; then PY="${cand}"; break; fi

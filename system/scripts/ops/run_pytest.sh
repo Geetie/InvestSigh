@@ -39,9 +39,15 @@ cd "$REPO_ROOT/system"
 
 PY="${WORKBUDDY_PY:-}"
 if [ -z "$PY" ]; then
+  # ★ 候选必须**同时覆盖两种 venv 布局**（2026-09-17 实测修复）：
+  #   POSIX = `<venv>/bin/python`；Windows = `<venv>/Scripts/python.exe`。
+  #   与 pre-commit.sh / bootstrap_worktree.sh 保持**同一优先级**（三处必须一致，
+  #   否则会出现"钩子用一个解释器、跑测用另一个"的错位，排查成本极高）。
   for cand in \
-    "$HOME/.workbuddy/binaries/python/envs/default/bin/python" \
-    "$REPO_ROOT/system/.venv/bin/python" \
+    "${HOME}/.workbuddy/binaries/python/envs/default/bin/python" \
+    "${HOME}/.workbuddy/binaries/python/envs/default/Scripts/python.exe" \
+    "${REPO_ROOT}/system/.venv/bin/python" \
+    "${REPO_ROOT}/system/.venv/Scripts/python.exe" \
     python3
   do
     if command -v "$cand" >/dev/null 2>&1; then PY="$cand"; break; fi
