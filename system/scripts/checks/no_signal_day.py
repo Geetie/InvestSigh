@@ -113,6 +113,35 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     return out
 
 
+def _latest_per_run_date(
+    check_records: Sequence[Mapping[str, Any]],
+) -> tuple[list[Mapping[str, Any]], list[Mapping[str, Any]]]:
+    """按 `run_date` 拆成 `(每个运行日的最新一条, 被取代的历史修订)`。
+
+    ★ 为什么必须这么做（批次 10 审计 `G-RC-04`，实测）：
+      `facts/tasks.jsonl` 是**追加式不可变**的 —— 一条**修 bug 之前**留下的历史运行记录
+      （实测 `无变化日产了新信号: run_date=2026-09-16 signals_emitted=1`）**永远删不掉**。
+      若判据看**全部**记录，这条门禁就**恒红**；而"**恒红门禁 = 会被学会忽略的门禁**"
+      （`CONVENTIONS.md §二 G-01` 的降噪铁律：宁可漏报不可吵）。
+
+    ★ 判据语义（**可判定**）：`G1-02①` 的原文是"**无变化日**产了新信号" ——
+      那是**当日**的性质，应由该日**最新一次**运行判定，**不该由历史修订追认**。
+      （补充：真源追加式 ⇒ **文件里靠后 = 更新**，故取每个 `run_date` 的**最后一条**。）
+
+    ★ **不静默**：被取代的历史修订由调用方**逐条具名写进 `notes`**（可见，但不阻断）。
+    """
+    latest: dict[str, Mapping[str, Any]] = {}
+    order: list[str] = []
+    for rec in check_records:
+        key = str(rec.get("run_date") or "")
+        if key not in latest:
+            order.append(key)
+        latest[key] = rec  # 后写覆盖前写 = 取最新
+    effective = [latest[k] for k in order]
+    superseded = [r for r in check_records if r is not latest.get(str(r.get("run_date") or ""))]
+    return effective, superseded
+
+
 def check(root: Path) -> CheckReport:
     report = CheckReport(checker="no_signal_day")
     recs = _load_jsonl(root / "facts" / "recommendations.jsonl")
@@ -133,9 +162,22 @@ def check(root: Path) -> CheckReport:
         )
         return report
 
-    report.violations += check_no_signal_day(check_records)
+    effective, superseded = _latest_per_run_date(check_records)
+    report.scanned["run_dates_effective"] = len(effective)
+    report.scanned["superseded_revisions"] = len(superseded)
+
+    # ── 判据只看**每个运行日的最新一次运行**（`G-RC-04`）──
+    report.violations += check_no_signal_day(effective)
     report.violations += check_change_reasons(recs)
-    report.violations += check_signal_change_ratio(recs, check_records)
+    report.violations += check_signal_change_ratio(recs, effective)
+
+    # ── 被取代的历史修订：**具名登记**（可见、不阻断）──
+    #    为什么不去掉：那条历史记录**确实是**违例，抹掉它就是掩盖（`§六 假交付`）。
+    #    为什么不阻断：真源追加式 ⇒ 它永远在；阻断 = 恒红 = 门禁被忽略。
+    for viol in check_no_signal_day(superseded) + check_signal_change_ratio(recs, superseded):
+        report.notes.append(
+            f"HISTORICAL(superseded revision, not a violation): {viol.rule} @ {viol.file} — {viol.reason}"
+        )
     return report
 
 

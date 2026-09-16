@@ -288,5 +288,34 @@ blocked = True
 | **G-40** | **`aichain-recommend` 未建**：`Ch7` 要求建议展示 Skill（决策引擎属 C 档已建为 `scripts/decision/`） | `Ch7:24` · `Ch7 §D` | 中 | `OPEN` |
 | **G-41** | ★ **根因（比上面三条都重要）**：**`施工图 §3.3` 的 Skill 清单与各章"新 Skill"表不一致** → 清单是派单依据，**漏项即等于从未派单**。`T-04` 已登记过同类（§3.1 说"六阶段各一个"vs §3.3 的六个具名） | `施工图 §3.3` · `T-04` · `纪律 6`（引用一致性） | **中高** | `OPEN`（**须需求方**确认是补清单、还是确认这 3 个不做） |
 
+---
+
+## 10. 批次 10 两单审计后的收口（`G-RC-06` ~ `G-RC-08` · `G-B10-01` ~ `G-B10-06` · `G9`）
+
+> 需求方 2026-09-16 裁定：**「都按你的推荐，按最佳最科学最鲁棒的方式来」** → 下列项**均已按推荐执行或已排期**。
+
+### 10.1 已按裁定执行的（含原样证据）
+
+| 项 | 裁定 | 执行结果 |
+|---|---|---|
+| **张力 `T-10`** | 选 **①**：分母改为"该建议**适用的**要素数" | ✅ **已执行**（`scripts/trace/traceback.py`）。判据**可判定+穷尽**：`prev_version_id` 适用 ⟺ `version>1` 或已给 `supersedes`；**`version` 未知时按适用处理**（不得靠"不知道版本"豁免）。实测真仓库：`适用=['evidence','assumptions','computation']`、`version=1` → 首版的结构性不可满足**已消除** |
+| **`T-10` 的配套（更深的一层）** | 审计员指出、我复核属实 | ✅ **已修**：`_find_derived` 原先只按 `derived_id == conclusion_id` 匹配，而计算层 id 是 `dv-…`、建议 id 是 `rec-…` → **永不相等** ⇒ "计算"要素**对任何建议都不可达**、四要素之一形同虚设。现补第二条解析路径（按建议声明的 `evidence_version_ids` 里的 `dv-…` 解析，**不新增字段**） |
+| **`G-RC-04`** | 做**当前 vs 历史**可见拆分（不放松判据） | ✅ **已执行**（`scripts/checks/no_signal_day.py`）：每个 `run_date` **只看最新一次运行**（"无变化日产了新信号"是**当日**性质）；被取代的历史修订**逐条具名**进 `notes`。实测：跑一次当日运行 → 新记录 `_r1`（`signals=0`）→ **`PASS`**，旧记录以 `HISTORICAL(superseded revision, not a violation): … signals_emitted=1` **可见**。★ **判据本身没有放松**：那条历史记录**确实是违例**，只是不再恒红 |
+| **`G8`** | 按推荐修（批次余量 + 规范表同步） | ✅ `daily` 60s(1.4×) → **180s**；`evidence` → **150s**；`V-02` 表补齐 **15 批**；并更正 `V-02` 的"8~30 倍"（慢批次下 8× 会撞 300s 上限，现行判据改为"≤300s 且余量能区分慢与卡死"） |
+| **依赖清单** | `G-B10-06`：项目无任何依赖清单 → 换环境跑门禁会 `ModuleNotFoundError` **抛栈**（`run_checker` 的 `except` 不捕 `ImportError`）→ `gates`/`stage` **假红** | ✅ 新增 `system/requirements.txt` |
+| **豁免收窄** | 审计抓到**我自己的自相矛盾** | ✅ `EXEMPT_PATTERNS` 里的 `"reports/"` 是**子串**匹配 → 任何叫 `reports` 的目录**整目录静默免扫**。已改 `_EXEMPT_PREFIXES`（**锚定开头**的前缀匹配）。反向对照：深层 `a/reports/x.py` 现在**被拦**（原先静默放过） |
+
+### 10.2 仍待办的
+
+| # | 缺口 | 严重度 | 状态 |
+|---|---|---|---|
+| **`G-RC-06`** | **真源里有一条"非真实结论的载体"** —— `rec-nvda-001`（`ws/real-collect` 为验证 T12 传播造的**最小载体**）：它 `assumptions: []`、`evidence_version_ids` 指向的是 **claim**（不是 `dv-…`），且 `derived/` 为空 ⇒ `traceback` **如实**判它缺 `['assumptions','computation']`。**判据没错，是这条数据本身不满足** | 中 | `OPEN`（阶段② 产出**真实**建议后由**更高版本**自然取代；**不得**为过门禁而给它补假要素） |
+| **`G9`** | ★ **"声明-实现绑定" ≠ "检查有效性绑定"**：`stage_gate` 里 `criterion("daily_run","coverage_verifiable", v)` 那一行**确实是机器绑定**（删掉 → `bound 4→3`，审计已验）。**但**把 `cv = coverage_check(root)` 换成空 `CheckReport` → `bound` 仍 **4**、门禁对**不达标数据变绿**。⇒ 绑定只能证明"接了"，**不能证明"真的在查"** | 中高 | `OPEN`（按推荐：需要**更强的绑定**——要求"检查函数**真的读过真源**"才算已绑定；**我下一批做**） |
+| **`G-B10-01`** | `scripts/evidence/**` 与 `append_deduped` **零生产调用点**（仅测试调用）⇒ `T01` 与"写入侧幂等"**未真正生效** | 高 | 🔄 **在修**（`ws/evidence-fix` 任务 ⑥ 含接线接缝） |
+| **`G-B10-02`** | **编排层重复落库**：同源同 `quote_hash` 的 claim **累积**（实测 6 行）；`tasks` 幂等键却不重复 ⇒ **两表幂等强度不一致**。这是 `G-RC-05` 那 12 行污染的**真正成因**（`root` 绑定只限制了范围） | 高 | 🔄 **在修**（`ws/idempotency`，按 `Ch9 §3.5` ② 行幂等键 `(source_id, quote_hash)`） |
+| **`G-B10-03`** | `transmit` 的 `gain_map.undisclosed` **不在装载期校验**（不合规配置可能一路静默通过，`KeyError` 才在第一个未披露 hop 炸） | 中 | `OPEN`（修法一行；已记入批次 11 排期） |
+| **`G-B10-04`** | `raw/inbox/…amd…` 与 `raw/…amd…` **逐字节双份**（同源两份，未登记） | 低 | `OPEN` |
+| **`G-B10-05`** | 4 条真实 claim 全 `full_text_read: false`，而 `locator` 覆盖**全篇**且 `quote_hash` 相等 ⇒ `locator_check` 第 4 条判据是**单向**的（只约束 `true ⇒ 条件`），"全篇覆盖却标 false"**不告警** | 低 | `OPEN` |
+
 
 
