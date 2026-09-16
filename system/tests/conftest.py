@@ -122,6 +122,55 @@ def code_root(request: pytest.FixtureRequest) -> Path:
         shutil.rmtree(target.parent, ignore_errors=True)
 
 
+def _lock_rules_perms(target: Path) -> None:
+    """把副本的 `rules/**` 复原为 `0444`（纪律 9 的不变量）。
+
+    ★ 为什么必须做：`_make_writable()` 把整个副本改成 0644（因为**注入测试需要可写**），
+      但 `rules/` 的 0444 是**纪律 9 的不变量**，而 `rules_lock_guard` 与 `injection_guard`
+      **正是按 0444 判定的**（`Ch9 §3.10 J9` / 纪律 10）。
+      实测：`pristine_code_root` 初版漏了这一步 → 两个守卫在副本上 `exit=1`
+      （报"权限为 0o644，应为 0o444"）→ 被判成"守卫坏了"，**又是一次假缺陷**。
+
+    ★ 这与 `scripts/ops/bootstrap_worktree.sh` 对新工作树做的事**同源**（git 不跟踪只读位），
+      只是这里针对的是**夹具副本**。
+    """
+    rules = target / "rules"
+    if not rules.is_dir():
+        return
+    for item in rules.rglob("*"):
+        try:
+            item.chmod(0o444 if item.is_file() else 0o755)
+        except OSError:
+            continue
+
+
+@pytest.fixture(scope="session")
+def pristine_code_root() -> Path:
+    """一份**真源为空**的 `system/` 副本（session 级，懒建一次，用 `pytest_sessionfinish` 清理）。
+
+    ★ 为什么需要它（`G-RC-03`，真实数据首次暴露）：
+      「守卫在**干净树**上应 `exit 0`」这一类**契约用例**，必须对"干净"的输入做断言，
+      而不能对"**仓库当前恰好有什么数据**"做断言 —— 否则两者会混成同一个信号：
+      真实数据一进真源（`ws-real-collect`），`traceback`（见 `T-10`）与 `no_signal_day`（见 `G-RC-04`）
+      **如实**变红，契约用例却把它当成"守卫坏了"→ **真违规被淹没成假缺陷**。
+
+    ★ **不是掩盖**：`run_all_gates.py`（`gates` 批）跑的是**真仓库**，
+      所以 `T-10` / `G-RC-04` 那两条真实违例**照样可见**，只是不再污染"守卫代码健康度"这一维度。
+
+    ★ 与 `code_root` fixture 的区别：那个是**每用例一份**（互不污染，供注入测试改文件）；
+      这个是**全 session 一份**（只读，供退出码契约矩阵复用，省掉 20+ 次 `copytree`）。
+    """
+    target = WORK_DIR / "_pristine" / "system"
+    if not target.exists():
+        shutil.copytree(SYSTEM_ROOT, target, ignore=_ignore)
+        for sub in _ENSURE_DIRS:
+            (target / sub).mkdir(parents=True, exist_ok=True)
+        _make_writable(target)
+        _reset_truth_source(target)
+        _lock_rules_perms(target)
+    return target
+
+
 # ★ 双保险：单个 fixture 的 `finally` 在崩溃/中断时兜不住，
 #   残留的夹具副本会被 git 当源码提交（实测曾积累 53 个目录）。
 #   故在 session 起止各整目录清一次 —— **临时目录绝不允许进入仓库**。

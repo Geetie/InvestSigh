@@ -92,6 +92,12 @@ EXEMPT_PATTERNS = (
     #   若不豁免它们，规则会把自己的**文档**判成违例 —— 正是"误报刷屏 → 门禁被关掉"的引信。
     "scripts/checks/no_placeholder_guard.py",
     "config/placeholder_exemptions.yaml",
+    # ★ `reports/` 是**运行产物目录**，不是代码：守卫把"规则名 + 规则说明"写进自己的 JSON 报告，
+    #   下次扫描该报告就会**自我命中**（实测：`pre-commit.sh` 第 ⑥ 道门禁因此被自己的报告阻断 ——
+    #   与 `D-5` / `D-7` 同类，只是这次经由**报告产物**这条路径复发）。
+    #   扫描"守卫自己写出来的报告"没有任何防护价值（那些文字**就是**规则本身），
+    #   故整目录免扫。`_COPY_SKIP` 亦已把 `reports` 排除在夹具之外 —— 与此一致。
+    "reports/",
     "tests/",
     "scripts/checks/no_placeholder_guard.py",
 )

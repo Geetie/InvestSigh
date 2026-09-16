@@ -80,14 +80,19 @@ def test_guard_matrix_is_not_empty() -> None:
 
 @pytest.mark.parametrize(("name", "script", "extra"), GUARDS, ids=GUARD_IDS)
 def test_guard_exits_zero_and_reports_scanned_on_pristine_tree(
-    name: str, script: str, extra: tuple[str, ...]
+    name: str, script: str, extra: tuple[str, ...], pristine_code_root: Path
 ) -> None:
     """干净树上：`exit 0` **且**报出 `scanned` 计数。
 
     两条断言合成一个用例，是因为它们**共享同一次执行**（同一命令、同一输入）——
     拆成两个用例会把同一次执行跑两遍（实测白花 ~4.5s）。
+
+    ★ `code_root` 用 `pristine_code_root`（**真源为空**的副本），**不是** `SYSTEM_ROOT`（真仓库）
+      —— 见 `conftest.pristine_code_root` 与缺口 `G-RC-03`：真实数据入真源后
+      `traceback` / `no_signal_day` **如实**变红，若此处拿真仓库当真源，
+      **真违规会被淹没成"守卫坏了"**。判据只该问"守卫代码在干净输入上是否正确"。
     """
-    code, out = run_gate_inproc(script, SYSTEM_ROOT, *extra)
+    code, out = run_gate_inproc(script, pristine_code_root, *extra)
     assert code == 0, f"{name} 在干净树上非零退出（code={code}）\n{out}"
     assert "scanned " in out, f"{name} 未上报 scanned 计数（无法区分「没扫」与「扫了没问题」）\n{out}"
 
