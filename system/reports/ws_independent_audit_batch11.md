@@ -243,6 +243,12 @@
 - **可判定复现步骤**：见上框（脚本 `/tmp/investsigh-audit-b11/exp_fixture_integrity2.py`，逻辑即 `copytree(SYSTEM_ROOT, t, ignore=_ignore)` → `_ENSURE_DIRS` → `_make_writable` → `_reset_truth_source`，然后逐项核对 `_TRUTH_STEMS` + `registry/{corporate-actions,quality-labels,idempotency}.jsonl` + `audit/rule_changes.jsonl`；`N` 由 `sys.argv[1]` 给定）。
 - **贡献向量（实测发现）**：`system/tests/probe-f177bb76/` 是**不受 `.gitignore` 忽略的非点号目录**（`git status` 显示 `?? system/tests/probe-f177bb76/`，**1.7 MB**，内含 `system/tests/probe-f177bb76/system/tests/probe-f177bb76/…` **5 层递归自嵌套**）。而 `_ignore()` 只排除 `_COPY_SKIP` 与**以 `.` 开头**的名字 ⇒ **这个目录会被原样复制进每一个夹具副本**，且在源目录里它把"待复制项数"抬高 —— 而宿主对**单轮批量删除**有阈值（`G-RC-09`：`threshold: 9999, scope: "turn"`）。⇒ 它**同时**加重"复制更可能缺件"与"清理更可能被拒"两件事。（`system/tests/.probe-step56/` 因以 `.` 开头**不会**进副本 — 见 `_ignore()` 的 `n.startswith(".")`。）
 - **建议修法**：① `code_root` / `pristine_code_root` 在 `yield` 前加一条**响亮的完整性断言**（`for s in _TRUTH_STEMS: assert (target/"facts"/f"{s}.jsonl").exists()`，`registry`/`audit` 同理）—— 缺件时**报"夹具不完整"而不是报"产品坏了"**；② `_ENSURE_DIRS` 补 `facts`/`registry`/`audit`（或把它改为**从真源注册表派生**）；③ 清理 `probe-*` / `.probe-*` 之类实验残留，或把 `_ignore()` 改为按**前缀/白名单**排除（当前"非点号即复制"对在制品不设防）。
+- ★ **④ 补一条断言（这条是 `ws-ch2-rules` 补的，我原来的方案不够，如实归他）——"清空有效性"**：
+  我原来的①只能抓**缺件**。但 `G-60` 的实测形态是 **`SAFE_DELETE_BULK_CONFIRM_REQUIRED {"count":100267,"threshold":99999,"scope":"turn","targetCount":1}`** —— **`count` 越顶后连删 1 项也被拒**，于是 `pytest_sessionstart` 的 `_clear_work_dir()` 必失败。**这个形态下文件仍然在**（只是陈旧/不干净）⇒ **①抓不到**。
+  - ⇒ 必须再加一条：**sessionstart 之后断言工作目录确实为空**。否则观测上「**0 个文件被删**」与「**一切正常**」**不可区分**。
+  - ⇒ **两条断言各管一种失败**：① 管"**静默少文件**"，④ 管"**静默没删成**"。**缺任一条，那一半的失败就仍会被记成产品缺陷。**
+- **★ 同族归纳（这条比单个缺陷更值钱）**：`G-RC-12`（①/④）与我在本批次报的 **`G-42`（`skipped` 自报零校验）**、**`G-44`（适配器 `not outcome.skipped` 对 step 5/6 恒真）** 是**同一族** ——
+  **判据的强度不得建立在"被检对象自报"或"环境恰好为空"之上。** 三处的失败方式不同（自报可伪造 / 分支恒真 / 环境静默变空），但**都是"观测不到失败"**。建议在 `CONVENTIONS.md` 里给这一族一个**正式名字**（如"**静默等价态**"：两种语义相反的状态在观测上不可区分），并在守卫评审时逐条问"**这个判据失败时会不会静默？**"
 
 ### G-50 —— `G-48` 收口后**残留一处与 `.gitignore` 逐字相反**的注释（`conftest.py:47-49`）【严重度：**低**，但形态与 `G-48` 同族】
 
