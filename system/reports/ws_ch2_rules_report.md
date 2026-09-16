@@ -268,10 +268,41 @@ exit=0
 ### ⑥ `git status --short`（全部改动都在候选目录 + 报告）
 
 ```
-$ git status --short
+$ git status --short          # 提交前
 ?? system/registry/rule-candidates/
 ?? system/reports/ws_ch2_rules_report.md
+
+$ git status --short          # 提交后（工作区干净，口径见 ⑦）
+(无输出)
 ```
+
+### ⑦ `pre-commit` 全绿（**禁 `--no-verify`，实测**）
+
+提交 `3e5bc27` 由 pre-commit 钩子放行（显式路径 `git add`，**未用 `git add -A`**）。钩子逐门输出：
+
+```
+pre-commit → append_only_guard           RESULT: PASS（0 violations）
+pre-commit → rules_lock_guard            scanned files_on_disk: 10 / registered_files: 10
+                                         RESULT: PASS（0 violations）   ← ★ rules/ 锁不变量未破
+pre-commit → registry_schema_guard       RESULT: PASS（0 violations）
+pre-commit → schema_sync_guard           scanned committed_defs: 84 / fresh_defs: 84
+                                         RESULT: PASS（0 violations）
+pre-commit → conflict_scan(L1-L5)        RESULT: PASS（0 violations）   ← 候选 YAML 未触禁词/双写
+pre-commit → no_placeholder_guard        scanned files: 127   RESULT: PASS（0 violations）
+pre-commit → injection_guard             scanned rules_files: 10 / on_disk: 10
+                                         RESULT: PASS（0 violations）
+pre-commit → verification_policy_guard   RESULT: PASS（0 violations）
+pre-commit → shell_var_guard             RESULT: PASS（0 violations）
+pre-commit → graph_integrity_guard       RESULT: PASS（0 violations）
+pre-commit → criterion_effectiveness_guard  RESULT: PASS（0 violations）
+pre-commit ✓ 全部门禁放行
+commit-exit=0
+[ws/ch2-rules 3e5bc27] feat(rules-candidates): 批次13-R 4 份规则文件逐字转写为可安装候选
+ 5 files changed, 718 insertions(+)
+```
+
+> `criterion_effectiveness_guard` 打印的 6 条 `criteria_not_implemented` / 2 条 `ineffective_entries`
+> 是**既有登记**（本单未动判据），`RESULT: PASS（0 violations）`——如实贴上，**不当作"已验证"**（`G-03`）。
 
 > **未跑**：`verify.py --batch <整目录>`（配额，任务书禁）。**未跑** `run_all_gates`（本单不新增测试目录、不动代码，
 > 门禁项不变；如主理人要求，可在合并后随批次统一跑）。
@@ -341,6 +372,7 @@ $ git status --short
 | 与 `freeze.yaml` 只指针不双写 | §4.3（`scenario.yaml` → `p05`；其余 3 文件经逐项核对**无** 11 项之一） |
 | 绝不写 `system/rules/` | §3 ④⑤（`git status --short system/rules` 空 + `rules_lock_guard` PASS + 0444 位完好） |
 | 报告四段式 | 本文 §1 改了什么 / §3 测了什么 / §5 每条要求证据 / §6 剩余不确定性 |
+| 禁 `git add -A`；`pre-commit` 全绿（禁 `--no-verify`） | §3 ⑦（11 道门全 PASS + commit-exit=0；显式路径 `git add`，未用 `-A`） |
 | 未跑 `verify.py --batch <目录>` | §3 末尾声明 |
 
 ---
