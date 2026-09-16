@@ -36,7 +36,7 @@ from .contract import (
     safe_compute,
 )
 from .returns import CorporateActionPoint, PricePoint, compute_benchmark_return, compute_total_return
-from .store import append_derived_value_ids, append_gaps, iter_all_values
+from .store import AppendOutcome, append_derived_value_ids_detailed, append_gaps, iter_all_values
 
 PRICES_REL = "facts/prices.jsonl"
 BENCHMARKS_REL = "facts/benchmarks.jsonl"
@@ -52,6 +52,21 @@ class DriverReport:
 
     - `derived_ids`：**本次算出的全部** `DerivedValue`（不论是否真落库）；
     - `written_derived_ids`：**本次真正新增落库**的 `DerivedValue`（幂等重跑 → 空）；
+    - `skipped_derived_ids`：本次**考察过、但同键已在 `derived/` 中故未重复写入**的
+      `DerivedValue`（幂等命中，`Ch9 §3.5` 阶段④）。★ 与 `written_derived_ids` **互斥**，
+      两者和 `derived_ids` 是**三个不同**的集合：
+
+      | 集合 | "算出来了" | "写进去了" |
+      |---|---|---|
+      | `derived_ids` | ✔ | 不一定 |
+      | `written_derived_ids` | ✔ | ✔ |
+      | `skipped_derived_ids` | ✔ | ✘（同键已存在） |
+
+      ★ 为什么必须把它带出来（缺陷 `G-44`）：`step.py` 的处理器据此填
+        `StepOutcome.skipped`。若只有 `written_derived_ids`，则幂等重跑时该字段为空
+        ⇒ `pipeline` 的 `G1-05` 会把"读了 N 个对象、判定均无需追加"误读成**空执行**
+        ⇒ 整轮 `blocked`。**判定不在这里重算**：它由唯一写入口
+        `store.append_derived_value_ids_detailed` 回传（`G-06`）。
     - `values_written`：真正新增落库的**行数**（= `len(written_derived_ids)`）。
     """
 
@@ -59,6 +74,7 @@ class DriverReport:
     gaps_written: int = 0
     derived_ids: list[str] = field(default_factory=list)
     written_derived_ids: list[str] = field(default_factory=list)
+    skipped_derived_ids: list[str] = field(default_factory=list)
     gap_ids: list[str] = field(default_factory=list)
     integrity_violations: list[str] = field(default_factory=list)
     hard_errors: list[str] = field(default_factory=list)
@@ -73,6 +89,7 @@ class DriverReport:
             "gaps_written": self.gaps_written,
             "derived_ids": sorted(self.derived_ids),
             "written_derived_ids": sorted(self.written_derived_ids),
+            "skipped_derived_ids": sorted(self.skipped_derived_ids),
             "gap_ids": sorted(self.gap_ids),
             "integrity_violations": list(self.integrity_violations),
             "hard_errors": list(self.hard_errors),
@@ -210,9 +227,11 @@ def run_derived(
     - 每个基准对象：解析证券 → 取该证券行情 → 调 `compute_benchmark_return`；
       缺对象/缺行情/窗口不足 → **缺口对象**（`safe_compute` 折叠）。
     - 另对每个有行情的证券调一次 `compute_total_return`（个股口径演示）。
-    - `persist=False` → 只算不落（供纯校验）。
+    - `persist=False` → 只算不落（供纯校验）；此时**不做**幂等判定，故
+      `written_derived_ids` 与 `skipped_derived_ids` **均为空**（没有可供判定的写入动作）。
     - `version` = **上游基线版本**（`Ch9 §3.5` 阶段④ 幂等键的 `version` 分量）：上游重述时
-      **必须显式传入新 `version`**，否则旧值会被幂等键保留（`store.append_derived_value_ids`）。
+      **必须显式传入新 `version`**，否则旧值会被幂等键保留
+      （`store.append_derived_value_ids_detailed`）。
     """
     root_path = Path(root)
     report = DriverReport()
@@ -312,8 +331,12 @@ def run_derived(
         _collect(outcome, values, gaps, report)
 
     if persist:
-        report.written_derived_ids = append_derived_value_ids(root_path, values, version=version)
-        report.values_written = len(report.written_derived_ids)
+        # ★ **唯一**落库入口：它同时给出"本轮真正写入"与"本轮幂等命中"两个互斥集合
+        #   （`G-06`：幂等判定只在这里做一次；`step.py` 不重算，只转述）。
+        outcome: AppendOutcome = append_derived_value_ids_detailed(root_path, values, version=version)
+        report.written_derived_ids = outcome.written
+        report.skipped_derived_ids = outcome.skipped
+        report.values_written = len(outcome.written)
         report.gaps_written = append_gaps(root_path, gaps)
 
     report.integrity_violations = assert_derived_integrity(root_path)

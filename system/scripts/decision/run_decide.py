@@ -55,7 +55,11 @@ from scripts.decision.gate import (  # noqa: E402
     ResearchBaseline,
     ReturnValue,
 )
-from scripts.decision.rules import build_recommendation, decide, persist_recommendation  # noqa: E402
+from scripts.decision.rules import (  # noqa: E402
+    build_recommendation,
+    decide,
+    persist_recommendation_detailed,
+)
 
 DEFAULT_HORIZON = "2q"
 DEFAULT_RULE_VERSION = "decision-v1"
@@ -81,6 +85,13 @@ class RunReport:
     #: ★ 本次**真实**使用的输入窗口 `[begin, finish]`（ISO 串）；无窗口 → `None`。
     #:  `P7-3`：如实回传"当前可用输入窗口"，**不**用任何夹具窗口冒充。
     window: tuple[str, str] | None = None
+    #: ★ 本轮**考察过、但幂等键已存在故未重复写入**的 `recommendation_id`（`Ch9 §3.5` 阶段⑤）。
+    #:  与 `recommendation_ids`（本轮**真正新写入**）**互斥**。幂等判定不在这里做：
+    #:  它由唯一写入口 `rules.persist_recommendation_detailed` 回传（`G-06`）。
+    #:  ★ 为什么必须带出来（缺陷 `G-44`）：`scripts/decision/step.py` 据此填
+    #:  `StepOutcome.skipped`。缺了它，幂等重跑时该字段为空 ⇒ `G1-05` 判【空执行】
+    #:  ⇒ 整轮 `blocked`（而这一轮其实什么都没坏）。
+    skipped_recommendation_ids: tuple[str, ...] = ()
 
 
 def load_prices(path: str | Path) -> list[PricePoint]:
@@ -342,22 +353,40 @@ def _run_core(
         change_reason=decision.change_reason,
         evidence_version_ids=(stock_forecast.worksheet.derived_id,),
     )
-    written = 0
+    written_ids: tuple[str, ...] = ()
+    skipped_ids: tuple[str, ...] = ()
     if persist:
         # 真源目录 `facts/` 由本入口保证存在（`P7-6`：不再因缺目录抛 `FileNotFoundError`）。
         (root_path / "facts").mkdir(parents=True, exist_ok=True)
-        written = persist_recommendation(root_path, rec)
+        # ★ **唯一**落库入口：它同时给出"本轮真正写入"与"本轮幂等命中"两个互斥集合
+        #   （`G-06`：幂等判定只在这里做一次；`step.py` 不重算，只转述）。
+        outcome = persist_recommendation_detailed(root_path, rec)
+        written_ids, skipped_ids = outcome.written_ids, outcome.skipped_ids
         from schema.store import rebuild_index
 
         rebuild_index(root_path)
     else:
-        written = 1  # 未落库（`--no-persist`）→ 报告"本会产出"，但不写盘
+        written_ids = (recommendation_id,)  # 未落库（`--no-persist`）→ 报告"本会产出"，但不写盘
 
-    if persist and written == 0:
-        # 幂等命中（同"输入窗口 + 规则版本"重跑）→ **不追加**，如实回传（`P7-4`）。
-        return RunReport((), (f"already_persisted:{recommendation_id}",), 0, False, decision.action, window)
+    if persist and not written_ids:
+        if skipped_ids:
+            # 幂等命中（同"输入窗口 + 规则版本"重跑）→ **不追加**，如实回传（`P7-4`）。
+            # ★ 命中对象走**独立的 `skipped_recommendation_ids`**，**不得**折进 `recommendation_ids`：
+            #   后者是"本轮真正新写入"（`tests/compute/test_step_wiring.py:48` 已钉死该语义）；
+            #   若折进去，"首跑"与"幂等重跑"的 `recommendation_ids` 相同 ⇒ 幂等性在输出上不可区分。
+            return RunReport(
+                (),
+                (f"already_persisted:{recommendation_id}",),
+                0,
+                False,
+                decision.action,
+                window,
+                skipped_recommendation_ids=skipped_ids,
+            )
+        # 键此前不存在却一行未写入 ⇒ 既不是产出、也不是幂等命中 → 两个集合都空，如实降级。
+        return RunReport((), (f"not_persisted:{recommendation_id}",), 0, True, decision.action, window)
     signals = 1 if decision.is_new_signal else 0
-    return RunReport((recommendation_id,), decision.gaps, signals, False, decision.action, window)
+    return RunReport(written_ids, decision.gaps, signals, False, decision.action, window)
 
 
 def run(
@@ -514,6 +543,9 @@ def main(argv: list[str] | None = None) -> int:
 
     summary = {
         "recommendation_ids": list(report.recommendation_ids),
+        # 幂等命中（本轮未新写入、但确实考察过）——与 `recommendation_ids` **互斥**。
+        # 两轮输出因此**可区分**：首轮 `ids` 非空 / `skipped` 空；重跑反向。
+        "skipped_recommendation_ids": list(report.skipped_recommendation_ids),
         "action": report.action,
         "signals_emitted": report.signals_emitted,
         "gaps": list(report.gaps),

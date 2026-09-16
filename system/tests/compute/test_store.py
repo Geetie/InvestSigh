@@ -84,6 +84,68 @@ def test_append_derived_value_ids_returns_only_written(scratch: Path) -> None:
     assert second == []
 
 
+# ═══════════ `append_derived_value_ids_detailed`：写入口如实回传两个互斥集合 ═══════════
+#
+# 缺陷 `G-44`：`step.py` 的处理器原先只拿得到"写了什么"，拿不到"考察过、但已存在故没写"，
+# 于是幂等重跑时 `produced=[]` 且无法说明"我确实考察过了" → `chain_steps` 的适配器
+# 把它判成 `incomplete_reason` → `STATUS_GAP` → **整轮 blocked**。
+# 本节的断言全部锚在**唯一写入口**的返回值上（`G-06`：判定只有一处）。
+
+
+def test_detailed_reports_written_on_first_run_and_skipped_on_rerun(scratch: Path) -> None:
+    """双跑判别式：首轮 `written` 非空 / `skipped` 空；重跑**反向**（`G-44` 的核心观测）。"""
+    values = [_derived("dv-a", "0.1"), _derived("dv-b", "0.2")]
+    first = store.append_derived_value_ids_detailed(scratch, values)
+    assert sorted(first.written) == ["dv-a", "dv-b"], "首轮应真正写入"
+    assert first.skipped == [], "首轮不该有幂等命中（否则本用例失去判别力）"
+    assert len(store.read_rows(scratch, store.DERIVED_VALUES_STEM)) == 2
+
+    second = store.append_derived_value_ids_detailed(scratch, values)
+    assert second.written == [], "重跑未新写入 → written 必须为空"
+    assert sorted(second.skipped) == ["dv-a", "dv-b"], (
+        "★ 重跑必须把'考察过、已存在故未写入'的对象如实回报到 skipped —— "
+        "缺了它，上层无法区分『空执行』与『幂等命中』（G-44）"
+    )
+    assert len(store.read_rows(scratch, store.DERIVED_VALUES_STEM)) == 2, "重跑不得新增行"
+
+
+def test_detailed_written_and_skipped_are_disjoint(scratch: Path) -> None:
+    """★ 互斥不变量：`written ∩ skipped = ∅`（同批内既有新键、又有旧键命中）。"""
+    store.append_derived_value_ids_detailed(scratch, [_derived("dv-a", "0.1", "compute-v1")])
+    # 同批：`dv-a@v2` 是**新键**（写入）；`dv-a@v1` 已存在（命中）→ 以**写入为准**，不得两边都有
+    out = store.append_derived_value_ids_detailed(
+        scratch, [_derived("dv-a", "0.12", "compute-v2"), _derived("dv-a", "0.1", "compute-v1")]
+    )
+    assert out.written == ["dv-a"], f"新键应写入：{out}"
+    assert out.skipped == [], f"★ dv-a 已写入 ⇒ 不得同时出现在 skipped：{out}"
+    assert set(out.written) & set(out.skipped) == set()
+
+
+def test_detailed_reports_nothing_when_no_candidates(scratch: Path) -> None:
+    """★ **反向对照**：上游一件都没得做（`values=[]`）→ 两个集合**都空**。
+
+    这一条是整单的关键：证明"新增 skipped 出口"**没有**把"空执行"守卫洗成恒真 ——
+    真的一件都没得做时，上层仍然只能看到 `written=[] skipped=[]` ⇒ 照样判"未完成"。
+    """
+    out = store.append_derived_value_ids_detailed(scratch, [])
+    assert (out.written, out.skipped) == ([], []), f"无候选时不得回报任何命中：{out}"
+    assert not (scratch / "derived" / "derived_values.jsonl").exists(), "无候选不得建空文件"
+
+
+def test_detailed_reports_nothing_when_persist_disabled(scratch: Path) -> None:
+    """`skip_existing=False`（纯写入、不做幂等判定）→ `skipped` 恒空（判定根本没做）。"""
+    out = store.append_derived_value_ids_detailed(
+        scratch, [_derived("dv-a", "0.1")], skip_existing=False
+    )
+    assert out.written == ["dv-a"] and out.skipped == []
+
+
+def test_append_outcome_rejects_self_contradiction() -> None:
+    """★ G-42 同源：`AppendOutcome` 自己就拒绝"同一 id 两边都有"的自相矛盾输入。"""
+    with pytest.raises(ValueError, match="自相矛盾"):
+        store.AppendOutcome(written=["dv-a"], skipped=["dv-a"])
+
+
 def test_gaps_are_persisted_and_idempotent(scratch: Path) -> None:
     gap = ComputeGap(
         gap_id="dv-gap-x-v1", subject="x", missing=["prices"], reason="缺行情",

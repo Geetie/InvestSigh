@@ -21,9 +21,11 @@ from decision_builders import make_forecast, make_input
 from scripts.decision.gate import EarlyJudgmentIncomplete, JudgmentChange
 from scripts.decision.rules import (
     HorizonOutOfRange,
+    PersistOutcome,
     build_recommendation,
     decide,
     persist_recommendation,
+    persist_recommendation_detailed,
 )
 from schema.models import Recommendation, RecommendationAction
 from schema.store import as_of, read_models, read_records, rebuild_index
@@ -163,6 +165,52 @@ def test_persist_different_window_appends_new_row(scratch) -> None:
     )
     rows = read_models(scratch, "recommendations")
     assert sorted(r.recommendation_id for r in rows) == ["rec-a", "rec-b"]
+
+
+# ═════════ `persist_recommendation_detailed`：唯一写入口如实回传两个互斥集合 ═════════
+#
+# 缺陷 `G-44`：`scripts/decision/step.py` 原先只拿得到"写了什么"，拿不到"考察过、但已存在故没写"，
+# 于是幂等重跑时 `produced=[]` 且无法说明"我确实考察过了" → `chain_steps` 的适配器判
+# `incomplete_reason` → `STATUS_GAP` → **整轮 blocked**（实测：连续第二次 `run_daily` 必然 blocked）。
+
+
+def test_detailed_reports_written_then_skipped_across_rerun(scratch) -> None:
+    """双跑判别式：首轮 `written_ids` 非空 / `skipped_ids` 空；重跑**反向**。"""
+    rec = _rec()
+    first = persist_recommendation_detailed(scratch, rec)
+    assert first.written_ids == ("rec-persist",), "首轮应真正写入"
+    assert first.skipped_ids == (), "首轮不该有幂等命中（否则判别式失去判别力）"
+    assert len(read_records(scratch, "recommendations")) == 1
+
+    second = persist_recommendation_detailed(scratch, rec)
+    assert second.written_ids == (), "重跑未新写入 → written_ids 必须为空"
+    assert second.skipped_ids == ("rec-persist",), (
+        "★ 重跑必须把'考察过、已存在故未写入'的建议如实回报到 skipped_ids —— "
+        "缺了它，上层无法区分『空执行』与『幂等命中』（G-44）"
+    )
+    assert len(read_records(scratch, "recommendations")) == 1, "重跑不得新增行"
+
+
+def test_detailed_written_and_skipped_are_disjoint(scratch) -> None:
+    """★ 互斥不变量：`written_ids ∩ skipped_ids = ∅`（新窗口写入、旧窗口命中）。"""
+    assert persist_recommendation_detailed(scratch, _rec(recommendation_id="rec-a")).written_ids == ("rec-a",)
+    out = persist_recommendation_detailed(scratch, _rec(recommendation_id="rec-b", start=date(2026, 6, 1)))
+    assert out.written_ids == ("rec-b",) and out.skipped_ids == ()
+    assert set(out.written_ids) & set(out.skipped_ids) == set()
+
+
+def test_persist_outcome_rejects_self_contradiction() -> None:
+    """★ G-42 同源：`PersistOutcome` 自己就拒绝"同一 id 两边都有"的自相矛盾输入。"""
+    with pytest.raises(ValueError, match="自相矛盾"):
+        PersistOutcome(written_ids=("rec-x",), skipped_ids=("rec-x",))
+
+
+def test_count_view_stays_consistent_with_detailed_view(scratch) -> None:
+    """既有契约不回归：`persist_recommendation` == `len(detailed.written_ids)`（两个视图同源）。"""
+    rec = _rec()
+    assert persist_recommendation(scratch, rec) == 1
+    assert persist_recommendation(scratch, rec) == 0
+    assert persist_recommendation(scratch, rec) == 0
 
 
 def test_version_chain_is_usable_via_as_of(scratch) -> None:
