@@ -137,7 +137,7 @@
 | C-1 | 不改 `scripts/ops/verify.py`（新增 `tests/validators/`、`tests/claim/` 批次） | 主理人集成时统一加；改则触 `V-06` |
 | C-2 | 不把 `locator_check` 注册进 `run_all_gates.py` / `pre-commit.sh` | 非本模块清单（`G-07` 由主理人集成时补） |
 | C-3 | 不实现 `scripts/graph/forward_closure` | 属 `ws/graph` 工作流；本模块只**接线** |
-| C-4 | 不改 `schema/models.py` 的 `Claim.status` 默认值 | 非本模块清单；默认 `"active"` 的处置见报告 §四 |
+| C-4 | 不改 `schema/models.py` 的 `Claim.status` 默认值（本批次排期：不动它） | 非本模块清单。现状：默认值**已为** `pending_verification`（封闭 `StrEnum` `ClaimStatus`），`active` **已非合法取值**；本行仅登记"本批次不改默认值"这一**排期事实** |
 | C-5 | 不改 `scripts/guard/**` | 批次 4 已两轮独立审计（禁改） |
 
 ---

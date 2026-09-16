@@ -23,7 +23,12 @@
 
 ## 退出码（`CONVENTIONS.md::G-01`）
 
-`0` 放行 / `1` 命中违例（**命中即 fail，禁 warn-only**）/ `2` 输入异常（`code_root` 缺失 / JSONL 损坏）。
+`0` 放行 / `1` 命中违例（**命中即 fail，禁 warn-only**）/ `2` 输入异常
+（`code_root` 缺失 / **真源 JSONL 缺失** / JSONL 损坏）。
+
+★ 「真源 `facts/claims.jsonl` **缺失**」与「存在但 0 行」是**两件事**（`G-03`）：
+  缺失 = 结构性违例（`Ch9 §3.3.3`：`facts/` 的 18 个 JSONL 不得增删改名）→ **响亮失败**（`exit 2`）；
+  0 行 = 真空成立 → 显式 `NO_CLAIMS` note + `exit 0`。二者靠 `store.truth_source_status` 区分。
 """
 
 from __future__ import annotations
@@ -276,10 +281,21 @@ def _source_index(root: Path) -> dict[str, Mapping[str, Any]]:
 
 
 def check(root: Path) -> CheckReport:
-    """校验器入口：**单遍**扫描 `facts/claims.jsonl`，逐条复查定位（`P-01`）。"""
-    from schema.store import read_records
+    """校验器入口：**单遍**扫描 `facts/claims.jsonl`，逐条复查定位（`P-01`）。
+
+    ★ 真源**缺失**（文件不存在）→ 抛 `FileNotFoundError`（经 `run_checker` 折算为
+      **exit 2 输入异常**）：`Ch9 §3.3.3` 规定 `facts/` 的 18 个 JSONL 不得增删改名，
+      文件缺失即**结构性违例**，**不得**与「存在但 0 行」（真空成立，`G-03`）混为一谈。
+    """
+    from schema.store import TRUTH_MISSING, read_records, truth_source_status
 
     report = CheckReport(checker="locator_check.py")
+    if truth_source_status(root, "claims") == TRUTH_MISSING:
+        raise FileNotFoundError(
+            "facts/claims.jsonl 缺失 —— Ch9 §3.3.3 规定 facts/ 下 18 个 JSONL 不得增删改名，"
+            "文件缺失即结构性违例（与'存在但 0 行'不同；G-03：不得把'无被检对象'当'已验证'）"
+        )
+
     claims = read_records(root, "claims")
     report.scanned["claims"] = len(claims)
     if not claims:
