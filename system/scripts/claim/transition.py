@@ -4,9 +4,7 @@
 ## 有限状态机（`Ch6 §E.1` 状态图的逐边实现）
 
 ```
-[入口] active（采集层默认 status，schema/models.py::Claim.status）
-        │ 仅此一条入边（强制显式进入状态机）
-        ▼
+[*] ──（②③④ 提取完成，初始态，Ch6 §E.1 首行）──► pending_verification
 pending_verification ──► supported ──► disputed ──► refuted ──► superseded(终态)
      │  ▲                    │            │            │
      │  └── refuted ─────────┼────────────┘            │
@@ -19,8 +17,9 @@ pending_verification ──► supported ──► disputed ──► refuted �
 - **允许迁移表**（`ALLOWED_TRANSITIONS`）逐条对齐 `Ch6 §E.1`；表的补集（含自环、逆回、终态出边）
   一律**非法**：`assert_transition` 抛 `IllegalTransition`，**不静默兜底、不自动纠正**（`Ch6 §E.2`）。
 - `superseded` 为**终态**（`Ch6 §E.5`）；`refuted` **可重开**（`refuted → pending_verification`）。
-- `active` 是采集层默认值，**不属于** `Ch6 §E.1` 五态；本模块把它当**状态机入口别名**，
-  **只允许** `active → pending_verification`（强制显式进入；未核验不得直跳 `supported`）。
+- **初始态由设计写死为 `pending_verification`**（`Ch6 §E` 状态机首行 `[*] --> pending_verification`）：
+  采集层写出的 claim **直接**处于该态（`schema.models.ClaimStatus` 的默认值），
+  **不存在任何五态之外的"入口别名"**——五态之外的取值一律 `UnknownClaimStatus` 响亮拒绝。
 
 ## 追加式写入（`Ch9 §3.4.2`）
 
@@ -57,10 +56,7 @@ CLAIM_STATES = ("pending_verification", "supported", "disputed", "refuted", "sup
 """`Ch6 §E.1` 五态（唯一权威取值域）。"""
 
 INITIAL_STATE = "pending_verification"
-"""提取（②③④）完成后的**初始态**（`Ch6 §E.1`）。"""
-
-INGEST_DEFAULT_STATUS = "active"
-"""采集层默认 `status`（`schema/models.py::Claim.status`，真库实测行即 `"active"`）。"""
+"""提取（②③④）完成后的**初始态**（`Ch6 §E.1`）—— 采集层写出的 claim 即处于此态。"""
 
 TERMINAL_STATES = frozenset({"superseded"})
 """终态（`Ch6 §E.5`）：无出边。"""
@@ -77,11 +73,6 @@ ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
 }
 """**允许迁移表**（`Ch6 §E.1` 逐边）。表外一律非法。"""
 
-ENTRY_TRANSITIONS: dict[str, frozenset[str]] = {
-    INGEST_DEFAULT_STATUS: frozenset({INITIAL_STATE}),
-}
-"""状态机入口别名：采集层默认 `active` **只允许**进入初始态（强制显式进入）。"""
-
 _RECHECK_OBJECT_TYPES = frozenset({"baseline", "recommendation"})
 """`Ch6 §E.4`：仅对"依赖结论"（baseline / recommendation）入复查队列。"""
 
@@ -96,7 +87,7 @@ class ClaimTransitionError(RuntimeError):
 
 
 class UnknownClaimStatus(ClaimTransitionError):
-    """出现 `Ch6 §E.1` 五态（及入口别名）之外的取值 —— 未知状态。"""
+    """出现 `Ch6 §E.1` 五态之外的取值 —— 未知状态。"""
 
 
 class IllegalTransition(ClaimTransitionError):
@@ -131,11 +122,7 @@ class TransitionResult:
 
 def allowed_targets(from_status: str) -> frozenset[str] | None:
     """给定源状态，返回其**允许的目标集合**；源状态未知 → `None`。"""
-    if from_status in ALLOWED_TRANSITIONS:
-        return ALLOWED_TRANSITIONS[from_status]
-    if from_status in ENTRY_TRANSITIONS:
-        return ENTRY_TRANSITIONS[from_status]
-    return None
+    return ALLOWED_TRANSITIONS.get(from_status)
 
 
 def can_transition(from_status: str, to_status: str) -> bool:
@@ -148,10 +135,9 @@ def can_transition(from_status: str, to_status: str) -> bool:
 
 def assert_transition(from_status: str, to_status: str) -> None:
     """断言迁移合法；否则抛 `UnknownClaimStatus` / `IllegalTransition`（**响亮拒绝**）。"""
-    if from_status not in ALLOWED_TRANSITIONS and from_status not in ENTRY_TRANSITIONS:
+    if from_status not in ALLOWED_TRANSITIONS:
         raise UnknownClaimStatus(
             f"未知主张状态 from={from_status!r}；合法状态见 Ch6 §E.1: {CLAIM_STATES}"
-            f"（入口别名: {sorted(ENTRY_TRANSITIONS)}）"
         )
     if to_status not in CLAIM_STATES:
         raise UnknownClaimStatus(
@@ -382,7 +368,9 @@ def transition(
     root = Path(code_root)
     prior_row, all_rows = _latest_claim(root, claim_id)
     prior_obj = _validate_prior(prior_row)
-    from_status = str(prior_obj.status)
+    # `prior_obj.status` 在新契约下是 `ClaimStatus`（`str` 枚举）—— 直接 `str()` 会得到
+    # `'ClaimStatus.xxx'` 而非五态值，故取 `.value`（对旧式纯 `str` 回退为原值）。
+    from_status = str(getattr(prior_obj.status, "value", prior_obj.status))
     assert_transition(from_status, to_status)
 
     if version_kind is not None and version_kind not in VERSION_KINDS:

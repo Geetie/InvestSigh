@@ -251,3 +251,48 @@ False
 ⑤ 设计张力（`status` 默认值 / `forward_closure` 依赖 / stale 标记落点 / `first_seen_at` 语义）**全部显式登记并上报**，未自行裁决为设计。
 
 **需下游动作**：主理人装 §4.5 的三项集成（两批 + 门禁注册 + step ⑦ 接线），并裁定 §4.1/§4.3/§4.4 三处口径。
+
+---
+
+## 六、集成复核后修复（v2 · `ws/claim`）
+
+主理人把张力 ①（`Claim.status` 默认值）判为**设计写死**并**根治**：主分支 `b4f1fe5` 新增**封闭枚举** `ClaimStatus`
+（默认 `pending_verification`），重建 `facts.schema.json`。本模块据此对齐。
+
+### 6.1 改了什么（仅本模块清单内）
+
+| # | 文件 | 改动 |
+|---|---|---|
+| 1 | `scripts/claim/transition.py` | **删除"入口别名"概念**：移除 `INGEST_DEFAULT_STATUS`/`ENTRY_TRANSITIONS`；初始态即 `INITIAL_STATE=pending_verification`（五态之一）；`allowed_targets`/`assert_transition` 只认五态；**枚举归一化修复** `from_status = str(getattr(prior_obj.status,"value",prior_obj.status))`（见 6.3） |
+| 2 | `tests/claim/test_transition.py` | fixture `status` → `pending_verification`；删 `test_entry_alias_active_only_enters_pending`，改为 `test_legacy_active_status_rejected`（`active` 属违约值 → `UnknownClaimStatus`）；`test_real_ingest_then_support`（采集即初始态，直 `→supported`，2 版本行）；原本"目标=pending_verification"的多处（追加/定位门/三字段/序倒挂/时间倒挂）改目标为 `supported`（否则成自环） |
+| 3 | `tests/validators/test_locator_check.py` | fixture `status` → `pending_verification`；`test_real_ingested_claim_passes` 断言初始态 `pending_verification`；**去掉全部 `rule_hint=`**（`G-02`：只锚行为/退出码，不锚说明文字），`assert_rejected(...)` 仅断言 **exit 1** |
+
+### 6.2 真实输出
+
+**A. 集成契约（overlay `b4f1fe5` 的 `ClaimStatus`）—— 真实绿**：
+```
+$ python -m pytest tests/validators tests/claim -q   # 临时副本叠加 b4f1fe5 的 models.py/facts.schema.json
+........................................                                 [100%]
+40 passed in 7.46s
+```
+**B. 本工作区（基点 `205eb9c`，**缺** `b4f1fe5`）—— 2 例预期红**：
+```
+2 failed, 38 passed in 7.15s
+  FAILED tests/validators/test_locator_check.py::test_real_ingested_claim_passes
+  FAILED tests/claim/test_transition.py::test_real_ingest_then_support
+  ← 两例同因：本工作区模型仍产出 status='active'（b4f1fe5 不在 ws/claim 基点内，G-1 禁 merge）
+```
+**C. `run_all_gates.py`**：唯一非零 = `verification_policy_guard.py exit=1`（`V-06`），其余 **19 项 exit=0**；
+`rules_lock_guard` exit=0（`rules/*.yaml` 已 `chmod 0444` bootstrap）；`no_placeholder_guard`/`injection_guard` exit=0。
+
+### 6.3 overlay 复核暴露的真缺陷（**只有真契约才暴露**）
+
+`ClaimStatus` 是 `str` 枚举（非 `StrEnum`）：`str(ClaimStatus.pending_verification)` 得
+`'ClaimStatus.pending_verification'` 而非五态值 → 所有迁移在 `assert_transition` 处误判 `UnknownClaimStatus`。
+修复：取 `.value` 归一化（对旧式纯 `str` 回退为原值）。此缺陷在原契约（纯 `str`）下**永不复现**，与主理人所述"只有真跑一次才暴露"同类。
+
+### 6.4 未决（仍须主理人）
+
+- 本工作区基点 `205eb9c` **不含** `b4f1fe5`（`ClaimStatus`）与新增批次（`verify.py::BATCHES`）——
+  二者均在 `main`/`integration`；`G-1` 禁 `merge`，故本工作区 `V-06` 仍红。
+- `B` 的两例预期红**只**因基点落后；集成到含 `b4f1fe5` 的分支后即转绿（`A` 已证）。

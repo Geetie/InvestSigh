@@ -43,7 +43,7 @@ def _claim(**over: object) -> dict:
         "claim_form": "citation",
         "tier": "secondary_tertiary",
         "locator": "raw/doc.txt#L1-L2",
-        "status": "active",
+        "status": "pending_verification",
         "first_seen_at": DEFAULT_FIRST_SEEN,
         "analyzed_at": DEFAULT_FIRST_SEEN,
         "recorded_seq": 1,
@@ -127,13 +127,16 @@ def test_terminal_superseded_has_no_outgoing() -> None:
             transition_mod.assert_transition("superseded", target)
 
 
-def test_entry_alias_active_only_enters_pending() -> None:
-    """入口别名 `active` **只允许**进入 `pending_verification`（强制显式进入，不得直跳证据集）。"""
-    assert transition_mod.can_transition("active", "pending_verification") is True
-    assert transition_mod.can_transition("active", "supported") is False
-    assert transition_mod.can_transition("active", "superseded") is False
-    with pytest.raises(transition_mod.IllegalTransition):
-        transition_mod.assert_transition("active", "supported")
+def test_legacy_active_status_rejected() -> None:
+    """`active` **不在** `Ch6 §E.1` 五态内（违约值）→ `UnknownClaimStatus`（响亮拒绝）。
+
+    设计初始态是 `pending_verification`（`Ch6 §E` 状态机首行）；把 `active` 当"入口别名"
+    的旧处理已移除 —— 五态之外的状态一律不该存在（这正是 `Claim.status` 违约的教训）。
+    """
+    assert transition_mod.can_transition("active", "pending_verification") is False
+    assert transition_mod.allowed_targets("active") is None
+    with pytest.raises(transition_mod.UnknownClaimStatus):
+        transition_mod.assert_transition("active", "pending_verification")
 
 
 def test_unknown_status_rejected() -> None:
@@ -171,23 +174,18 @@ def _drive_ingest(code_root: Path) -> dict:
     return rows[0]
 
 
-def test_real_ingest_then_enter_then_support(code_root: Path) -> None:
-    """**AC-01 真跑通**：真实采集 claim（`status="active"`）→ `active→pending_verification→supported`。"""
+def test_real_ingest_then_support(code_root: Path) -> None:
+    """**AC-01 真跑通**：真实采集 claim（写库即初始态 `pending_verification`）→ `pending_verification→supported`。"""
     row = _drive_ingest(code_root)
     cid = row["claim_id"]
-    assert row["status"] == "active"
+    assert row["status"] == "pending_verification"
 
     at = datetime.now(timezone.utc) + timedelta(seconds=1)
-    r1 = transition_mod.transition(code_root, cid, "pending_verification", recorded_at=at)
-    assert (r1.from_status, r1.to_status) == ("active", "pending_verification")
-
-    r2 = transition_mod.transition(
-        code_root, cid, "supported", recorded_at=at + timedelta(seconds=1)
-    )
-    assert (r2.from_status, r2.to_status) == ("pending_verification", "supported")
+    r1 = transition_mod.transition(code_root, cid, "supported", recorded_at=at)
+    assert (r1.from_status, r1.to_status) == ("pending_verification", "supported")
 
     rows = [r for r in _read_claims(code_root) if r["claim_id"] == cid]
-    assert len(rows) == 3, f"应有 3 个版本行（追加），实得 {len(rows)}"
+    assert len(rows) == 2, f"应有 2 个版本行（追加），实得 {len(rows)}"
     seqs = [r["recorded_seq"] for r in rows]
     assert seqs == sorted(set(seqs)), f"recorded_seq 必须严格递增：{seqs}"
     assert rows[-1]["status"] == "supported"
@@ -199,7 +197,7 @@ def test_transition_appends_new_version_not_modifies(code_root: Path) -> None:
     original = (code_root / "facts" / "claims.jsonl").read_text(encoding="utf-8")
 
     result = transition_mod.transition(
-        code_root, "clm-1", "pending_verification", recorded_at=LATER
+        code_root, "clm-1", "supported", recorded_at=LATER
     )
     assert result.recorded_seq == 2
 
@@ -257,9 +255,9 @@ def test_locator_invalid_blocks_transition(code_root: Path) -> None:
     """**AC-05**：主张定位无效（空 locator）→ 迁移被拒 `ClaimLocatorInvalid`；CLI exit 1。"""
     _seed(code_root, [_claim(locator="")], raw=False)
     with pytest.raises(transition_mod.ClaimLocatorInvalid):
-        transition_mod.transition(code_root, "clm-1", "pending_verification", recorded_at=LATER)
+        transition_mod.transition(code_root, "clm-1", "supported", recorded_at=LATER)
 
-    proc = _cli(code_root, "--claim-id", "clm-1", "--to", "pending_verification")
+    proc = _cli(code_root, "--claim-id", "clm-1", "--to", "supported")
     assert proc.returncode == 1, proc.stderr
     assert "ClaimLocatorInvalid" in proc.stderr
     # 被拒后不落任何新行
@@ -272,7 +270,7 @@ def test_swapped_three_fields_rejected(code_root: Path) -> None:
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
-        transition_mod.transition(code_root, "clm-1", "pending_verification", recorded_at=LATER)
+        transition_mod.transition(code_root, "clm-1", "supported", recorded_at=LATER)
 
 
 def test_forward_closure_unavailable_blocks_superseded(
@@ -349,7 +347,7 @@ def test_non_advancing_recorded_seq_rejected(code_root: Path) -> None:
     _seed(code_root, [_claim()])
     with pytest.raises(transition_mod.IllegalTransition):
         transition_mod.transition(
-            code_root, "clm-1", "pending_verification", recorded_at=LATER, recorded_seq=1
+            code_root, "clm-1", "supported", recorded_at=LATER, recorded_seq=1
         )
 
 
@@ -359,5 +357,5 @@ def test_time_inversion_rejected(code_root: Path) -> None:
     earlier = datetime(2026, 9, 15, 0, 0, tzinfo=timezone.utc)
     with pytest.raises(transition_mod.IllegalTransition):
         transition_mod.transition(
-            code_root, "clm-1", "pending_verification", recorded_at=earlier
+            code_root, "clm-1", "supported", recorded_at=earlier
         )
