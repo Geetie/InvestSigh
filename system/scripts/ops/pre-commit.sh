@@ -59,17 +59,48 @@ fi
 
 CODE_ROOT="$REPO_ROOT/system"
 FAILED=0
+# ★ 卡 13-O：把「输入错误」与「违规」分开记（`CONVENTIONS.md G-01`：`2`=输入异常 / `1`=违规）。
+#   两者此前**被同款报成"阻断"** —— 见 `run_gate` 的注释。
+INPUT_ERROR=0
 
 run_gate() {
-  label="$1"; shift
+  # ★★★ 载荷约定（**改动这里必看**）：调用点是 `run_gate <label> <script> <args…>`，
+  #   而真正要执行的是 `"$PY" "$@"` —— 即 **`$@` 的首位必须是脚本路径**。
+  #   ⇒ 先取 `$1`/`$2`，再 `shift 1` **只摘掉 label**。
+  #   ★ 踩过两次，两次都被 `tests/guards/test_hook_same_source.py` 当场抓住：
+  #     ① `shift 2` ⇒ 把**脚本路径**也摘掉了 ⇒ 每道门都失败；
+  #     ② 忘了 `shift` ⇒ `$@` 首位是 **label** ⇒ `python <label> <script> …`
+  #        ⇒ `can't open file '…/<label>'`（错误信息里出现的是**门禁名而不是路径**，很有迷惑性）。
+  label="$1"; script="$2"; shift 1
   echo "pre-commit → ${label}"
+
+  # ★★ 卡 13-O（缺口 `G-61`）：**先判"判据在不在被检树里"，再跑判据**。
+  #   旧行为：脚本缺失时 `python` 报 `can't open file … [Errno 2]`，退出码 `2`，
+  #   而下面那条分支把它与 `rc=1`（真违规）**同款报成"阻断"** ⇒ 提交者被告知"你改坏了"，
+  #   实际原因是**判据与对象不同源**（清单比被检树新）。本批次实测 3 次、≥2 条流撞上。
+  #   ⇒ 缺脚本 = **输入错误**（`exit 2`），**不写"阻断"**，且**一次性把处置写清**。
+  if [ ! -f "${script}" ]; then
+    echo "pre-commit [INPUT-ERROR] ${label}：门禁脚本不在被检树 —— ${script}" >&2
+    echo "  ★ 这是**输入错误**（exit=2），**不是**违规：判据与对象不同源（缺 G-61）。" >&2
+    echo "  ★ 被检树 REPO_ROOT=${REPO_ROOT}（cwd=${PWD}）；判据清单来自本树的 scripts/ops/pre-commit.sh。" >&2
+    echo "  ★ 处置：在本树 \`git merge main\` 后重试。**不许** \`--no-verify\`（绕过门禁得到的绿不算证据）。" >&2
+    INPUT_ERROR=1
+    return 0
+  fi
+
   "$PY" "$@" || {
     rc=$?
     # ★ 变量一律加花括号：`$rc` 紧跟全角括号 `）` 时，多字节首字节会被并进变量名
     #   → `set -u` 下报 `rc<乱码>: unbound variable`，脚本**当场中止**，
     #   于是 `FAILED=1` 没设上、**后续门禁（⑤–⑧）根本没跑**（实测踩到，已修）。
-    echo "pre-commit ✗ ${label} 阻断（exit=${rc}）" >&2
-    FAILED=1
+    if [ "${rc}" -eq 2 ]; then
+      # ★ `2` = 判据自己的输入异常（`Ch2 §B.3`）⇒ **不是**"你改坏了"。
+      echo "pre-commit [INPUT-ERROR] ${label}（exit=2）：判据报**输入异常**，不是违规" >&2
+      INPUT_ERROR=1
+    else
+      echo "pre-commit ✗ ${label} 阻断（exit=${rc}）" >&2
+      FAILED=1
+    fi
   }
 }
 
@@ -124,6 +155,21 @@ run_gate "scenario_tag_binding_guard" "$CODE_ROOT/scripts/checks/scenario_tag_bi
 #    两条断言：① 代码引用的规则文件必须存在；② 代码读的键必须在实有键里。
 #    ★ 与 `run_all_gates.py::GATES` **同时**登记（`G-07`）。
 run_gate "rule_key_alignment_guard" "$CODE_ROOT/scripts/checks/rule_key_alignment_guard.py" "$CODE_ROOT"
+
+# ★ 卡 13-O：先把「输入错误」结掉 —— 它比违规更该先说（`2`：门禁没跑全，结论不成立）。
+#   两者同时出现时**两条都报**，仍以 `exit 2` 结束：此时"跑了哪些、没跑哪些"本身不可信。
+if [ "${INPUT_ERROR}" -ne 0 ]; then
+  if [ "${FAILED}" -ne 0 ]; then
+    echo "pre-commit: 另有门禁**阻断**（见上）—— 但因存在输入错误，本次结论**不成立**。" >&2
+  fi
+  # ★ 注意：这里**不许**出现未转义的反引号 —— 它是**命令替换**。
+  #   我第一版写成 ``…判据与对象不同源，\`G-61\`）`` 时漏了转义 ⇒ shell 去执行 `G-61`
+  #   ⇒ `line 161: G-61: command not found`，而 **echo 仍打印出一行"看起来正常"的话**
+  #   （那个词被静默吞成空）⇒ 又一个**静默失败**（`G-62` 第 4 型：失败通道）。
+  echo "pre-commit: [INPUT-ERROR] 有门禁脚本不在被检树 —— 这是**输入错误**，不是违规（exit=2；判据与对象不同源，缺口 G-61）。" >&2
+  echo "pre-commit: 处置：在本树执行 git merge main 后重试。" >&2
+  exit 2
+fi
 
 if [ "$FAILED" -ne 0 ]; then
   echo "pre-commit: 有门禁阻断，提交被拒。" >&2
