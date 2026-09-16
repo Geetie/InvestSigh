@@ -432,3 +432,41 @@ def test_cli_reports_display_source_when_rules_absent(scratch: Path, run_script)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "NO_SOLUTION_SET_DISPLAY" in proc.stdout
     assert "design_default" in proc.stdout or "display_value_source: 0" in proc.stdout
+
+
+# ── 第四轮：**缺子键 ≠ 无可比对象**（删 `default_count` / `solver_ref` 也必须是红）──
+
+
+def test_missing_default_count_is_flagged(scratch: Path, real_rules, run_script) -> None:
+    """★ 第四轮反例：**删** `solution_set_display.default_count` ⇒ 必须 `exit 1`。
+
+    旧写法 `if declared_default is not None and int(declared_default) != DEFAULT_DISPLAY_CAP`
+    在缺键时 `declared_default is None` ⇒ **静默跳过** ⇒ "展示几组"这一事实从规则面消失、
+    而代码仍按回落值 `DEFAULT_DISPLAY_CAP` 展示，门禁却全绿（`G-03`：跳过不是通过）。
+    """
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["solution_set_display"].pop("default_count")
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/solver.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "SOLVER-RULE-BINDING" in proc.stdout
+    assert "default_count 缺失" in proc.stdout
+
+
+def test_missing_solver_ref_is_flagged(scratch: Path, real_rules, run_script) -> None:
+    """★ 同族：删 `assumption_grid.solver_ref` ⇒ 必须 `exit 1`（旧写法 `if ref and …` 静默跳过）。"""
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["assumption_grid"].pop("solver_ref")
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/solver.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "SOLVER-RULE-BINDING" in proc.stdout
+    assert "solver_ref 缺失" in proc.stdout

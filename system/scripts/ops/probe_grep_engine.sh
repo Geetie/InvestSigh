@@ -43,16 +43,14 @@ echo "（上面 8 行就是全部输入；任何「真值」都只能相对它�
 echo
 
 echo "============================ 逐格对照 ============================"
-printf '%-12s %-22s %-9s %-9s %-9s %s\n' \
-    '模式' '模式字节(od)' '裸grep' '/usr/bin' '★真值' '判定'
-echo "-------------------------------------------------------------------------"
+printf '%-16s %-9s %-9s %-11s %-11s %-7s %s\n' \
+    '模式' '裸BRE' '/usr BRE' '裸ERE(原样)' '/usr ERE' '★真值' '判定'
+echo "---------------------------------------------------------------------------------"
 
-# ★ 标签列必须区分 **GNU 扩展**（`\|` `\+` `\?` `\<` `\>`）与 **POSIX BRE 本有**（`\{n,m\}` `\.` `\(…\)\1`）。
-#   初版把前者也标成了 "BRE" —— 那是**标签失真**：会让人以为"BRE 坏了一半"，
-#   而实际是"GNU 扩展在 toybox 上没实现、POSIX 本有的都在"。
-#   标签错了，即使读数为真，结论也会错（`V-11` 类别轴）。
-# 每行：模式@Python 等价正则@说明
-while IFS='@' read -r pat py label; do
+# 每行：BRE 模式@**同一字符串**在 -E 下@Python 等价正则@说明
+#   ★ `-E` 列刻意用**原样字符串**（不转换）：那才是"遇到问题就加个 -E"的真实动作。
+#     `-E` 下原样字符串与转换后字符串**不是同一个量**，两列都要有真值对照。
+while IFS='@' read -r pat ere py label; do
     [ -z "${pat}" ] && continue
     case "${pat}" in \#*) continue ;; esac
 
@@ -60,19 +58,20 @@ while IFS='@' read -r pat py label; do
 
     out_bare="$(print_content | "${BARE_GREP}" -c "${pat}" 2>&1)"; rc_bare=$?
     out_real="$(print_content | "${REAL_GREP}" -c "${pat}" 2>&1)"; rc_real=$?
+    out_beraw="$(print_content | "${BARE_GREP}" -E -c "${ere}" 2>&1)"; rc_beraw=$?
+    out_reraw="$(print_content | "${REAL_GREP}" -E -c "${ere}" 2>&1)"; rc_reraw=$?
 
     truth="$("${PY}" -c '
 import re, sys
 pat = sys.argv[1]
 lines = ["aab", "ab", "a.b", "aa", "zz", "abcabc", "abb", "abab"]
 try:
-    n = sum(1 for l in lines if re.search(pat, l))
-    print(n)
+    print(sum(1 for l in lines if re.search(pat, l)))
 except re.error as exc:
     print("RE-ERR:" + str(exc))
 ' "${py}")"
 
-    # 判定：与真值一致记 OK，否则记 MISMATCH（**不做阻断**，只标记）
+    # 判定只看两个 **BRE** 列（-E 列另按同法比对，见下方汇总行）
     verdict="MISMATCH"
     if [ "${out_bare}" = "${truth}" ] && [ "${out_real}" = "${truth}" ]; then
         verdict="both-OK"
@@ -82,17 +81,19 @@ except re.error as exc:
         verdict="real-BAD"
     fi
 
-    printf '%-12s %-22s %-9s %-9s %-9s %s\n' \
-        "${label}" "${bytes}" "${out_bare}/rc${rc_bare}" "${out_real}/rc${rc_real}" "${truth}" "${verdict}"
+    printf '%-16s %-9s %-9s %-11s %-11s %-7s %s\n' \
+        "${label}" "${out_bare}/rc${rc_bare}" "${out_real}/rc${rc_real}" \
+        "${out_beraw}/rc${rc_beraw}" "${out_reraw}/rc${rc_reraw}" "${truth}" "${verdict}"
+    printf '  └ 模式字节: %s\n' "${bytes}"
 done <<'PATTERNS'
-a\|z@a|z@GNU扩展 交替
-a\+b@a+b@GNU扩展 一或多
-ab\?@ab?@GNU扩展 零或一
-\<ab\>@\bab\b@GNU扩展 词边界
-ab\{2\}@ab{2}@POSIX-BRE 区间
-a\.b@a\.b@POSIX-BRE 字面点
-ab@ab@纯字面(对照)
-\(abc\)\1@(abc)\1@POSIX-BRE 组+反向引用
+a\|z@a\|z@a|z@GNU扩展 交替
+a\+b@a\+b@a+b@GNU扩展 一或多
+ab\?@ab\?@ab?@GNU扩展 零或一
+\<ab\>@\<ab\>@\bab\b@GNU扩展 词边界
+ab\{2\}@ab\{2\}@ab{2}@POSIX-BRE 区间
+a\.b@a\.b@a\.b@POSIX-BRE 字面点
+ab@ab@ab@纯字面(对照)
+\(abc\)\1@\(abc\)\1@(abc)\1@POSIX-BRE 组+反向引用
 PATTERNS
 
 echo "-------------------------------------------------------------------------"

@@ -114,6 +114,70 @@
 
 ---
 
+### 1-5 ★ 第四轮（自查）：**"缺子键 ⇒ 门禁静默跳过"** + 我自己交付物里的**重复死代码**
+
+第三轮落地后自查"③ 是否真的把**所有**漂移都变红"，发现**同一族病在第三轮没治干净**：
+`*-RULE-BINDING` 里凡写成"**先取到值再比较**"的地方，**键被删掉**时会**静默跳过**
+（`doc.get(k) is not None and ...` / `if ref and ...` / `if isinstance(node, Mapping)`），
+于是"规则文件删掉这个键"**照样全绿**。判据③要求的是"回落值 == **真文件里的值**"——
+**没有可比对象就直接跳过**，等于把"文件里根本没写"读成"一致"。
+
+#### 修 3 —— 缺键 / 形态非法 ⇒ **违例**（不再静默跳过）
+
+逐处先判"键在不在"，再判"值对不对"（**8 处**，覆盖 4 个读口）：
+
+| # | 文件 | 键 | 改前的样子（删键后**不红**） |
+|---|---|---|---|
+| 1 | `scenario_guard` | `probability.default` | `is not None` 判 ⇒ 键没了 `.get` 回 `None` ⇒ **读成"合规 null"**（最危险：合法值就是 `null`） |
+| 2 | `scenario_guard` | `probability.must_be_null_50_50` | `bool(...)` 判 ⇒ 键没了回 `False` ⇒ **读成"已确认不默认 50/50"** |
+| 3 | `scenario_guard` | `scenario_method_blocking.when` | `if declared_when and ...` ⇒ 空/缺**静默通过**（且 `when: ""` 也过） |
+| 4 | `scenario_guard` | `scenario_method_promotion.record_method_version` | `and key in node` ⇒ 缺键跳过 |
+| 5 | `scenario_guard` | `scenario_method_status_domain` | `isinstance(list) and ...` ⇒ 形态非法跳过 |
+| 6 | `valuation` | `valuation_compute.entry` | `if declared and ...` ⇒ 缺键跳过 |
+| 7 | `solver` | `solution_set_display.{default_count,max_count}` | `is not None and ...` ⇒ 缺键跳过 |
+| 8 | `solver` | `assumption_grid.solver_ref` | `if ref and ...` ⇒ 缺键跳过 |
+
+并把 4 处 `isinstance(x, Mapping)` 换成"**在文档里但不是映射 ⇒ 形态非法**"（此前会**掉进 else 静默通过**）。
+
+#### 修 4 —— `daily_explain`：`on_hit.keep_original_judgment_time` 缺键（**值比较判不出来**）
+
+加载器在缺该键时回落 **设计逐字值 `True`**，而"应该有的值"**也是 `True`** ⇒ 两者**撞成同一个数**，
+`trigger.keep_original_judgment_time != DESIGN_...` **恒为假** ⇒ 缺键**永远不红**。
+处置：绑定里**按文档原文单独判存在性**（不靠值比较）。
+
+#### 修 5 —— `daily_explain`：删掉一段**永不可达且描述错误**的 note
+
+`load_recheck_trigger` 末段原本对"阈值键缺失"记 `NO_FORCED_RECHECK_KEY` note，声称
+"该阈值取设计逐字回落值（B2）"。**实测证伪**：
+
+```text
+[删 single_day_drop_pct] 响亮失败 DailyExplainError: rules/review.yaml:: forced_recheck 阈值非数值（None / -12）—— 不静默兜底
+```
+
+上面的 `Decimal(...)` 解析**先抛错**，那段 note **一行都执行不到**；而它的文字还宣称"回落"，
+**与真实行为相反**（真实行为是响亮失败，且这更好，符合"不许静默兜底"）。
+⇒ 删死代码 + 订正 docstring 为"阈值键缺失/非数值 ⇒ `DailyExplainError`（响亮失败）"。
+
+#### 修 6 —— ★ **我自己交付物里的重复死代码**（自曝，已进 main）
+
+审计"证据是否真在执行"时发现：第三轮提交 `148867a` 把**整块测试重复追加了两遍**：
+
+| 文件 | 第三轮前 | 第三轮后 | 其中**逐字重复**（AST 哈希相同） |
+|---|---|---|---|
+| `tests/pricelayer/test_daily_explain.py` | 20 个 `def` | 38 个 | **7 个函数 ×2**（`test_real_rules_recheck_thresholds` 等 7 条） |
+| `tests/pricelayer/test_step_wiring.py` | 10 个 `def` | 14 个 | **2 个函数 ×2** |
+
+Python 里**后一份静默遮蔽前一份** ⇒ 这 9 个副本**从不执行**（对覆盖率无损，因为是逐字副本），
+但它让"新增了多少只有效用例"**虚高**，属"看起来测了、其实没跑"的同一族病。
+处置：以 AST 哈希定位第二个副本整块删除（`+0 / -101` 与 `+0 / -30`，**纯删除**），
+并逐文件名核对关键用例仍在；**pytest 收集数不变**（遮蔽态与实际态都是 1 个/名）。
+
+> **已办**：上表 8 处缺键 + 修 4 的**永久回归用例已写并逐条执行**（9 条新用例 + 2 条反向对照）——
+> 方式见 §② V-1j：`pytest` **命令**仍未跑（`G-60` 排他窗口），但把**测试函数本体**用**手搓等价夹具**
+> 直接调用执行了断言。窗口关闭后仍需按正式路径 `verify.py --batch pricelayer` 复跑一次。
+
+---
+
 ## ② 怎么验证的（原样命令 + 原样输出 + 退出码）
 
 ### V-0 本模块测试批次（`verify.py` 正式批次）
@@ -290,6 +354,125 @@ $ python - <<'PY'    # 逐项改**真 rules/ 的副本**，再直接调该模块
       · rules/review.yaml:: forced_recheck.on_hit.keep_original_judgment_time=False 与代码回落值 True 不一致 —— `T08`…
 ```
 → **4 个对照 0 违例 + 6 个反例各 1 违例**。每一条都有对应的 pytest 用例（`exit 1` + `*-RULE-BINDING` 码面断言）。
+
+### V-1f ★ 本轮**未跑 pytest** —— 第三轮证据的性质声明（`G-60` 排他窗口）
+
+主理人指定本窗口**只给 `ws-degrade-contract`** 跑 pytest（配额判别实验）。故第三轮（裁定 ③ 落地）：
+
+- **没有跑任何 pytest**；上文 V-1d / V-1e 的证据**全部是"不建夹具、不删文件"的直连探针**：
+  `py_compile` + 直接调四个读口 / 四个 `_rule_binding_violations` + 守卫 CLI（真仓库根）。
+- **本轮新增的 pytest 用例尚未执行** —— 它们随 `verify.py --batch pricelayer` 在**窗口关闭后**复跑。
+  ★ **本报告刻意不写"新增了多少条"这个数**：手抄的条数会随新增静默过期，唯一真源是批次跑出来的读数
+  （与主理人对 `CONVENTIONS.md` 批次表的处置同一理由）。
+- 既有的 **168 passed / exit=0** 读数采集于**配额触顶之前**，仍然有效（见 §② V-0 / V-0′）。
+- **未**使用 `--no-report` / 环境变量 / 改 `_clear_work_dir` 等方式绕过 —— **绕过得来的绿不算证据**。
+
+### V-1g ★ 命令工具的可靠性（本轮环境告警后的**三重复核**）
+
+`ws-verify-shard` 广播：Bash 里 `grep` 解析到的是 **broker 包装器**（`which -a grep` 首位命中
+`…/shim/brokered-bin/grep`），症状是**静默返回空且退出码为 0** ⇒ "grep 无匹配"会被读成"确实没有"。
+本轮凡曾用 Bash `grep` 得出的结论，已**用 Python 逐条重算**（三选一里的第 3 条；亦可用 Grep 工具 / `/usr/bin/grep`）：
+
+| 结论 | Python 复算结果 | 判定 |
+|---|---|---|
+| `pre-commit.sh` 不含 pytest（口径 16） | `pytest`/`run_pytest`/`verify.py` 三者 `str.count` 与 `re.findall` **均 0**；正对照 `run_gate` = **14** | ✅ **成立** |
+| `value_source` 取值域 ∈ {`rules`,`design_default`} | 全仓 `pricelayer/*.py` 实测取值 = `['design_default','rules']` | ✅ **成立** |
+| `chmod` 只出现在夹具的副本处理 | 仅 `tests/pricelayer/conftest.py` ×1（真文件 0444 未被碰） | ✅ **成立** |
+| `pre-commit` 输出 0 FATAL | 保存件 `[FATAL]` = **0**、`全部门禁放行` = **1** | ✅ **成立** |
+| `verify.py` 批次数 | `': Batch('` = **23** | ✅ **成立** |
+| `load_unregistered_fallback` 调用点已全部改为 dataclass | 5 处代码调用点无残留元组解包（`valuation.py:201/577` 用 `.method_class`） | ✅ **成立** |
+
+★ 同时认领**同族第二处**（自查）：`python … | tail -8; echo $?` 报的是 **`tail` 的退出码**而非 python 的
+（与 `grep \|` 空真同一病灶：**测的不是被测对象**）。已改为 `cmd > file 2>&1; echo "exit=$?"`（不经管道）。
+
+### V-1h ★ 第四轮证据：**"改前绿、改后红"** 的对照表（8 处缺键 + 2 处形态）
+
+**取证方法（不建 pytest、不删文件、不动真源）**：把**HEAD 版旧模块**用 `exec` 装成独立模块
+`scripts.pricelayer._old_*`（`git show HEAD:…` 取源），与工作树新版**在同一变异根上**各算一次
+`_rule_binding_violations(...)`，再跑一次守卫 **CLI 取退出码**。变异根 = `/tmp` 里**真 `rules/` 的副本**
+（`chmod 0644` 只放开副本），真文件始终 0444、内容零改动。
+
+```text
+用例                                         模块                 旧    新   CLI
+对造 真 rules                                 scenario_guard     0    0     0
+对造 真 rules                                 valuation          0    0     0
+对造 真 rules                                 solver             0    0     0
+对造 真 rules                                 daily_explain      0    0     0
+删 probability.default                      scenario_guard     0    1     1
+删 must_be_null_50_50                       scenario_guard     0    1     1
+删 blocking.when                            scenario_guard     1    2     1
+blocking.when 置空串                          scenario_guard     1    2     1
+删 promotion.record_method_version          scenario_guard     0    1     1
+删 valuation_compute.entry                  valuation          0    1     1
+删 solution_set_display.default_count       solver             0    1     1
+删 assumption_grid.solver_ref               solver             0    1     1
+删 on_hit.keep_original_judgment_time       daily_explain      0    1     1
+```
+
+★ **"旧"列必须为 0 才说明这条反例在守东西** —— 8 处里 **6 处旧 = 0**（真·欠报），
+2 处 `blocking.when` 旧 = 1 也已在改前就红（加载器的"形态不认识"响亮失败），第四轮新增的是**绑定面**那一条（1 → 2）。
+
+`daily_explain` 单列（`_rule_binding_violations` 是两参，旧版也须传 `trigger`；用错签名会得到假读数）：
+
+```text
+用例                                           旧加载器     旧违例 |      新加载器     新违例
+对造 真 rules                                  rules       0 |        rules       0
+删 on_hit.keep_original_judgment_time        rules       0 |        rules       1
+删 on_hit 整节                                 rules       0 |        rules       1
+keep_original_judgment_time 置假              rules       1 |        rules       1
+删 single_day_drop_pct   RAISE:DailyExplainError    None | RAISE:DailyExplainError    None
+```
+
+末行即**修 5** 的证伪依据：阈值缺键时**加载器先响亮失败**（旧新一致）⇒ 那段
+`NO_FORCED_RECHECK_KEY` note **不可达**且描述与行为相反。
+
+★ **负结论带完整命令与工具名**（口径 16 的配套纪律）：上表数字全部由**本机 Python
+`str.count` / AST 哈希 / `subprocess` 退出码**得出；本行所述"旧代码"= `git show HEAD:<path>` 的字节，
+工具名 = `/Users/gaza/.workbuddy/binaries/python/envs/default/bin/python`（3.13.12），
+取值时刻见 §③ 抬头的【对象 + SHA + 取样时刻】。
+
+### V-1i ★ 本轮**未跑 pytest**（第二次声明，`G-60` 排他窗口）
+
+`team-lead` 指令："本轮窗口内其他流请不要跑 pytest …… 你的 `pricelayer` 批等它回结论，
+**在此之前不要跑 pytest**（`pre-commit` 可跑）。"
+⇒ 本轮**未运行** `verify.py --batch pricelayer`，也**未运行** `pytest` 命令；
+故**不给出**任何"通过数/耗时"。上方 V-1h 的证据**全部**是**不经 pytest** 的直连探针 + 守卫 CLI 退出码
+（`G-60` 的删除配额只影响 pytest 的 `_clear_work_dir()`，与本方式无关）。
+**待窗口关闭**：按正式路径重跑批次并回报**真**读数（含耗时）。
+
+### V-1j 本轮新增用例的**执行**证据（不跑 `pytest` 命令，但**执行测试函数本体**）
+
+本轮把 8 处缺键 + 修 4 写成永久回归用例后，**没有**留在"写了没跑"的状态：
+用 `importlib` 载入测试模块，**手搓等价夹具**（`scratch` = `mkdtemp`；
+`real_rules` = `conftest.copy_real_rules`；`run_script` = 照 `conftest` 逐字复刻的 `subprocess.run`；
+`write_jsonl` = `conftest.write_jsonl.__wrapped__()`），再按签名注入参数**直接调用测试函数**。
+
+```text
+✓ test_scenario_guard.py::test_missing_probability_default_is_flagged_not_read_as_compliant
+✓ test_scenario_guard.py::test_missing_must_be_null_50_50_is_flagged
+✓ test_scenario_guard.py::test_missing_blocking_when_and_record_method_version_are_flagged
+✓ test_scenario_guard.py::test_empty_blocking_when_is_flagged
+✓ test_scenario_guard.py::test_reverse_control_cli_passes_on_real_rules_file
+✓ test_valuation.py::test_missing_valuation_compute_entry_is_flagged
+✓ test_valuation.py::test_reverse_control_cli_passes_on_real_rules_file
+✓ test_solver.py::test_missing_default_count_is_flagged
+✓ test_solver.py::test_missing_solver_ref_is_flagged
+✓ test_solver.py::test_cli_clean_on_real_rules_file
+✓ test_daily_explain.py::test_missing_on_hit_key_is_flagged_by_binding
+✓ test_daily_explain.py::test_missing_threshold_key_fails_loudly_without_claiming_fallback
+✓ test_daily_explain.py::test_cli_clean_on_real_rules_file
+✓ test_daily_explain.py::test_trigger_missing_on_hit_key_records_note
+失败数 = 0
+```
+
+★ **这条证据的性质必须说清（不夸大）**：它证明的是**断言与夹具用法**在真实对象上成立；
+它**不等于** pytest 运行 —— 没有收集、没有 fixture 终结器、没有 `pytest_sessionstart`
+（而那正是 `G-60` 配额作用的环节）。故**不能**据此声称"批次通过"，只能声称"这些用例的断言已执行且成立"。
+★ 途中两个坑如实登记：①`pytest` 新版本**禁止直接调用 fixture 函数**（`Failed: Fixture "write_jsonl" called directly`）⇒
+改用 `.__wrapped__()`；②`daily_explain._rule_binding_violations` 是 **`(root, trigger)` 两参**，
+首轮探测用错签名得到**假读数**（"旧=1"）⇒ 已用 `inspect.signature` 核正后重测。
+
+---
 
 ### V-2 六门禁在**真仓库真源**上运行（`code_root = system`）
 
@@ -552,6 +735,27 @@ RESULT: PASS（0 violations）        EXIT=0
 - **不做**：不改 `chain_steps.py`（共享文件），仅提供两种接线并留测试（§② V-5）。
 - **不做**：不写 `rules/**`（0444 + SHA256 锁）—— 候选值全部写在测试夹具副本内。
 - **宿主抖动如实登记**：同一套 168 例在本工作树内实测 **53.89s ~ 91.26s**（≈1.7×波动，宿主配额/删除监察所致，见 `CONVENTIONS.md` 对 `rmtree` 的实测）。超时取上限 300s 正是为了**让这种抖动不误报**。
-- **本流改了 `CONVENTIONS.md`**（补批次表缺行 + 订正批次数 20→21），**这是共享文件**；改动仅限批次表两行，未触碰规范正文。若主理人认为该表应由他人维护，可整块回退。
+- **`CONVENTIONS.md` 批次表已由主理人统一处置（本流不再动它）**：主理人裁定 ② ——"`CONVENTIONS.md` 批次表 **已由我统一处置，你不要动**"：他**删掉了"批次数"这一项**（"★ 刻意不写'批次数' —— 唯一真源是 `verify.py::BATCHES`"）并补上缺失的 `valuelayer` 行。
 - **与同轮并入的 `scripts/valuelayer/_rules.py` 交叉核对（同一纪律的第二个实现，结论一致）**：该模块（13-A 价值层）把 `rules/{baseline,metric-sets}.yaml` 集中成**唯一读口**，走 `_cached_yaml`（P-02）、缺文件/缺键/值非法**响亮失败**、**不内置兜底默认值**——与本流 `solver`/`valuation`/`scenario_guard`/`daily_explain` 的读法**同构**（同一 `P-02` 读口 + 同类 note 口径）。
-  该模块对 `tbd` 与「缺键」**刻意分开**（`tbd` = 管了但待拍板 ⇒ 不可核 + note；缺键 = 根本没管 ⇒ 响亮失败），本流在**结论层面**已等价：`load_*` 在缺键时回落**设计逐字值**并记 note，而 `check()` 的 `*-RULE-BINDING` 判据集**同时**把该键列为必需 ⇒ **门禁当场 exit 1**（§② V-1c 用例②实测）。**唯一有待裁定的差异**：`_rules.py` 选择"缺键即在**读口**抛错"，本流选择"读口宽松+note、**门禁**响亮"（好处是 `load_*` 可被无门禁场景单独复用，坏处是单独调 `load_*` 时不会抛）。**若主理人裁定统一到 `_rules.py` 口径**，本流改动面 = 4 个 `load_*` 各加一处 `raise`（键名表已在常量里，无需改逻辑）。
+  该模块对 `tbd` 与「缺键」**刻意分开**（`tbd` = 管了但待拍板 ⇒ 不可核 + note；缺键 = 根本没管 ⇒ 响亮失败），本流在**结论层面**已等价：`load_*` 在缺键时回落**设计逐字值**并记 note，而 `check()` 的 `*-RULE-BINDING` 判据集**同时**把该键列为必需 ⇒ **门禁当场 exit 1**（§② V-1c 用例②实测）。**该差异已裁定**（主理人裁定 ③）：**保持现状，不统一到** `_rules.py` 的"读口即抛错"，改以 §1-4 的三条约束（设计逐字值 + `value_source`&note + 绑定断言）承担同一纪律；第四轮（§1-5 修 3）进一步把"缺子键"也纳入**门禁必红**，使两口径在**门禁层面**完全等价（差异只剩"单独调 `load_*` 时抛不抛"）。
+
+### ④-8 第四轮登记（两条）
+
+**（a）`value_source` 在"部分字段回落"时的语义 —— ★ 待裁定，本轮**不擅自改**。**
+`value_source` 是**单个**取值域为 `{rules, design_default}` 的标志，却服务**多字段**结构
+（`UnregisteredFallback{method_class, mark}`、`SolutionSetDisplay{default_count, max_count, must_show_multiple, selection, overflow}`、
+`RecheckTrigger{阈值×2, keep_original_judgment_time}`）。现口径（第三轮刻意选的、并已写进用例
+`test_unregistered_fallback_partial_key_records_note` 的 docstring）是：**只要节存在 ⇒ `rules`**，
+缺失的**子键**由 **note** 点名。第四轮实测确认它一致地等于"**子键缺 ⇒ 仍报 `rules`**"：
+
+```text
+[删 on_hit.keep_original_judgment_time] 加载成功 value_source=rules notes=("NO_ON_HIT_KEY: … 缺失 —— 取设计逐字回落值 True …",)
+```
+
+⇒ **风险**：只看 `value_source` 的下游（看板/其它门禁）会读成"这个结构整体已核"，而实际有字段来自设计回落。
+**两个候选口径**：(甲) `value_source` 改为"**全部字段都来自文件**才叫 `rules`"，否则 `design_default`（信息由 note 保留）；
+(乙) 保持现状（`rules` + 逐键 note）。★ 本流**不自行翻转**：这条已被第三轮的裁定 ③-2 解释过一次，
+翻转等于**反向改自己刚立的判据**，且会动到 3 个读口 + 若干用例 ⇒ 请主理人裁定（若选甲，改动面 = 3 个 `load_*` 各 1 行 + 1 条用例的断言）。
+
+**（b）本轮 pytest 用例：已写、已逐条**执行**，但**未跑 `pytest` 命令**（与 §② V-1i/V-1j 同一条）。
+正式路径 `verify.py --batch pricelayer` 待窗口关闭后复跑；届时在 §③ 补报**真**读数（不在此处写条数 —— 见 §② V-1i）。
