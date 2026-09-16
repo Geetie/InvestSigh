@@ -544,8 +544,12 @@ python scripts/ops/run_all_gates.py . --timeout 30
 把 **HEAD 版旧模块** `exec` 成 `scripts.pricelayer._old_*`，与新版在**同一根**上各算一次 `_rule_binding_violations`，
 再跑守卫 **CLI 取退出码** —— 表格与原始输出见报告 §② **V-1h**（★ 关键：**"旧"列必须为 0** 才说明这条反例在守东西）。
 
-**★ 本轮仍未跑 pytest**（排他窗口，`team-lead` 指令）：故**不写任何条数**；本轮的 8 处缺键 + 修 4 的
-**永久回归用例尚未写** —— 刻意**不提交"写了没跑"的用例**，待窗口关闭后与批次重跑**合并在同一次提交**里。
+**★ 本轮仍未跑 `pytest` 命令**（排他窗口，`team-lead` 指令）：故**不写任何条数**；
+但本轮的 9 条新用例 + 2 条反向对照**已写并逐条执行** —— 做法是「不跑 pytest 命令、但**执行测试函数本体**」：
+`importlib` 载入测试模块 + **手搓等价夹具**（`real_rules` 用 `conftest.copy_real_rules`、`run_script` 逐字复刻、
+`write_jsonl` 用 `.__wrapped__()`）直接调用，**失败数 = 0**（输出见报告 §② V-1j）。
+★ 该证据**不等于** pytest 运行（没有收集/终结器/`pytest_sessionstart` —— 而 `G-60` 配额正作用在那里），
+故**不能**据此声称"批次通过"；正式路径 `verify.py --batch pricelayer` 待窗口关闭后复跑并回报**真**读数。
 
 **★ 新登记 1 条待裁定**（报告 §④-8a，本轮**不擅自改**）：`value_source` 是**单**标志却服务**多字段**结构，
 现口径"节存在即 `rules`"⇒ **子键缺失时仍报 `rules`**（note 点名缺件）。候选：(甲) 全部字段都来自文件才叫 `rules`；
