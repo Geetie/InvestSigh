@@ -6,7 +6,7 @@
 - **审计员立场**：**尽力证伪**。凡我构造过用例但**未能**推翻的，逐条明说"我试了 X、Y，未推翻"。
 - **审计时 HEAD**：审计开始为 `1c35154`，主体收尾时为 **`d1efa1d`**；**报告定稿时 `main` 已推进到 `d5a37f8`**（`git reflog` 实测：`d5a37f8 ← c2933c3 ← d1efa1d ← 1c35154`）。三者**均已超出被审范围**。本报告只对被审的 11 个提交下结论；范围外的改动只在 §⑥ 以"环境事实"登记，不作为交付结论。
 - **定稿前复验（在本轮会话内重跑，非引用记忆）**：`G-42`（A1 击穿）在**当前 HEAD 的副本上重跑仍成立**（违例 6 → 0）；并新增一条 `G-RC-12`（夹具副本不完整时**静默继续**）。见 §③ 第 4 条与 §⑥ 第 6–7 条。
-- **纪律遵守声明**：全程**未修改任何被审文件**；一切实验在副本（`system/tests/.audit-b11/` 与 `/tmp/b11b3/`）中；真仓库 `system/facts/`、`system/derived/`、`system/state.json` **未被触碰**（实测 `git status --porcelain system/registry system/audit system/facts system/derived system/state.json` 为空）。
+- **纪律遵守声明**：全程**未修改任何被审文件**；一切实验在副本（仓库外的 `/tmp/investsigh-audit-b11/`，以及该目录在仓库内的旧位置 `system/tests/.audit-b11/`）中进行；**真仓库真源未被我触碰**：实测 `git status --porcelain system/registry system/audit system/facts system/state.json` 为**空**，`system/derived/` 下唯一一条 `?? system/derived/compute_gaps.jsonl` 系**他人**跑 `run_daily` 所留（见 §⑥ 第 7 条），**非我所为**。
 
 ---
 
@@ -118,8 +118,8 @@
 
 ## ④ 新发现的缺陷
 
-> 编号约定沿用 `reports/phase1_gap_register.md`（当前已用到 `G-41` / `G-RC-10`），本报告使用 `G-42` ~ `G-48` / `G-RC-11`。
-> 所有复现步骤**均在我实测通过的命令序列**上给出；实验目录已在报告完成后删除（见 §⑥）。
+> 编号约定沿用 `reports/phase1_gap_register.md`（当前已用到 `G-41` / `G-RC-10`），本报告使用 `G-42` ~ `G-48` / `G-RC-11` / `G-RC-12`。
+> 所有复现步骤**均在我实测通过的命令序列**上给出；实验脚本与副本存放在**仓库之外**（`/tmp/investsigh-audit-b11/`，含一式 `base/` 副本），**仓库工作树内不留任何我产生的中间产物**（见 §⑥ 第 5 条）。
 
 ### G-42 —— `skipped` 是自报字段、零校验：`G1-05` 可被一个凭空字符串击穿 【严重度：**高**】
 
@@ -129,7 +129,7 @@
   2. `assert_steps_complete()` 的 `G1-05` 违例由 **6 条 → 0 条**
 - **为什么是缺陷而不是设计**：裁定 R2 把 `skipped` 定义为"**行幂等命中**（`Ch9 §3.5` 阶段②，键 `(source_id, quote_hash)`）"——这是一个**可与真源交叉核对**的性质（`executor._existing_claim_keys(root)` 就能核）。当前实现把它降级为**处理器自报的自由文本**，等于把判据的强度交给被检对象自己声明。**同族**：B 组的 `degrade_first_day_exempt`（G-43）与 `bc26933` 的 `blocked_hint`（G-46）。
 - **建议修法（★ 定稿前我已实测推翻了本报告初稿给的第一版修法，故此处给的是修订版）**：
-  - ❌ **不闭合的修法（实测）**："要求 `skipped` 中每个 id 在真源中可解析" —— 我构造反向对照，桩把 `skipped` 填成真源里**真实存在**的 `claim-nvidia-newsroom-q4-fy2025-4d13454fd859`（**不存在的串**），`G1-05` 违例同样 `6 → 0`。原因：任何**真实存在**的对象引用都可被**任意一步冒领**，"存在性"根本不是"归属性"。
+  - ❌ **不闭合的修法（实测）**："要求 `skipped` 中每个 id 在真源中可解析" —— 我构造反向对照：桩把 `skipped` 填成**真源里真实存在**的 `claim-nvidia-newsroom-q4-fy2025-4d13454fd859`（**这不是我瞎编的串，是随副本复制进来的真实 claim id**），`G1-05` 违例同样 `6 → 0`。原因：任何**真实存在**的对象引用都可被**任意一步冒领**，"存在性"根本不等于"归属性"。⇒ **这条加强方案不闭合，不要再照它改。**
   - ✅ **闭合的那一半（`produced` 方向）**：`produced` 是**可判定**的——每个 ref 必须是本轮**新出现在真源里的行**（`created_at ∈ [run_started_at, run_ended_at]`）。桩报 `produced=[]` 时该条自然通过，但"**编造 `produced` 骗过完整性判据**"这一反向攻击被彻底封死。**这一条建议立即加**（成本低、无假阳性）。
   - ⚠️ **闭合不了的那一半（`skipped` 方向）**：`skipped` 的语义是"**我读了、判定无需写入**"，而"读了什么"**只能由处理器自述**——`considered` 集无论由处理器返回还是由编排器派生，最终来源都是处理器。⇒ **纯 in-band 校验不可能闭合**。
   - ⇒ **因此我建议的不是"再加一条断言"，而是把声明降格 + 留痕**：① 在 `pipeline.py` 的 docstring 与判据台账里**明确写**：`G1-05` 是"**不得静默空转**"（liveness / 记账格式）判据，**不是**"产物真实齐备"判据 —— 删掉现文中"判据强度**未削弱**"这句**会被下一次审计当成已闭合**的表述；② 让幂等命中**真实留痕**到**已登记的真源** `registry/idempotency.jsonl`（该表已在 `REGISTRY_MODELS` 里、且目前**无写入方**）记 `(step, object_ref, decision, run_id)`，把"自报"变成"**跨轮可核对的账**"；③ 把"处理器可伪造 `skipped`"作为**已知残留**登记进 `CONVENTIONS.md`，避免轮次间重复发现同一条。
@@ -202,6 +202,10 @@
 - **今天为什么还没炸**：这 4 个文件在真仓库**各 0 行**（实测），且 `grep` 显示**生产代码里没有写入点**（`audit/rule_changes.jsonl` 只在 `registry_models.py` 被登记为真源，尚无写入方）。⇒ 属**潜伏**缺陷。
 - **为什么必须现在修**：`T-13` 正在裁定"facts 扩表 18→22"，`_TRUTH_STEMS` 与 `JSONL_MODELS` 的**手工一致**（我实测今日 18=18 相等）**没有任何机器绑定**（`grep -rn "_TRUTH_STEMS" system/tests/` 只命中 conftest 自身）⇒ 下一次扩表就会出现"新真源没被清空"。
 - **建议修法**（两处机器绑定，**这正是别人正在做的任务 #55**，我只做审计登记）：① `_TRUTH_STEMS` 从 `JSONL_MODELS` **派生**（不写字面量）；② 断言 `_COPY_SKIP ∪ _TRUTH_STEMS` 覆盖 `JSONL_MODELS ∪ REGISTRY_MODELS` 的**全部**真源。
+- ★★ **合并前复核（2026-09-16，我在 `.worktrees/ws-schema-expand`（`1d09ae0`）上实测）：这条只被闭合了**一半**，且**恰好漏掉我点名的那个 case**。**
+  - ✅ **已闭合的一半（`facts/` 侧，做得对）**：`_TRUTH_STEMS` 已**不写字面量**，改为 `from schema.stems import JSONL_STEMS; _TRUTH_STEMS = tuple(JSONL_STEMS)`（`conftest.py:89-91`）；`schema/stems.py` 把清单独立成**不依赖 pydantic** 的模块（省 conftest 每批 ≈1.2s 导入），并让 `schema/models.py` **在导入期断言** `JSONL_MODELS` 键集合与它相等 ⇒ 漂移即 `AssertionError`。**这正是我建议的 ①**，而且额外解决了"pydantic 拖慢最轻批次"这个我没提到的问题。
+  - ❌ **没闭合的一半（我点名的 4 条登记层真源）**：该分支的 `_COPY_SKIP` 仍是 `{__pycache__, .pytest_cache, .venv, .work, index, reports, derived, .locks, state.json}` —— **不含 `registry`、不含 `audit`**；`_ENSURE_DIRS` 仍是 `(views, raw, derived, snapshots, index)` —— **不含 `facts`/`registry`/`audit`**；全树 `grep -n "REGISTRY_MODELS" system/ --include='*.py'` 在 **tests 侧零命中**，`_COPY_SKIP` 也**没有任何测试引用**（只有 `conftest.py:57/117` 自身）。⇒ **`registry/corporate-actions.jsonl`、`registry/quality-labels.jsonl`、`registry/idempotency.jsonl`、`audit/rule_changes.jsonl` 依然既不被清空、也不被排除、也不被断言覆盖。**
+  - ⇒ **判定**：任务 #55 的交付范围是"**4 张事实表**（18→22）+ `_TRUTH_STEMS`↔注册表绑定"，与我说的"**4 条登记层真源**"是**两回事** —— 不是虚报，而是**范围错过**。**建议在 `ws/schema-expand` 合并前补上我建议的 ②**（一条断言即可：`(_COPY_SKIP ∪ set(_TRUTH_STEMS)) ⊇ {所有 JSONL_MODELS 与 REGISTRY_MODELS 的真源相对路径}`），否则 `G-RC-11` 在"18→22 扩表"落地后**仍然是敞着的**，而扩表恰恰是放大它的动作。
 
 ### G-RC-12 —— 夹具副本**不完整时静默继续**：`_ENSURE_DIRS` 不含 `facts/`/`registry/`/`audit/`，且 `_reset_truth_source` 用 `if facts.is_dir()` 静默跳过 【严重度：**中高**（未闭合的环境风险）】
 
@@ -220,9 +224,23 @@
   ==> 10 次中 0 次不完整
   ```
 - **为什么这是缺陷（与宿主无关的那一半）**：**代码侧没有任何"副本必须完整"的守卫**。`facts/` 不在 `_ENSURE_DIRS` 里（不会被补出来），`_reset_truth_source` 用 `is_dir()` 守卫（**缺了就跳过、不响**），`code_root` 也不断言。⇒ **一旦复制缺件，测试会以"`FileNotFoundError: .../facts/claims.jsonl`"或"某守卫 `exit=1`"的形式失败，而这两者看起来都像产品缺陷。** 这正是本项目自己的铁律 **V-07「测试失败必须先区分『产品坏了』与『夹具坏了』」** 要防的事，而当前夹具**没有能力**做这个区分。
-- **可判定复现步骤**：见上框（脚本已随报告删除，逻辑即 `copytree(SYSTEM_ROOT, t, ignore=_ignore)` → `_ENSURE_DIRS` → `_make_writable` → `_reset_truth_source`，然后逐项核对 `_TRUTH_STEMS` + `registry/{corporate-actions,quality-labels,idempotency}.jsonl` + `audit/rule_changes.jsonl`）。
+- **可判定复现步骤**：见上框（脚本 `/tmp/investsigh-audit-b11/exp_fixture_integrity2.py`，逻辑即 `copytree(SYSTEM_ROOT, t, ignore=_ignore)` → `_ENSURE_DIRS` → `_make_writable` → `_reset_truth_source`，然后逐项核对 `_TRUTH_STEMS` + `registry/{corporate-actions,quality-labels,idempotency}.jsonl` + `audit/rule_changes.jsonl`；`N` 由 `sys.argv[1]` 给定）。
 - **贡献向量（实测发现）**：`system/tests/probe-f177bb76/` 是**不受 `.gitignore` 忽略的非点号目录**（`git status` 显示 `?? system/tests/probe-f177bb76/`，**1.7 MB**，内含 `system/tests/probe-f177bb76/system/tests/probe-f177bb76/…` **5 层递归自嵌套**）。而 `_ignore()` 只排除 `_COPY_SKIP` 与**以 `.` 开头**的名字 ⇒ **这个目录会被原样复制进每一个夹具副本**，且在源目录里它把"待复制项数"抬高 —— 而宿主对**单轮批量删除**有阈值（`G-RC-09`：`threshold: 9999, scope: "turn"`）。⇒ 它**同时**加重"复制更可能缺件"与"清理更可能被拒"两件事。（`system/tests/.probe-step56/` 因以 `.` 开头**不会**进副本 — 见 `_ignore()` 的 `n.startswith(".")`。）
 - **建议修法**：① `code_root` / `pristine_code_root` 在 `yield` 前加一条**响亮的完整性断言**（`for s in _TRUTH_STEMS: assert (target/"facts"/f"{s}.jsonl").exists()`，`registry`/`audit` 同理）—— 缺件时**报"夹具不完整"而不是报"产品坏了"**；② `_ENSURE_DIRS` 补 `facts`/`registry`/`audit`（或把它改为**从真源注册表派生**）；③ 清理 `probe-*` / `.probe-*` 之类实验残留，或把 `_ignore()` 改为按**前缀/白名单**排除（当前"非点号即复制"对在制品不设防）。
+
+### G-50 —— `G-48` 收口后**残留一处与 `.gitignore` 逐字相反**的注释（`conftest.py:47-49`）【严重度：**低**，但形态与 `G-48` 同族】
+
+- **背景**：实现方在 `2a8ca32` 采纳了我的 `G-48`（证伪"`derived/` 可由 `facts/ + method_version` 确定性重算"），但**按相反方向收口**：把 `derived/` **改回入库**（`.gitignore` 的忽略块整段移除、改写成"★ 关于 `system/derived/`：**它是真源，必须入库**（此结论经独立审计证伪后更正，缺口 `G-48`）…"）。这是需求方在两种正当收口之间的选择，**我接受**。
+- **但残留了相反声明**：`system/tests/conftest.py:47-49` 至今写着 ——
+  ```
+  #   `derived` 已定为**非唯一真源**（见 `.gitignore` 的更正注释与
+  #   `append_only_guard` 的 pathspec = `system/facts/*.jsonl`），
+  #   故与 `index` / `reports` 同等待遇：**不复制**；`_ENSURE_DIRS` 会把空目录补回来。
+  ```
+  ⇒ 三处问题：① 它**引用的 `.gitignore` 现在说的正好相反**（"它是真源，必须入库"）；② 它把 `append_only_guard` 的 pathspec **当成"非真源"的证据** —— 而这**恰是提交信息里自己点名撤回的那个推理错误**（"把'守卫没覆盖'读成'该性质不成立'"）；③ 它对 `.gitignore` 的"更正注释"的**转述已过期**。
+- **判定**：`_COPY_SKIP` 含 `derived` 这个**行为本身仍然正确**（夹具必须从**空真源**起步），错的只是**理由**。⇒ 无需改行为，**只需改注释**。
+- **建议修法**：把 `:47-49` 改为"`derived` 是**真源**（`G-48` 更正），但夹具契约要求**空真源** ⇒ 与 `index`/`reports` **同等待遇：不复制**；`_ENSURE_DIRS` 补回空目录"。
+- **★ 为什么仍要登记**：这已经是本项目**第三次**出现"同一件事两处相反声明"（`G-48` 的 `.gitignore` vs `store.py`；`G-42` 的裁定 R2 vs `ingest_step.py`；本轮这条）。**同一形态反复出现，说明缺的不是某一条注释，而是"改一处必须扫全仓同主题措辞"的机制。** 我在 §⑧ 第 3 条给了可判定的做法。
 
 ---
 
@@ -250,16 +268,16 @@
    ```
    **单文件逐一跑全部通过**（`15 passed` / `13 passed` / `21 passed`）。⇒ **那些失败不是产品缺陷，是我的方法缺陷。**（该守卫的实现 `conftest._acquire_session_lock` 与 `tests/guards/test_session_lock.py` 在我审计时为**未提交的在制品**，**不在被审 11 个提交内**，故不作为交付结论；但我如实记录：它**修掉了我实际踩到的坑**，缺口登记为 `G-RC-10`。）
    - **独立旁证**：该修复随后合入为 **`d1efa1d`**（**在我被审范围之外**），其提交信息**独立复述了我上面这个诊断**——"`ps` 显示当时**至少 5 个 pytest 会话并发**，其中**两个在同一工作树**里跑 `tests/injection`…而 `conftest.pytest_sessionstart` **会整个清空同一个 `system/tests/.work/`** ⇒ **互删对方正在用的夹具副本**"。⇒ 我的结论与实现方的复核**互相印证**。
-3. **一致性旁注（`d1efa1d` 已合入后**仍**成立，故登记为可判定缺陷，**不计入被审 11 个提交**）**：`CONVENTIONS.md:132`「V-05 **强制手段**：⚠️ **人工**（守卫无法可靠检测并发进程）」与 `:241` 表格行 `| V-05 | ⚠️ 人工（并发不可靠检测）；…`，**在 `d1efa1d` 落地后仍未被更新**（实测 `grep -n "V-05" system/CONVENTIONS.md` 仍是原文），而同提交已交付 `tests/guards/test_session_lock.py`（PID 存活检测 + 陈旧锁自愈 + 专用测试）⇒ **规范条文与实现相反**（此处方向是**代码强于文档**）。按本项目自己的铁律第 5 条（"声明与实现必须有机器绑定"），**建议由 `d1efa1d` 作者顺手把 V-05 的"强制手段"改为"机器 + `tests/guards/test_session_lock.py`"**。
+3. **一致性旁注（登记时**仍**成立，故登记为可判定缺陷，**不计入被审 11 个提交**）**：`CONVENTIONS.md:132`「V-05 **强制手段**：⚠️ **人工**（守卫无法可靠检测并发进程）」与 `:241` 表格行 `| V-05 | ⚠️ 人工（并发不可靠检测）；…`，**在 `d1efa1d` 落地后仍未被更新**（实测 `grep -n "V-05" system/CONVENTIONS.md` 仍是原文），而同提交已交付 `tests/guards/test_session_lock.py`（PID 存活检测 + 陈旧锁自愈 + 专用测试）⇒ **规范条文与实现相反**（此处方向是**代码强于文档**）。按本项目自己的铁律第 5 条（"声明与实现必须有机器绑定"），**建议由 `d1efa1d` 作者顺手把 V-05 的"强制手段"改为"机器 + `tests/guards/test_session_lock.py`"**。★ **该条已闭合**：`2a8ca32` 已把 `CONVENTIONS.md:257` 改为"**人工（动测前 `ps`）+ 机器（`tests/.work/.session.lock` 排他会话锁，`returncode=4`）**"，我在收口前复验通过（见 §⑧ 第 4 条）。
 4. **我的实验目录被外部清空**：审计中途 `system/tests/.audit-b11/` 下除我**刚写的一个文件**外的全部内容（`base/`、全部 `case-*/`、全部 `exp_*.py`）被**外部清空**（目录 mtime 20:06–20:07）。我**没有**任何脚本会删这个目录（我的脚本只删自己创建的 `case-*/probe-*` 子目录）。**为不引用"记忆里的数字"，我把关键结论（A1 击穿、B1 绕过、B3 新旧对比）在本轮用重建的脚本 + `git show 4f95c3d:…` **全部重跑了一遍**，报告中的数字**全部来自本轮的实测输出**。顺带确认：`.audit-b11` 以 `.` 开头 ⇒ 被 `_ignore()` 排除，**从未**污染夹具副本。
-5. **审计纪律**：未修改任何被审文件（`git status` 中被审范围内的文件无我的改动）；真仓库真源未动（`system/registry`、`system/audit`、`system/facts`、`system/derived`、`system/state.json` 的 `git status` 为空）。我自己的实验目录**全部在仓库之外**（`system/tests/.audit-b11/` 与 `/tmp/investsigh-audit-b11/`），**其中 `.audit-b11` 以 `.` 开头、被 `_ignore()` 排除，从未污染夹具副本**；该目录我在定稿前**移出仓库**（`mv system/tests/.audit-b11/* /tmp/investsigh-audit-b11/`，随后 `rmdir`），现 `git status` 只剩本报告这一个由我新增的文件。
+5. **审计纪律**：未修改任何被审文件（`git status` 中被审范围内的文件无我的改动）；真仓库真源未被我触碰 —— 实测 `git status --porcelain system/registry system/audit system/facts system/state.json` **为空**；`system/derived/` 下唯一一条 `?? system/derived/compute_gaps.jsonl` 是**他人**跑 `run_daily` 落下的（见下第 7 条），**非我所为**（我的全部实验在副本内进行）。我自己的实验目录**全部在仓库之外**（`system/tests/.audit-b11/` 与 `/tmp/investsigh-audit-b11/`），**其中 `.audit-b11` 以 `.` 开头、被 `_ignore()` 排除，从未污染夹具副本**；该目录我在定稿前**移出仓库**（`mv system/tests/.audit-b11/* /tmp/investsigh-audit-b11/`，随后 `rmdir`），现 `git status` 中由我新增的文件**只有本报告**。
 6. **★ 定稿前新增的两条实测（本轮会话内，非引用记忆）**：
    - **A1 在当前 HEAD 上重跑仍成立**：违例 `6 → 0`；且**"要求 skipped 的 id 真实存在于真源"这一加强方案也不闭合**（见 §② A 组 A1 行与 `G-42` 修法）。
    - **`G-RC-12`（夹具副本静默不完整）**：broker 开启 30 次 **7 次**缺件 / broker 关闭 10 次 **0 次**缺件；**代码侧无完整性断言**。⇒ 我因此**撤回**本报告初稿里"E 附：夹具副本稳定完整 —— 未证伪"这条（§③ 第 4 条已改写）。
 7. **范围外的环境事实（不作为交付结论，仅供主理人排期参考）**：
    - `main` 在被审范围外继续推进：`1c35154 → d1efa1d → c2933c3 → d5a37f8`（`git reflog` 实测）。
    - **`G-44` 已被在制品覆盖**：`git branch` 显示存在分支 **`ws/step56-skipped`**，且定稿瞬间 `git status` 有 `M system/scripts/orchestrate/pipeline.py`、`M system/scripts/ops/verify.py`、`M system/CONVENTIONS.md`（**均为他人正在编辑的文件，我一个字未改**）。⇒ 我对 `G-44` 的结论**只对 `790643c` 那一刻的 `chain_steps.py` / `compute/step.py` / `decision/step.py` 成立**；若 `ws/step56-skipped` 已让计算层/决策层按裁定 R2 回填 `skipped`，请以该分支的实测输出为准，并把本条按"已闭合 / 未闭合"在台账上更新。
-   - **真仓库出现一条新的未跟踪产物**：`?? system/derived/compute_gaps.jsonl`（他人跑的 `run_daily` 落下的）。⇒ 这**恰好印证 `5a314a3` 的判断是必要的**（`derived/` 非唯一真源、不该进版本库），但也说明 **`derived/` 在真仓库里是"活的"**：它现在有内容，而它**不在** `_reset_truth_source` 的清空清单里 —— 好在 `_COPY_SKIP` 已含 `derived`（`23f78db` 之前的 `5a314a3`），夹具因此不受影响。**这是我唯一确认"已闭合"的同族缺口。**
+   - **真仓库出现一条新的未跟踪产物**：`?? system/derived/compute_gaps.jsonl`（他人跑的 `run_daily` 落下的）。⇒ 说明 **`derived/` 在真仓库里是"活的"**：它现在有内容，而它**不在** `_reset_truth_source` 的清空清单里 —— 好在 `_COPY_SKIP` 已含 `derived`，夹具因此不受影响。**这一条我在 `G-48` 收口后已复核为"已闭合"**（详见 §⑧ 第 3 条）。
 
 ---
 
@@ -267,15 +285,31 @@
 
 | 交付 | 档位 |
 |---|---|
-| `4f95c3d` `skipped` 字段与 `G1-05` | **不够**（字段是自报、无校验；step 1 口径反向 ⇒ 判据在一半的步上恒假） |
+| `4f95c3d` `skipped` 字段与 `G1-05` | **不够**（字段是自报、无校验；step 1 口径反向 ⇒ 判据在一半的步上恒假）→ ★ **`G-42` 已按"如实降格 + 加互斥校验"收口，我复验：互斥校验生效、原攻击仍成立（残余已由实现方声明）** —— 见 §⑧ 第 1 条 |
 | `790643c` step 2 接线 | **好**（判别式成立，我三连跑复现） |
 | `fd49a20` 首日豁免 | **不够**（死代码修好了，谓词却恒误豁免；计数可见但含义不可信） |
-| `5a314a3` `derived/` 归属 | **错**（"真源/非真源"两套声明逐字共存；"可重算"理由实测不成立） |
+| `5a314a3` `derived/` 归属 | **错**（"真源/非真源"两套声明逐字共存；"可重算"理由实测不成立）→ ★ **该结论已被实现方采纳并按相反方向收口**（`derived/` 改回入库），我复验后**判定为"已闭合（残留一处注释未清，见 `G-50`）"** —— 见 §⑧ 第 3 条 |
 | `23f78db` 夹具不继承 `state.json` | **好**（就该文件而言）／**不够**（同族 4 个登记层真源未覆盖、无机器绑定；副本完整性**无断言** ⇒ 缺件时静默继续） |
-| `3f4c372` `_stage_gate_verdict` | **不够**（方向检测成立；缺无歧义检查） |
+| `3f4c372` `_stage_gate_verdict` | **不够**（方向检测成立；缺无歧义检查）→ ★ **`G-47` 已修，我复验生效**（见 §⑧ 第 2 条） |
 | `bc26933` 判据有效性门禁 | **好**（三条绑定实测拦得住）／**不够**（`blocked_hint` 无语义核对） |
 | `016f311` 缺口登记 | **好**（`G9-1` 可独立复现，输出逐字一致） |
 
 **给主理人的一句话**：本批次**有真修实**（step 2 的判别力、判据有效性门禁的两向绑定），但 `G-42` / `G-43` / `G-44` 三条都属于**同一形态**——"**判据/字段有了，但校验它的那一侧没有接上**"，因此三个关键守卫**当前都能被机器证明失效**（`G1-05` 6→0；首日豁免真违规被放过；第二次 `run_daily` 恒 `blocked`）。这三条**建议按"高"优先级进下一批**，`G-44` 尤其紧急——它意味着**生产上第二次跑 `run_daily` 就会 `blocked`**。
 
 **还有一条必须单独说的（`G-RC-12`）**：`G-42`/`G-43`/`G-44` 的结论**全部依赖"夹具副本是真的"**。而我实测：broker 开启时 30 次夹具构造里 **7 次静默缺件**（缺 `facts/`/`registry/`/`audit/` 等约 30 项，`copytree` **不抛异常**），broker 关闭时 10 次 0 次缺件；**代码侧没有任何"副本必须完整"的断言**（`facts` 不在 `_ENSURE_DIRS`，`_reset_truth_source` 用 `if facts.is_dir()` 静默跳过）。⇒ 请把"**夹具缺件 ⇒ 报『夹具不完整』而不是报『产品坏了』**"当作**独立一条**排期：否则本批次我与前几批审计员**都可能在读一份被悄悄改了输入的实验**，而每一次这样的失败都会被记成产品缺陷。
+
+---
+
+## ⑧ 审计后复核：实现方 `2a8ca32` 的收口，我**不采信提交信息**、逐条在机器上复验
+
+> **为什么单开一节**：本报告定稿时发现实现方已把本报告作为交付物入库（`2a8ca32`），并在同一提交里宣称处置了 `G-42` / `G-47` / `G-48` / `V-05`。按 `§九`（**实现方不得自证完成**），**提交信息不是证据**。我用当前 HEAD 的 `system/` 副本重跑了五组输入（脚本 `/tmp/investsigh-audit-b11/exp_recheck_fixes.py`，`exit=0`）。
+
+| # | 实现方宣称 | 我的独立复验 | 判定 |
+|---|---|---|---|
+| 1 | `G-42`：新增 `produced ∩ skipped ≠ ∅` 互斥校验；并把"判据强度未削弱"改为**如实降格**（"自报式不变量兜底，不能抓蓄意伪造"） | **互斥校验真的生效**：<br>`produced=['x-1'] skipped=['x-1'] → 违例 6 条`（报"第 1 步…的 produced 与 skipped **相交**：['x-1']"）<br>`produced=[x-1,x-2] skipped=[x-2,x-3] → 违例 6 条`（**部分相交也拦得住**）<br>`produced=['x-1'] skipped=['y-1'] → 违例 0 条`（**无误伤**）<br>**原攻击仍成立**：`produced=[] skipped=['claim-我瞎编的-不存在于真源'] → 违例 0 条`<br>**反向对照仍成立**：`produced=[] skipped=[] → 违例 6 条`（空执行照样被拦） | ✅ **修复生效、且残余已如实登记** ⇒ 按我现在掌握的信息，`G-42` 可判为**"已按可接受方式收口"**（不再要求它"闭合"—— 我在 §④ 已证明 `skipped` 方向**不可能** in-band 闭合）。 |
+| 1-附 | 未修 `skipped` 存在性核对，理由是"`assert_steps_complete` 拿不到 `root`…要加需改共享签名，不在本次自裁范围" | **这条理由比真实理由弱，且未穷尽替代方案**：① **真实理由是**"**存在性 ≠ 归属性**"—— 我已实测：把 `skipped` 填成真源里**真实存在**的 id，违例同样 `6 → 0` ⇒ **即便拿得到 `root`，这条核对也不闭合**；② 替代方案确实存在且**不破坏共享签名**：给 `assert_steps_complete(result, registered_hooks, *, root: Path \| None = None)` 加**可选 kwarg**（调用点只有 `pipeline.py` 自身的 2 处 + 测试），默认 `None` 时行为逐字不变。 | ⚠️ **请实现方把理由改成真实理由**（避免下一位读者以为"改个签名就能闭合"而白做一轮）。**但结论不因此改变**：`G-42` 的残余**只能靠换人审计 + 读代码**，这一点实现方写对了。 |
+| 2 | `G-47`：`_stage_gate_verdict` 歧义即响亮失败 | **五组输入实测**：<br>`② 有 BLOCKED + exit 1` → `ok=True`（合规，正确通过）<br>`③ 同阶段 daily_run 同时 PASS+BLOCKED + exit 0` → `ok=False  why=…**同时**出现…判据不自洽，无法据以判定（**不得静默取其一**，尤其不得取 PASS）` ← **原实现此处静默取 PASS，已堵住**<br>`④ 缺一个阶段` → `ok=False  why=以下阶段既未标 PASS 也未标 BLOCKED（可能静默跳过）：['daily_run']`<br>`⑤ 全 BLOCKED + exit 0` → `ok=False  why=存在阻塞阶段 … 却 exit=0 —— 疑似把阻塞阶段判成通过` | ✅ **生效**（我上面第 ① 组输入是我自己构造有误——`head.replace()` 漏造了 `daily_run`，与代码无关，如实登记）。 |
+| 3 | `G-48`：采纳我的证伪，但**按相反方向**收口 —— `derived/` **改回入库**（`.gitignore` 的忽略块整段删除） | 实测：`git ls-files system/derived` → `system/derived/.gitkeep`、`system/derived/compute_gaps.jsonl`（**已跟踪**）；`.gitignore` 的新注释**逐字引用了我的三条论据**并写明"该前提是错的，已撤回"，且**明确不把 `append_only_guard` 的覆盖缺口当作"非真源"的证据**（这正是它自己上次的推理错误）。<br>**夹具侧一致性我单独查了**：`_COPY_SKIP` 仍含 `derived`（**行为正确** —— 夹具契约是"空真源"）；`_reset_truth_source` 不清 derived stem，但因不复制故副本里必为空 ⇒ **`G-RC-11` 同族缺口在 `derived/` 上恰好不成立**。 | ✅ **收口有效，我接受这个方向**（在"改 `store.py` 措辞"与"`derived/` 入库"之间选后者是需求方权限）。⚠️ **但残留一处相反注释** → **`G-50`**（`conftest.py:47-49` 仍写"`derived` 已定为**非唯一真源**（见 `.gitignore` 的更正注释…）"，而 `.gitignore` 现在说的正好相反）。 |
+| 4 | `V-05` 规范已从"⚠️ 人工"同步为"人工 + 机器" | 实测 `grep -n "V-05" system/CONVENTIONS.md` → `:257 \| V-05 \| **人工（动测前 ps）+ 机器（tests/.work/.session.lock 排他会话锁，returncode=4，见 G-RC-10）**；留档由 verify.py 自动完成 \|` | ✅ **已同步**（原为"⚠️ 人工（守卫无法可靠检测并发进程）"）⇒ 我在 §⑥ 第 3 条登记的"规范与实现相反"**已闭合**。 |
+
+**3-附：一条机制建议（对 §④ `G-50` 收尾）** —— 本轮已第三次出现"同一件事两处相反声明"。建议加一条**可判定**的收口动作，而不是靠人记得：**凡修改某条声明的提交，必须在提交信息里列出 `grep -rn "<被改措辞>" system/` 的全部命中并逐条说明"已同步 / 不适用"**。这不需要新守卫（人类可读即可判定），但能让 `G-48`/`G-50` 这类"改了一半"在**提交那一刻**就暴露，而不是等下一轮审计。
