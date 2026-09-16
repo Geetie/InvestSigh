@@ -112,6 +112,8 @@ RULE_KEY_ASSUMPTION_GRID = "assumption_grid"
 RULE_KEY_MUST_SHOW_MULTIPLE = "must_show_multiple"
 RULE_KEY_DEFAULT_COUNT = "default_count"
 RULE_KEY_MAX_COUNT = "max_count"
+RULE_KEY_SELECTION = "selection"
+RULE_KEY_OVERFLOW = "overflow"
 RULE_KEY_SOLVER_REF = "solver_ref"
 
 RULE_BOUND_ENTRIES: tuple[tuple[str, str], ...] = (
@@ -125,11 +127,16 @@ RULE_BOUND_ENTRIES: tuple[tuple[str, str], ...] = (
 class SolutionSetDisplay:
     """`rules/valuation-methods.yaml::solution_set_display` 的解析结果（**带来源标注**）。
 
-    - `value_source`：`"rules"` = 取自规则文件；`"design_default"` = 文件/键缺失，取
-      **设计逐字值**（`DEFAULT_DISPLAY_CAP` / `MAX_DISPLAY_CAP` / `DESIGN_MUST_SHOW_MULTIPLE`）。
-    - `notes`：**`value_source == "design_default"` 时必非空** —— 逐条写明**缺的是什么**，
-      使"不走门禁的调用方"也能看到"值其实不是从规则读到的"（主理人裁定 ③-2：
-      `design_default` 必须打 note，否则就是静默降级）。
+    - `value_source`：`"rules"` = **本结构全部字段都来自文件**；`"design_default"` =
+      **至少一个字段不是从文件读到的**（含"键缺失 ⇒ 取设计逐字回落值"与"规则未声明该
+      标签 ⇒ 空串"两种情况，逐条见 `notes`）。
+      ★ **主理人第五轮裁定（甲）**：本标志的单位 = **它声称覆盖的单位**（整个结构）。
+      若结构内**有**字段落到回落值而标志仍写 `rules`，只读本标志的下游就会得到
+      「**整块已核**」——而事实是**部分未核**（`V-11` 类别轴：样本性质被上推到类别；
+      `G-62`：不可区分）。故改为"全来自文件才叫 `rules`"。
+      ★ **不丢信息**：缺键事实由 `notes` 保留；改标志只是**不再过度声称**，不是删信息。
+    - `notes`：记每条**未**从文件读到的字段（主理人裁定 ③-2：`design_default` 必须打 note，
+      否则就是静默降级）。★ 由构造保证：`notes` 非空 ⟺ `value_source == "design_default"`。
     """
 
     default_count: int
@@ -178,29 +185,71 @@ def load_solution_set_display(root: str | Path | None = None) -> SolutionSetDisp
     node = doc.get(RULE_KEY_SOLUTION_SET_DISPLAY)
     if not isinstance(node, Mapping):
         return _fallback(f"{VALUATION_METHODS_YAML} 缺/非法键 {RULE_KEY_SOLUTION_SET_DISPLAY!r}")
-    default_count = int(node.get(RULE_KEY_DEFAULT_COUNT) or DEFAULT_DISPLAY_CAP)
-    max_count = int(node.get(RULE_KEY_MAX_COUNT) or MAX_DISPLAY_CAP)
-    must_show_multiple = bool(node.get(RULE_KEY_MUST_SHOW_MULTIPLE, DESIGN_MUST_SHOW_MULTIPLE))
+    notes: list[str] = []
+
+    def _int_field(key: str, code_default: int) -> int:
+        """**先判键在不在，再判值合不合法**（第四轮修 3 的同一条纪律）。
+
+        ★ 旧稿写 `int(node.get(key) or code_default)`：**键在但值为 `0`/`None` 时会被 `or`
+          悄悄换成回落值且不留 note** ⇒ 标志会误报 `rules`（`G-03`：静默不是通过）。
+        """
+        if key not in node:
+            notes.append(
+                f"NO_DISPLAY_KEY: {VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
+                f"{key} 缺失 —— 该字段取设计逐字回落值 {code_default}（非'已核'）"
+            )
+            return code_default
+        try:
+            return int(node[key])
+        except (TypeError, ValueError) as exc:
+            raise PriceLayerError(
+                f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}.{key}="
+                f"{node[key]!r} 非整数 —— 不静默兜底（旧稿会把 0/None 悄悄换成回落值 "
+                f"{code_default} 且不留痕）"
+            ) from exc
+
+    default_count = _int_field(RULE_KEY_DEFAULT_COUNT, DEFAULT_DISPLAY_CAP)
+    max_count = _int_field(RULE_KEY_MAX_COUNT, MAX_DISPLAY_CAP)
+    if RULE_KEY_MUST_SHOW_MULTIPLE not in node:
+        notes.append(
+            f"NO_DISPLAY_KEY: {VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
+            f"{RULE_KEY_MUST_SHOW_MULTIPLE} 缺失 —— 该字段取设计逐字回落值 "
+            f"{DESIGN_MUST_SHOW_MULTIPLE}（非'已核'）"
+        )
+        must_show_multiple = DESIGN_MUST_SHOW_MULTIPLE
+    elif not isinstance(node[RULE_KEY_MUST_SHOW_MULTIPLE], bool):
+        raise PriceLayerError(
+            f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
+            f"{RULE_KEY_MUST_SHOW_MULTIPLE}={node[RULE_KEY_MUST_SHOW_MULTIPLE]!r} 非布尔 —— "
+            "不静默兜底（旧稿 `bool(...)` 会把 `null` 悄悄读成 `False` ⇒ 多解下限退化为 1）"
+        )
+    else:
+        must_show_multiple = node[RULE_KEY_MUST_SHOW_MULTIPLE]
+
     if default_count < 1 or max_count < 1 or default_count > max_count:
         raise PriceLayerError(
             f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY} 取值非法："
             f"default_count={default_count} / max_count={max_count} "
             "（须为正整数且 default_count <= max_count；不静默夹紧）"
         )
-    notes: list[str] = []
-    for key in (RULE_KEY_DEFAULT_COUNT, RULE_KEY_MAX_COUNT, RULE_KEY_MUST_SHOW_MULTIPLE):
+    for key in (RULE_KEY_SELECTION, RULE_KEY_OVERFLOW):
         if key not in node:
             notes.append(
                 f"NO_DISPLAY_KEY: {VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
-                f"{key} 缺失 —— 该字段取设计逐字回落值（非'已核'）"
+                f"{key} 缺失 —— 规则文件未声明该标签，字段为空串"
+                "（**无设计逐字值可回落**）（非'已核'）"
             )
     return SolutionSetDisplay(
         default_count=default_count,
         max_count=max_count,
         must_show_multiple=must_show_multiple,
-        selection=str(node.get("selection") or ""),
-        overflow=str(node.get("overflow") or ""),
-        value_source="rules",
+        selection=str(node.get(RULE_KEY_SELECTION, "")),
+        overflow=str(node.get(RULE_KEY_OVERFLOW, "")),
+        # ★ 主理人第五轮裁定（甲）：标志的单位 = 它声称覆盖的单位（整个结构）。
+        #   **全部字段都来自文件**才叫 `rules`；否则 `design_default`（缺件事实由 notes 保留）。
+        #   → 反向对照（`G-05`）：字段齐全时**必须仍报 `rules`**，否则标志退化成"永远
+        #     design_default"，与"永远 rules"一样没用。
+        value_source="rules" if not notes else "design_default",
         notes=tuple(notes),
     )
 
