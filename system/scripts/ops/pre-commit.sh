@@ -118,6 +118,13 @@ run_gate "quote_provenance_guard" "$CODE_ROOT/scripts/checks/quote_provenance_gu
 #      两处口径不一致本身就是同一族的缺陷。
 run_gate "scenario_tag_binding_guard" "$CODE_ROOT/scripts/checks/scenario_tag_binding_guard.py" "$CODE_ROOT"
 
+# ⑭ 键对齐（批次 13-pre 方向 1）：**代码读的 `rules/` 键必须存在** ——
+#    `dict.get()` 读一个不存在的键时静默返回 `None`，被 `or ""` 洗成"看起来合法"的值，
+#    于是"这条规则其实没被读"在**任何输出里都不可见**。
+#    两条断言：① 代码引用的规则文件必须存在；② 代码读的键必须在实有键里。
+#    ★ 与 `run_all_gates.py::GATES` **同时**登记（`G-07`）。
+run_gate "rule_key_alignment_guard" "$CODE_ROOT/scripts/checks/rule_key_alignment_guard.py" "$CODE_ROOT"
+
 if [ "$FAILED" -ne 0 ]; then
   echo "pre-commit: 有门禁阻断，提交被拒。" >&2
   exit 1

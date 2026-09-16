@@ -63,6 +63,12 @@ GATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     # 值相同、各自自洽，改一侧另一侧不会红 ⇒ 漂移可无限期存在。
     # ★ 这是**合并的产物**（两条流各自自洽），单流自检不可能发现 —— 故必须有一道**跨载体**的门。
     ("scenario_tag_binding_guard.py", "scripts/checks/scenario_tag_binding_guard.py", ()),
+    # ── 批次 13-pre 方向 1：**代码读的 `rules/` 键必须存在** ──
+    # 形态：`dict.get()` 读一个规则文件里**不存在**的键 ⇒ 静默返回 `None` ⇒ 被 `or ""` 洗成
+    # 合法值 ⇒ "这条规则其实没被读"在任何输出里不可见（`T-18`/`G-50`/`G-55`/`G-57`/`G-58` 同族的第六种）。
+    # 两条断言：① 代码**引用**的规则文件必须存在；② 代码**读**的键必须在实有键里。
+    # ★ 白名单按 `口径 13` 逐条带 reason/owner/预期何时有消费者/review_by，且输出比值。
+    ("rule_key_alignment_guard.py", "scripts/checks/rule_key_alignment_guard.py", ()),
 )
 
 TIMEOUT_MARK = "TIMEOUT"
