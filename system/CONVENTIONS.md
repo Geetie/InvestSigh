@@ -92,8 +92,15 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
 ★★ **本表刻意**不写**「片数」与「例数」**（`#91`；与本节开头"刻意不写批次数"同一条规矩，此前只执行了一半）：
 唯一真源 = `verify.py::INJECTION_SHARDS`（片数）＋ `tests/injection/test_shard_coverage.py` 的
 `--collect-only` **现算**断言（每片例数）。**超时列的真源是 `verify.py::BATCHES` 的 `timeout` 字段。**
-本表此前写死过片数与例数，实测已漂移（写「6 片」实为 **7**；`a` 写 27 实为 **30**、`b` 写 28 实为 **32**、
-`d` 写 31 实为 **29**、`f` 写 31 实为 **27**，`g` **整行缺失**；`pricelayer` 写 168 实为 **183**）
+本表此前写死过片数与例数，实测已漂移。★ **下面这串全是「当时读数」（`#91`，2026-09-16），不是真值**
+（按 `V-11` 规则 9：引用另一份文件的数字须带限定词）：写「6 片」当时实为 **7**；`a` 写 27 当时实为 **30**、
+`b` 写 28 当时实为 **32**、`d` 写 31 当时实为 **29**、`f` 写 31 当时实为 **27**，`g` **整行缺失**；
+`pricelayer` 写 168 当时实为 **183**。
+⇒ ★★ **「当时读数」会继续过期，别把它们当基准**：`pricelayer` 已 `183 → 192 → 201`；
+`injection-b` 已 `32 → 34`。**取数命令**（复算用这两条，别照抄任何数字）：
+① 整批：`python system/scripts/ops/verify.py --batch injection-b`，读门禁自印的 `N passed`；
+② 逐片：以 `test_shard_coverage.py::_collect_count` 现算，**片数唯一真源 = `verify.py::INJECTION_SHARDS`**。
+（★ 复算陷阱：`_collect_count` 里的 `--noconftest` **会吃掉 parametrize 出来的用例**，照抄它手算是会得到错数的。）
 ⇒ 漂移记录与复算见 `reports/ws_fixture_cost_report.md`（卡 13-F/`#91`）。**超时列本身也曾有 6 行过期**
 （`unit`/`guards` 写 60s 实为 300s、`compute` 60→180、`validators` 30→90、`claim`/`decision` 30→120）—— 同一次一并订正。
 
