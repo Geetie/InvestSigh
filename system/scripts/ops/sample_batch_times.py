@@ -334,15 +334,35 @@ def _cell_for(name: str) -> Cell:
                 f"（未知批次：按清单最大值 {UNKNOWN_FIXTURE_CASES} 例**保守上界**估计）", assumed=True)
 
 
-def _main_sha(root: Path) -> str:
-    """取 `refs/heads/main` 的 SHA —— 读数必须能与一个**确定的代码状态**对应。"""
+def _git_rev(root: Path, rev: str) -> str:
+    """取任意 rev 的 SHA（`git` 不可用时返回**带原因的字符串**，不静默）。"""
     try:
         out = subprocess.run(
-            ["git", "rev-parse", "refs/heads/main"],
-            cwd=str(root), capture_output=True, text=True, check=False,
+            ["git", "rev-parse", rev], cwd=str(root), capture_output=True, text=True, check=False,
         )
-        return out.stdout.strip() or "unknown(rev-parse 无输出)"
+        return out.stdout.strip() or f"unknown(rev-parse {rev} 无输出)"
     except OSError as exc:  # git 不在 PATH 等
+        return f"unknown({exc.__class__.__name__})"
+
+
+def _main_sha(root: Path) -> str:
+    """取 `refs/heads/main` 的 SHA —— 读数必须能与一个**确定的代码状态**对应。"""
+    return _git_rev(root, "refs/heads/main")
+
+
+def _head_dirty(root: Path) -> bool | str:
+    """本工作树是否有未提交改动。
+
+    ★★ 为什么必须记：**被测对象是本工作树的工作区内容**，不是 `main` 的 SHA。
+    工作区脏 ⇒ 读数对应的代码状态**没有名字**（`V-11` 仪器轴）⇒ 必须显形，不许当成干净读。
+    """
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain"], cwd=str(root),
+            capture_output=True, text=True, check=False,
+        )
+        return bool(out.stdout.strip())
+    except OSError as exc:
         return f"unknown({exc.__class__.__name__})"
 
 
@@ -542,6 +562,9 @@ def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str)
             pytest_exit = int(m.group(1))
             elapsed = float(m.group(2))
             timeout = float(m.group(3))
+        # ★ `passed` 数（主理人要求的读数四元组之一）；取不到 ⇒ `None`（**不写 0**）。
+        mp = re.search(r"(\d+) passed", blob)
+        passed = int(mp.group(1)) if mp else None
 
         rows.append({
             "batch": name,
@@ -549,6 +572,11 @@ def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str)
             "started_at_local": started.isoformat(timespec="seconds"),
             "started_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
             "main_sha": _main_sha(root),
+            # ★★ **被测对象**是本工作树的工作区内容（`verify.py` 就在它里面跑）⇒
+            #    读数必须写 **HEAD + 是否脏**，`main` 的 SHA 只是**上下文**（`V-11` 仪器轴）。
+            "head_sha": _git_rev(root, "HEAD"),
+            "head_dirty": _head_dirty(root),
+            "worktree": str(root),
             # ★★ 「被测配置」也是仪器的一部分（口径 21 延伸）⇒ 逐行记录，不靠上下文记性。
             #    `env_child` = 子进程**实际**环境（定值只看它）；`env_caller` 只作对账。
             "env_profile": profile,
@@ -561,6 +589,7 @@ def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str)
             "elapsed_s": elapsed,                      # ★ 门禁口径
             "timeout_s": timeout,                      # ★ 门禁口径
             "pytest_exit": pytest_exit,
+            "passed": passed,
             "verify_exit": verify_exit,                # ★ 不经管道
             "log_header": header,
             "log_header_note": header_note,
@@ -617,8 +646,29 @@ def _render(rows: list[dict], stop_reason: str) -> str:
     if stop_reason:
         lines.append("")
         lines.append(f"★ **已停止整轮取样** —— {stop_reason}")
+    # ★★ 主理人 2026-09-16 批准的读数格式（来自 `ws-ch5-pricelayer` 的预声明，**逐字照此出**）：
+    #    命令 + 退出码 + `passed` 数 + `elapsed` 秒 + **对象（SHA + 工作树 + 取样时刻）**。
+    #    ★ 缺第 4 项 ⇒ 只登记、不结论（`V-11` 仪器轴）。
+    lines.append("")
+    lines.append("#### 读数（主理人批准的格式：命令 · 退出码 · `passed` + `elapsed` · **对象**）")
+    lines.append("")
+    for i, r in enumerate(rows, 1):
+        el = "—" if r["elapsed_s"] is None else f'{r["elapsed_s"]:.2f}s'
+        to = "—" if r["timeout_s"] is None else f'{r["timeout_s"]:.0f}s'
+        pa = "—（取不到）" if r["passed"] is None else str(r["passed"])
+        dirty = r["head_dirty"]
+        dirty_s = "★**脏**" if dirty is True else ("干净" if dirty is False else f"{dirty}")
+        lines.append(f"{i}. `python scripts/ops/verify.py --batch {r['batch']}`（run {r['run']}）")
+        lines.append(f"   - **退出码**：`verify={r['verify_exit']}` ｜ `pytest={r['pytest_exit']}`")
+        lines.append(f"   - **`passed` 数 = {pa}** ｜ **`elapsed` = {el}**（timeout {to}）")
+        lines.append(f"   - **对象**：被测 SHA `{r['head_sha']}`（{dirty_s}）｜ 工作树 `{r['worktree']}`"
+                     f" ｜ 取样时刻 `{r['started_at_local']}`"
+                     f" ｜ （上下文：`main` = `{r['main_sha']}`）")
     lines.append("")
     lines.append(f"main SHA: `{rows[0]['main_sha']}` ｜ 首格时刻: {rows[0]['started_at_local']}")
+    lines.append(f"配额预检状态（逐行）：`{rows[0]['quota_preflight']}`"
+                 + ("　★ **不适用**：子进程实测 `E=0` ⇒ 走包装器时删除守卫关 ⇒ **不消耗**宿主删除配额"
+                    "（2026-09-16 裁定）" if rows[0]["quota_preflight"] == "na-wrapper" else ""))
     # ★ 仪器条件的"抬头"必须跟读数**同框**打印：读数脱离配置就没有可比性（口径 21 延伸）。
     prof = rows[0]["env_profile"]
     lines.append(f"被测配置（仪器）: **`{prof}`** ｜ 夹具模式: `{rows[0]['fixture_mode']}`"
@@ -857,30 +907,45 @@ def _print_plan(cells: tuple[Cell, ...], repeat: int) -> None:
               "（对照用 `--profile-baseline`，读数会逐行标注且**不得据以定值**）。")
 
 
-def _quota_gate(cell: Cell, repeat: int, skip: bool) -> str:
-    """开跑**前**的配额预检：返回空串 = 放行；非空 = **保守拒绝**的原因。
+def _quota_gate(cell: Cell, repeat: int, skip: bool) -> tuple[str, str]:
+    """开跑**前**的配额预检。
 
-    ★ **这是"保守建议"，不是判决**：该读数**不可复现**（见 `_quota_state` 与模块 docstring）。
-    故拒绝时**必须**把"读数可能不成立 + 怎么显式覆盖"一起打出来 —— 否则它会变成一个
-    **假阻断**（`G-61` 那种"判据与对象不同源"的错误，换成配额版本）。
-    覆盖方式：`--no-quota-check`（读数会如实标注 `skipped`，**不得**当成"预检通过"）。
+    返回 `(状态, 原因)`，`状态` ∈ `{"na-wrapper", "skipped", "unavailable", "fail", "ok"}`；
+    `原因` 非空 = **保守拒绝**的理由（此时 `状态` = `"unavailable"` / `"fail"`）。
+
+    ★★ **2026-09-16 主理人裁定（依据代码级自查）**：`verify.py::_child_env()` **显式**令
+    `CODEBUDDY_SAFE_DELETE_ENABLED="0"`（`run_pytest.sh:35` 同，`3653c7c` 起在 main）
+    ⇒ **走包装器跑批次时删除守卫是关的 ⇒ 不消耗宿主删除配额**
+    ⇒ **本预检在包装器路径下「不适用」**（`na-wrapper`）。
+    ★★ 但这**不是"把闸门删掉"**，两条边界必须同时成立：
+    ① 只有**实测**子进程 `E=0` 才算不适用（取 `verify._child_env()`，不问调用者 env —— `G-61` 同源教训）；
+    ② 状态**逐行写进读数**（`quota_preflight`），**不静默**；若子进程实际不是 `E=0`
+       （= 绕过包装器：直接 `python -m pytest` / IDE / 手工改 `E`）⇒ 预检**照旧生效**。
+
+    ★ 生效时它仍是"**保守建议，不是判决**"：该读数**不可复现**（见 `_quota_state`），
+    故拒绝时**必须**把"读数可能不成立 + 怎么显式覆盖"一起打出来，否则它会变成**假阻断**（`G-61` 的配额版）。
     """
     if skip:
-        return ""
+        return "skipped", ""
+    child_e = _child_env().get("CODEBUDDY_SAFE_DELETE_ENABLED")
+    if child_e == "0":
+        return "na-wrapper", ""
     st = _quota_state()
     if isinstance(st, str):
-        return f"QUOTA_PREFLIGHT_UNAVAILABLE：{st} ⇒ 不得盲跑"
+        return "unavailable", f"QUOTA_PREFLIGHT_UNAVAILABLE：{st} ⇒ 不得盲跑"
     need, cost_note = _measured_cost(cell)
     if st["remaining"] < need * repeat:
-        return (f"QUOTA_PREFLIGHT_FAIL（**保守建议，非判决**）：瞬读余量 {st['remaining']} "
-                f"< 本格所需 ≈{need * repeat}（= **`FIX` 现测**每例项数 × {repeat}；"
-                f"引用值口径为 {cell.quota_per_run * repeat}） ⇒ 建议**换轮次**"
-                f"（不重试、不降 `repeat`、不拿旧值代替）。"
-                f"{('★ ' + cost_note + '；') if cost_note else ''}"
-                f"★ 该读数是**瞬读、可能不成立**（本单实测同一 rid 数分钟后从 `99998` 变为"
-                f"**不在表里**）；若你确知环境已变，用 `--no-quota-check` 显式覆盖"
-                f"（读数会如实标注 `skipped`，**不得**当成「预检通过」）")
-    return ""
+        return "fail", (
+            f"QUOTA_PREFLIGHT_FAIL（**保守建议，非判决**）：瞬读余量 {st['remaining']} "
+            f"< 本格所需 ≈{need * repeat}（= **`FIX` 现测**每例项数 × {repeat}；"
+            f"引用值口径为 {cell.quota_per_run * repeat}） ⇒ 建议**换轮次**"
+            f"（不重试、不降 `repeat`、不拿旧值代替）。"
+            f"{('★ ' + cost_note + '；') if cost_note else ''}"
+            f"★ 该读数是**瞬读、可能不成立**（本单实测同一 rid 数分钟后从 `99998` 变为"
+            f"**不在表里**）；若你确知环境已变，用 `--no-quota-check` 显式覆盖"
+            f"（读数会如实标注 `skipped`，**不得**当成「预检通过」）"
+        )
+    return "ok", ""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -971,13 +1036,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"★ `{c.name}` 的夹具用例数是**假设值 {c.fixture_cases}**（清单里没有它）"
                   f"⇒ 预检按**上界**估计；跑之前请把真实值补进 `SCHEDULED_CELLS`。", file=sys.stderr)
         # ★ 每一格开跑**前**都重新预检（配额是**消耗型**的：跑了前几格，后面的余量会变小）
-        gate = _quota_gate(c, args.repeat, args.no_quota_check)
-        if gate:
-            stop_reason = f"{c.name} → {gate}"
+        #   ★★ 但包装器路径下预检**不适用**（子进程实测 `E=0` ⇒ 守卫关 ⇒ 不消耗配额，
+        #      2026-09-16 裁定）—— 状态**逐行写进读数**，不静默、也不删闸门。
+        gate_status, gate_reason = _quota_gate(c, args.repeat, args.no_quota_check)
+        if gate_reason:
+            stop_reason = f"{c.name} → {gate_reason}"
             break
-        rows, reason = sample_one(c.name, args.repeat, ROOT,
-                                  "skipped(--no-quota-check)" if args.no_quota_check else "ok",
-                                  profile)
+        if gate_status == "na-wrapper":
+            print(f"★ `{c.name}`：配额预检**不适用**（子进程实测 `E=0` ⇒ 走包装器时删除守卫关"
+                  f"⇒ 不消耗宿主删除配额，2026-09-16 裁定）⇒ 本行 `quota_preflight=na-wrapper`",
+                  file=sys.stderr)
+        rows, reason = sample_one(c.name, args.repeat, ROOT, gate_status, profile)
         all_rows.extend(rows)
         if reason:
             stop_reason = f"{c.name} → {reason}"
