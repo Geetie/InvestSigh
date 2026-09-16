@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -883,21 +884,250 @@ def _guard(root: Path) -> tuple[int, str]:
     return run_gate_inproc(GUARD, root)
 
 
+# ═══════════════════ 计数派生（卡 13-J：写死计数 → 从真源派生）═══════════════════
+#
+# ★ 为什么**不能**把期望值改成"调用门禁内部那个函数"：那样两边**同源** ⇒ **自反断言**
+#   （真源算错也照样绿），比写死**更糟** —— 写死至少会红。
+# ⇒ 故本节刻意走**两条独立路径**，任一管道走歪都会红：
+#     ① **期望值** = 测试**自己**数（自己 `yaml.safe_load` 解析登记表；自己按路径加载被检
+#        副本那份 `stage_gate.py` 取绑定集合）——不 import 门禁的任何私有函数；
+#     ② **实际值** = **门禁 CLI 打印文本**里的 `scanned <key>: N`（**文本解析**）。
+# ★ 并额外留三条**关系式「锚」**（在下面的 `_assert_counts_match` 里）：即使有人把某个派生
+#   写成了恒真，锚也会因"划分/穷尽/方向"不成立而红。
+#
+# ★ 诚实标注（防把这条判据说过头）：`criteria_bound` 的真源只有 `stage_gate.bound_criteria()`
+#   一个（`G-06`：门禁不得另写解析），所以这一路两边的"数据源"必然相同 —— 它真正在核的是
+#   **"门禁的统计/打印管道 == 直接聚合"**，**不是**"真源本身算对了"。真源本身的正确性由
+#   `stage_gate` 自己的用例与门禁的断言 E（与 `criteria_not_implemented()` 逐阶段对拍）承担。
+
+_COUNT_KEYS = (
+    "criteria_bound",
+    "criteria_registry_entries",
+    "counterexample_entries",
+    "ineffective_entries",
+    "criteria_without_counterexample",
+)
+
+
+def _scanned(out: str, key: str) -> int:
+    """取门禁 CLI 文本里的 `scanned <key>: N`（**文本路径**）。"""
+    prefix = f"scanned {key}: "
+    hits = [ln.strip() for ln in out.splitlines() if ln.strip().startswith(prefix)]
+    assert len(hits) == 1, f"`{key}` 在门禁输出里出现 {len(hits)} 次（应为 1）：\n{out}"
+    return int(hits[0][len(prefix) :])
+
+
+def _registry_rows(code_root: Path) -> list[dict]:
+    """**自己**解析登记表（不走门禁的 `_entries()`）。"""
+    doc = yaml.safe_load((code_root / REGISTRY).read_text(encoding="utf-8"))
+    assert isinstance(doc, dict), f"{REGISTRY} 顶层不是 mapping"
+    rows = doc.get("counterexamples")
+    assert isinstance(rows, list), f"{REGISTRY} 缺 counterexamples 列表"
+    return [r for r in rows if isinstance(r, dict)]
+
+
+def _bound_pairs(code_root: Path) -> set[tuple[str, str]]:
+    """**自己**加载**被检副本**那份 `stage_gate.py` 取绑定集合（不复用门禁的加载器）。
+
+    ★ 必须加载副本那一份：`bound_criteria()` 用 `Path(__file__)` 定位自身，
+      加载副本才能让"往副本里加一行 `criterion(...)`"真的改变绑定集合。
+    ★ `P-04`：`stage_gate.py` 模块级会 `sys.path.insert`，故全局副作用必须复原，
+      否则同进程内后续检查器会加载到副本的 `scripts`。
+    """
+    path = code_root / "scripts" / "delivery" / "stage_gate.py"
+    assert path.exists(), f"缺少判据绑定的唯一真源: {path}"
+    name = "_stage_gate_for_count_derivation"
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None, f"无法加载 {path}"
+    module = importlib.util.module_from_spec(spec)
+    before_modules = set(sys.modules)
+    before_path = list(sys.path)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+        bound = module.bound_criteria()
+    finally:
+        sys.path[:] = before_path
+        sys.modules.pop(name, None)
+        for extra in set(sys.modules) - before_modules:
+            if extra == "scripts" or extra.startswith("scripts."):
+                sys.modules.pop(extra, None)
+    return {(str(stage), str(cid)) for stage, ids in bound.items() for cid in ids}
+
+
+def _derived_counts(code_root: Path) -> dict[str, int]:
+    """**期望值**：测试自己从真源算出来的五个计数（**不读门禁的任何对象**）。"""
+    rows = _registry_rows(code_root)
+    counterexample_pairs = {
+        (str(r.get("stage")), str(r.get("criterion_id")))
+        for r in rows
+        if str(r.get("kind")) == "counterexample"
+    }
+    bound = _bound_pairs(code_root)
+    return {
+        "criteria_bound": len(bound),
+        "criteria_registry_entries": len(rows),
+        "counterexample_entries": sum(1 for r in rows if str(r.get("kind")) == "counterexample"),
+        "ineffective_entries": sum(1 for r in rows if str(r.get("kind")) == "ineffective"),
+        # 语义同门禁 F 段：已绑定但**一条 counterexample 都没有**的判据数。
+        "criteria_without_counterexample": len(bound - counterexample_pairs),
+    }
+
+
+def _assert_count_anchors(sc: dict[str, int]) -> None:
+    """三条关系式「锚」（抽出来是为了能被反向对照**逐个**证明会红）。
+
+    它们是**粗粒度恒等式**，用来兜住"某个派生被写成恒真"的情形：任一计数走歪、或出现
+    第三套谓词，这三条里至少有一条不成立。
+    """
+    # 锚① 穷尽性：每条登记非 counterexample 即 ineffective，没有第三类 ⇒ 两数相加必等于总数。
+    assert (
+        sc["counterexample_entries"] + sc["ineffective_entries"] == sc["criteria_registry_entries"]
+    ), f"登记条目未被 kind 二分穷尽（有第三类 kind，或某个计数走歪）：{sc}"
+    # 锚② 划分恒等式：declared = bound + not_implemented（三者都取自门禁自己报的数）。
+    assert (
+        sc["criteria_bound"] + sc["criteria_not_implemented"] == sc["criteria_declared_automated"]
+    ), f"「已绑定 + 未绑定 != 声明 automated」—— 两侧出现了第二套谓词或计数走歪：{sc}"
+    # 锚③ 义务方向：已绑定 ⊆ 已登记 ⇒ 登记条数不得少于绑定判据数。
+    assert (
+        sc["criteria_registry_entries"] >= sc["criteria_bound"]
+    ), f"登记条数少于绑定判据数 —— A 义务（已绑定必有登记）不成立：{sc}"
+
+
+def _assert_counts_match(out: str, code_root: Path) -> None:
+    """**派生断言本体**（抽成函数是为了能被反向对照直接调用）。
+
+    ① 五键逐条：门禁**打印的数** == 测试**自己数**的数；
+    ② 三条关系式「锚」——纯文本可核，防"派生把判据稀释成恒真"。
+    """
+    scanned = {key: _scanned(out, key) for key in _COUNT_KEYS}
+    derived = _derived_counts(code_root)
+    for key in _COUNT_KEYS:
+        assert scanned[key] == derived[key], (
+            f"`{key}`：门禁报 {scanned[key]}，测试自己数得 {derived[key]} —— "
+            f"两条路径不一致（说明门禁的统计管道或本测试的派生逻辑有一处走歪）\n{out}"
+        )
+    _assert_count_anchors(
+        {
+            **scanned,
+            "criteria_not_implemented": _scanned(out, "criteria_not_implemented"),
+            "criteria_declared_automated": _scanned(out, "criteria_declared_automated"),
+        }
+    )
+
+
+def test_derived_counts_follow_a_registry_change_without_editing_literals(
+    code_root: Path,
+) -> None:
+    """**可执行反例（正向）**：真源里**去掉一条**登记 ⇒ 计数自动跟上，**不必**来改字面量。
+
+    选 `expansion::review_append_only` 的**最后一条** counterexample（该判据共有 3 条
+    counterexample + 1 条 ineffective）⇒ 删掉后它**仍有** counterexample ⇒ 门禁仍 `exit 0`，
+    于是本条只考察"计数是否跟着真源走"，不掺"义务被违反"的旁支。
+    """
+    path = code_root / REGISTRY
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    rows = list(doc["counterexamples"])
+    before = _derived_counts(code_root)
+
+    victims = [
+        i
+        for i, r in enumerate(rows)
+        if str(r.get("stage")) == "expansion"
+        and str(r.get("criterion_id")) == "review_append_only"
+        and str(r.get("kind")) == "counterexample"
+    ]
+    assert len(victims) >= 2, f"该判据的 counterexample 少于 2 条，删一条会触发义务违例：{victims}"
+    idx = victims[-1]
+    doc["counterexamples"] = rows[:idx] + rows[idx + 1 :]
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    # 口径 1′（注入/篡改型实验的三条自证）：① 锚点在（victims 非空）② 前后不同 ③ 已读回确认落盘
+    back = yaml.safe_load(path.read_text(encoding="utf-8"))["counterexamples"]
+    assert len(back) == len(rows) - 1, "变更未落盘（读回条数没变）"
+
+    code, out = _guard(code_root)
+    assert code == 0, f"删掉一条**非最后一条**反例后门禁不应阻断\n{out}"
+    _assert_counts_match(out, code_root)  # ← 全程没改任何字面量
+    after = _derived_counts(code_root)
+    assert after["counterexample_entries"] == before["counterexample_entries"] - 1, (
+        "计数没跟着真源走 —— 说明它读的不是真源"
+    )
+    assert after["criteria_registry_entries"] == before["criteria_registry_entries"] - 1
+    assert _scanned(out, "counterexample_entries") == after["counterexample_entries"]
+
+
+def test_derived_count_assertion_is_load_bearing(code_root: Path) -> None:
+    """**反向对照（防真空）**：证明"跟不上**会红**"。
+
+    ★ 没有这一半，"能自动跟上"这句话是**真空的** —— 与 `G9`「绑定只证明接了、不证明真的在查」同型。
+    四个方向各证一次，缺一个都会留下一个"改坏了也不响"的洞：
+      ① **文本侧**篡改（门禁报数被改坏）⇒ 五键逐条必红；
+      ② **真源侧**篡改但**不重跑**门禁（期望值变、文本没变）⇒ 必红；
+      ③ 三条**关系式锚**逐个被喂入坏数字 ⇒ 每个都必须能红；
+      ④ 干净输入 ⇒ 必须绿（否则上面的"红"可能只是断言恒假）。
+    """
+    code, out = _guard(code_root)
+    assert code == 0, out
+    _assert_counts_match(out, code_root)  # ④ 前提：干净输入是绿的
+
+    # ① 文本侧：把 counterexample_entries 的报数 +1
+    n = _scanned(out, "counterexample_entries")
+    tampered_text = out.replace(
+        f"scanned counterexample_entries: {n}", f"scanned counterexample_entries: {n + 1}", 1
+    )
+    assert tampered_text != out, "注入点不存在（文本侧）"
+    with pytest.raises(AssertionError):
+        _assert_counts_match(tampered_text, code_root)
+
+    # ② 真源侧：删一条登记（**不重跑门禁**）⇒ 期望值变、文本没变 ⇒ 必红
+    path = code_root / REGISTRY
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    rows = list(doc["counterexamples"])
+    doc["counterexamples"] = rows[:-1]
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    landed = yaml.safe_load(path.read_text(encoding="utf-8"))["counterexamples"]
+    assert len(landed) == len(rows) - 1, "变更未落盘（真源侧）"
+    with pytest.raises(AssertionError):
+        _assert_counts_match(out, code_root)
+
+    # ③ 三条锚逐个证明"能红"：基线**取自刚才那次干净运行**（不写死字面量，避免又开一处台账副本）
+    good = {
+        **{k: _scanned(out, k) for k in _COUNT_KEYS},
+        "criteria_not_implemented": _scanned(out, "criteria_not_implemented"),
+        "criteria_declared_automated": _scanned(out, "criteria_declared_automated"),
+    }
+    _assert_count_anchors(good)  # 基线必须绿，否则下面的"红"毫无意义（假通过同样是假的）
+    # 锚①：kind 两数不再穷尽登记总数
+    with pytest.raises(AssertionError):
+        _assert_count_anchors({**good, "ineffective_entries": good["ineffective_entries"] + 1})
+    # 锚②：划分恒等式被打破（declared != bound + not_implemented）
+    with pytest.raises(AssertionError):
+        _assert_count_anchors(
+            {**good, "criteria_declared_automated": good["criteria_declared_automated"] + 1}
+        )
+    # 锚③（**隔离**）：登记数 < 绑定数，但 kind 两数相加仍等于登记数 ⇒ 只有锚③该红
+    with pytest.raises(AssertionError):
+        _assert_count_anchors(
+            {
+                **good,
+                "criteria_registry_entries": good["criteria_bound"] - 1,
+                "counterexample_entries": good["criteria_bound"] - 2,
+                "ineffective_entries": 1,
+            }
+        )
+
+
 def test_criterion_effectiveness_guard_passes_on_pristine_tree(code_root: Path) -> None:
-    """**反向对照（H3-反例）**：登记完整 → 门禁 `exit 0` 且报出 `scanned`。"""
+    """**反向对照（H3-反例）**：登记完整 → 门禁 `exit 0` 且报出 `scanned`。
+
+    ★ 卡 13-J：五个计数**不再写死字面量**，改由 `_assert_counts_match` 派生核对 ——
+      期望值 = 本测试自己从真源数；实际值 = 门禁 CLI 文本。**新增判据时不必再来改数字**
+      （"跟不上会红"由 `test_derived_count_assertion_is_load_bearing` 单独证明）。
+    """
     code, out = _guard(code_root)
     assert code == 0, f"登记完整时门禁不应阻断\n{out}"
     assert "scanned " in out, f"未上报 scanned 计数（无法区分「没扫」与「扫了没问题」）\n{out}"
-    # ★ 批次 13-A 的增量（合并 main 后实测）：`criteria_bound` 12→13、
-    #   `criteria_registry_entries` 15→16、`counterexample_entries` 14→15
-    #   （绑了 `nvidia_sample::chapter4_g_depth` 并登记其反例）；
-    #   `ineffective_entries` / `criteria_without_counterexample` 未变。
-    #   这几个数字是**故意写死**的绊线：判据台账一变，先来核这里，再决定改数还是改登记。
-    assert "criteria_bound: 13" in out, out
-    assert "criteria_registry_entries: 16" in out, out
-    assert "counterexample_entries: 15" in out, out
-    assert "ineffective_entries: 1" in out, out
-    assert "criteria_without_counterexample: 0" in out, out
+    _assert_counts_match(out, code_root)
     assert "review_append_only" in out, "语义错位的判据必须逐条可见（G-03）"
     # 缺口 `G9-1` 已闭合（`task_state_auditable` 补实现 + 反例由 ineffective 改 counterexample）。
     # ★ 这条断言是**反向**的：它钉住"该判据**不再**出现在缺口清单里" —— 若有人把登记退回
@@ -915,7 +1145,12 @@ def test_removing_any_registry_entry_makes_guard_fail(code_root: Path) -> None:
     path = code_root / REGISTRY
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     entries = list(doc["counterexamples"])
-    assert len(entries) == 16, "登记条数变了 —— 请同步本用例的期望值"
+    # ★ 卡 13-J：这里原来写死的 `len(entries) == 16` **不是在核对数字**，而是在**防真空** ——
+    #   若登记为空，下面的参数化循环会执行 0 次、本用例**静默通过**（"没测"与"通过"观测上等价）。
+    #   ⇒ 正确修法**不是**换成 `len(entries) == <派生数>`（那又变成自反、且与真源同源），
+    #      而是：① 显式断言非空；② 数出**实际逐条检查了几条**并要求它等于总条数。
+    assert entries, "登记为空 ⇒ 参数化循环执行 0 次、本用例真空（什么都没测）"
+    monkey_checked = 0
     for idx, row in enumerate(entries):
         doc["counterexamples"] = entries[:idx] + entries[idx + 1 :]
         path.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
@@ -934,6 +1169,11 @@ def test_removing_any_registry_entry_makes_guard_fail(code_root: Path) -> None:
         )
         if expected:
             assert row["criterion_id"] in out, out
+        monkey_checked += 1
+    assert monkey_checked == len(entries), (
+        f"只逐条检查了 {monkey_checked}/{len(entries)} 条 —— 循环被提前中断，"
+        "后面的条目**没有被验证**（静默漏测）"
+    )
     doc["counterexamples"] = entries
     path.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
 

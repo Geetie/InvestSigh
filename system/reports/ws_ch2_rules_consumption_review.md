@@ -1786,3 +1786,266 @@ solver.py:679  if int(declared_max)     != MAX_DISPLAY_CAP:      → 违例
 1. **§16.2 第 1、2 项的 `2→1` 是 13-A 的改动造成的**，不是我这边环境/缓存造成的（我把同一跑在**不含**该改动的树上做了反向对照）；
 2. 这道门禁**对对象敏感**（不是常数输出）—— 否则两个树会给出同一组数。
 ★ 反过来也提醒一句：**任何"门禁显示 PASS/N 条"的读数，必须连"在哪个树上跑的"一起报**；只报数字，读者无法区分"没做"和"做了但没生效"。
+
+---
+
+## §17 卡 13-J（`#79`）实现 + `§16` 重钉 + `G-60` 现场
+
+### §17.1 `§16` 重钉：**9 个 blob SHA 与 `a8f763f` 逐一相同 ⇒ 本节结论整体继承**
+
+13-A 已提交并合并（`a8f763f` / merge `3a7acc9`，我在本树 `git merge main` ⇒ `9c775ca`，并重跑了 `bootstrap_worktree.sh`：
+`rules_lock_guard` PASS、14 个 `rules/*.yaml` 全 `-r--r--r--`，符合 `G-53`/`V-07`）。
+
+| 文件 | `git rev-parse a8f763f:<path>` | §16.1 我记的 | |
+|---|---|---|---|
+| `_rules.py` | `97e894c6b39f` | `97e894c6b39f` | ✅ 一致 |
+| `completeness.py` | `359bd0c2a1dc` | `359bd0c2a1dc` | ✅ |
+| `growth_quality.py` | `9eef7391ac03` | `9eef7391ac03` | ✅ |
+| `route_guard.py` | `992b9cc38f63` | `992b9cc38f63` | ✅ |
+| `moat_guard.py` | `6018fa60c5d7` | `6018fa60c5d7` | ✅ |
+| `verify.py` | `f73c6638b643` | `f73c6638b643` | ✅ |
+| `stage_gate.py` | `52698012a694` | `52698012a694` | ✅ |
+| `criterion_counterexamples.yaml` | `d2dbafc7ab0a` | `d2dbafc7ab0a` | ✅ |
+| `test_criterion_effectiveness.py` | `58ac473880f1` | `58ac473880f1` | ✅ |
+
+⇒ **§16 的 13-A 面结论（四项结账、R8-1、R8-2）按此继承，无需重跑**。`#69` 只剩 **13-B 面**（`git grep 'solution_set_display' main` 仍 `exit=1`）。
+
+### §17.2 卡 13-J 实现（`+252 / −12`，单文件）
+
+**对象**：`system/tests/injection/test_criterion_effectiveness.py`（`58ac473880f1` → **`d7977a94f7c9`**）。
+
+**设计（按卡的三条硬要求 + 我补的第四条）**：
+
+| 要求 | 落法 |
+|---|---|
+| **两边必须不同源** | **期望值** = 测试**自己**数（`yaml.safe_load` 直接解析登记表；按路径加载**被检副本**那份 `stage_gate.py` 取绑定集合）；**实际值** = **门禁 CLI 打印文本**解析（`_scanned()`）。不 import 门禁的任何私有函数 |
+| **关系式「锚」** | 三条，全部**纯文本可核**：①**穷尽性** `ce + ineffective == registry_entries`；②**划分恒等式** `bound + not_implemented == declared_automated`；③**义务方向** `registry_entries >= criteria_bound` |
+| **反向对照（防真空）** | 新增用例 `test_derived_count_assertion_is_load_bearing`：①文本侧篡改 ②真源侧篡改但**不重跑** ③三条锚逐个喂坏值 ④干净输入必须绿 |
+| ★ **我补的第四点** | `len(entries) == 16` **不能**派生成 `len(entries) == <派生数>` —— 它**不是**在核对数字，而是在**防真空**（空登记 ⇒ 参数化循环 0 次 ⇒ 静默通过）⇒ 改为 `assert entries, "登记为空 ⇒ 本用例真空"` + `assert monkey_checked == len(entries)`（"逐条都真被删过一次"） |
+
+**★ 诚实标注（这条判据的**能力边界**，别读过头）**：
+`criteria_bound` 的真源只有 `stage_gate.bound_criteria()` 一个（`G-06` 不许门禁另写解析）⇒ 这一路两边**数据源必然相同**，
+它真正在核的是「**门禁的统计/打印管道 == 直接聚合**」，**不是**「真源本身算对了」（后者由 `stage_gate` 自己的用例与门禁断言 E 承担）。
+且**"台账一变就逼人复核"这条绊线按设计消失了**：新增一条判据时，旧写法会红（逼你来看），新写法直接绿。
+⇒ 这是**有意取舍**（卡就是这么要求的），替代物是上面三条锚 + 两条反向对照 ⇒ **请 team-lead 知情**。
+
+### §17.3 派生**前 / 后**各跑一次（据实）
+
+**前（写死版，`3c7b34d` 的 `58ac473880f1`）**：把它的 5 个字面量与**同一次干净运行**的门禁真值对拍 ⇒ **逐条相符**，即旧断言在该树上是绿的：
+```
+旧断言字面量:  criteria_bound: 13 / criteria_registry_entries: 16 / counterexample_entries: 15
+              ineffective_entries: 1 / criteria_without_counterexample: 0
+门禁实际报数:  criteria_bound: 13 / criteria_registry_entries: 16 / counterexample_entries: 15
+              ineffective_entries: 1 / criteria_without_counterexample: 0        exit = 0
+```
+**后（派生版，`d7977a94f7c9`）**：同一条件，`_assert_counts_match` 绿；五键"门禁文本 vs 测试自数"逐条相等（见 §17.5 之 A）。
+
+**本回合的 pytest 实测（在删除配额耗尽**之前**完成）**：
+```
+$ sh system/scripts/ops/run_pytest.sh tests/injection/test_criterion_effectiveness.py \
+    -q -p no:cacheprovider \
+    -k "pristine_tree or removing_any_registry_entry or derived_counts_follow or derived_count_assertion"
+....                                                                     [100%]
+4 passed, 25 deselected in 17.72s
+```
+⇒ 改动的两条 + 新增的两条**全绿**。
+
+### §17.4 ★★ `G-60` **现场**：本回合删除配额耗尽 ⇒ 完整单文件回归**跑不了**
+
+紧接着的整文件回归失败，且**不是缺陷**：
+```
+$ sh system/scripts/ops/run_pytest.sh tests/injection/test_criterion_effectiveness.py -q -p no:cacheprovider
+EEEEEEEEEEEEEEEEEEEEEEEEEEE..                                            [100%]
+[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED]
+  {"count":100267,"threshold":99999,"scope":"turn","targets":["…/tests/.work/test_prep_compliant_baseline_is_green-…"],"targetCount":1}
+⇒ 27 E / 2 passed（过的那 2 条是**不建 `code_root` 夹具**的用例）
+```
+**归因（我自己的算术，防误栽给某一条流）**：`system/` = **629 文件 + 123 目录**（夹具还 skip `__pycache__/.work/reports/derived/index/state.json` 等）⇒
+一次 `code_root` 用例的 teardown 最多删 ~600 项；我那 4 条**最多贡献 ~2.4k** ⇒ **距 100267 三个数量级**。
+⇒ 与 `V-09` 的定性一致：**删除预算是「宿主回合级 + 全流共享」** ⇒ 是全体并发流一起推到了天花板。**已广播全流**（"任何 `E`/`INTERNALERROR` 先看有没有 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`，别报成本单缺陷；不许绕过"）。
+
+★ **`G-60` 的新实测数据点（比原登记更硬）**：不是"残留清不掉"那么轻 ——
+**正常开发（跑一个文件的用例）在单回合内就会撞天花板**，且判据是 `count = 累计 + 本次 > 99999` 的**累计式**，
+**一旦越过，连"删 1 项"都被永久拒绝**（我实测 `targetCount: 1`）。
+⇒ 卡 13-F 把 `_clear_work_dir()` 改**逐文件删除**（单次体量 ~600 → 1）是**唯一**能救的方向；"分批/分片跑"按此机理**救不了**（与 `G-60` 登记一致）。
+
+★ **因此本节"整文件 29 条全绿"这句话我**没有**拿到**。我**不会**拿 `E` 冒充结论 —— 替代证据见 §17.5（**不删文件**的直连探针，覆盖同样四条用例的全部逻辑）。
+
+### §17.5 端到端直连探针（**不删任何文件**；`cp -R` 到 `/tmp` 后直接调门禁与派生函数）
+
+```
+A. 干净件：门禁 exit = 0；`_assert_counts_match` 绿；五键"门禁文本 vs 测试自数"逐条相等
+   criteria_bound 13/13 · criteria_registry_entries 16/16 · counterexample_entries 15/15
+   ineffective_entries 1/1 · criteria_without_counterexample 0/0
+
+B. 反向对照①（**文本侧**篡改门禁报数 +1）⇒ ★ AssertionError：
+   "`counterexample_entries`：门禁报 16，测试自己数得 15 —— 两条路径不一致"
+
+C. 反向对照②（**真源侧**删一条但**不重跑**门禁）⇒ ★ AssertionError：
+   "`criteria_registry_entries`：门禁报 16，测试自己数得 15"
+   （变更已落盘校验：15 == 16 − 1）
+
+D. 正向（真源侧删 `expansion::review_append_only` 最后一条 counterexample → **重跑**门禁）：
+   门禁 exit = 0；`_assert_counts_match` **绿（全程未改任何字面量）**；
+   counterexample_entries 15 → 14、registry_entries 16 → 15；门禁文本与派生一致
+
+E. 三条锚：基线绿；坏值逐个**必红** —— 锚①改 ineffective+1 红、锚②改 declared+1 红、锚③（隔离）registry<bound 红
+
+F. 防真空：空登记下 `assert entries` 必触发（否则参数化循环 0 次 ⇒ 静默通过）
+⇒ 全部通过 ✅
+```
+★ 口径 1′（注入/篡改型实验三条自证）**逐条打印**：锚点在（受害条目下标 `[12,13,14]`）/ 前后不同 / **读回文件确认已落盘** —— 任一条不成立就停。
+
+### §17.6 两条给 team-lead 的更正请求
+
+1. **`76a2d5b` 不是仓库里的对象**。`3c7b34d` 的 `batch13_taskbook.md` 写「卡 13-J 归属改派给 `ws-ch2-rules`（它已提交 `76a2d5b` 交付"逐条方案与证据"）」，但我实测：
+   ```
+   $ git log --oneline --all | grep 76a2d5b      → 空
+   $ git cat-file -t 76a2d5b                     → fatal: Not a valid object name 76a2d5b
+   ```
+   ⇒ **请更正该 hash**（可能是 `76ec851` 的笔误？那条是"§11 + §12"）。我**没有**用任何 `76a2d5b` 提交过东西；
+   13-J 的"逐条方案与证据"实际在**我发给你的两条消息**里，落盘的对应物是 `0b834e0`/`ba17f28`（§16/§16.7）。
+   ★ 这与本项目"每条登记都要可核"的口径同类 —— 一个**指不到任何对象的 hash** 会让后人无法复核，故按纪律报出（我自己的 `grep` 假阴性也是这么被纠的）。
+2. **`G-60` 已收入我的复核视野**，并给出同族定位：它是我 §15 立的"**静默变空**"家族的**第三种形态** ——
+   `G-03`（无被检对象 ⇒ 不得当已验证）是第一种，`len(entries)==16` 防的"空集 ⇒ 循环 0 次"是第二种，
+   `G-60`（清理机制在累计超限后**永久失效** ⇒ 会话启动即被拒）是第三种：**"空"与"通过/成功"观测上无法区分**。
+   ⇒ 建议 `G-60` 的修法在登记里也照这个措辞写一句，将来好一起查。
+
+### §17.7 未做 / 未验证（如实）
+
+1. **整文件 29 条的全绿**：本回合**无法取得**（`G-60`，见 §17.4）。我拿到的是"4 条相关用例 pytest 全绿" + "覆盖同四条逻辑的直连探针全绿"。
+2. **其余 25 条未逐条重跑**：我对它们的改动面为零（只新增了 7 个模块级名字、改了 2 条用例、加 1 个 `import importlib.util`），
+   且已核**无重名**（`_COUNT_KEYS`/`_scanned`/`_registry_rows`/`_bound_pairs`/`_derived_counts`/`_assert_counts_match`/`_assert_count_anchors` 各只 1 处定义，`:903`–`:997`）⇒ **推断**它们不受影响，**这是推断、不是实测**，本回合无法补。
+3. **13-B 面仍未闭合**：等它提交后按 hash 复跑。
+
+### §17.8 ★★ 实现过程中撞上 `G-61` 的**最恶性形态**：幽灵门禁卡死**全流**提交（本节是现场记录，非本单缺陷）
+
+**现象**：本单的第一次提交被拒：
+```
+pre-commit → scenario_tag_binding_guard
+  python: can't open file '…/ws-ch2-rules/system/scripts/checks/scenario_tag_binding_guard.py': [Errno 2]
+pre-commit ✗ scenario_tag_binding_guard 阻断（exit=2）
+pre-commit: 有门禁阻断，提交被拒。
+```
+
+**我先按上一轮 `G-61`（`quote_provenance_guard` 那次）的办法处理 —— 合并 `main`** ⇒ **`Already up to date`**（我已在 `681f696`），脚本**仍然不存在** ⇒ 说明这次**不是"滞后"**。
+
+**根因（实测命令与输出，不是推断）**：
+```
+$ git -C /Users/gaza/Developer/InvestSigh status --short        # 主仓工作区（@ main）
+A  system/scripts/checks/scenario_tag_binding_guard.py
+AM system/scripts/checks/scenario_tag_binding_guard.py          # ← 暂存后又改过（磁盘≠索引）
+M  system/scripts/ops/pre-commit.sh                             # ← 暂存里加了第 ⑬ 条门禁
+M  system/scripts/ops/run_all_gates.py
+A  system/tests/guards/test_scenario_tag_binding.py
+A  system/reports/ws_g55_binding_guard_report.md
+
+$ git merge-base --is-ancestor 7835c0b main   → 不是祖先（**未合并**）
+$ git branch --contains 7835c0b               → 只在 ws/ch13-e-benchmark-fields
+```
+机制：**共享钩子（`.git/hooks/pre-commit`，全 worktree 共用）执行的是主仓那份
+`/Users/gaza/Developer/InvestSigh/system/scripts/ops/pre-commit.sh`** —— 那份**含第 ⑬ 条、但只处于暂存状态**；
+而 `CODE_ROOT` 从 cwd 反解 = **被检的那个工作树** ⇒ 任何**不含 `7835c0b`** 的树里都没有该脚本 ⇒ `[Errno 2]` ⇒ `exit=2`。
+
+| | 上一轮 `quote_provenance_guard` | **本轮 `scenario_tag_binding_guard`** |
+|---|---|---|
+| 判据脚本在哪 | **已在 `main`** | ★ 只在 `ws/ch13-e-benchmark-fields`，**未合并**，且**暂存在主仓索引** |
+| `git merge main` 能救吗 | ✅ 能（脚本随合并进来） | ❌ **不能**（`Already up to date`——那个状态**不在任何可合并的分支上**） |
+| 谁受影响 | 所有**滞后**的树 | ★ **所有树**（含 `main` 自己：它也合并不到"那个"状态） |
+
+⇒ **升级前的判断**：在 `7835c0b` 被提交并合进 `main` 之前，**全体流的 `git commit` 都会失败**，且**报成"违规"**。
+⇒ 已**直接报 team-lead**（二选一：提交合并 `7835c0b`，或把主仓索引恢复到一致状态 —— **都由那个工作区的属主做，我不碰主仓**），并**广播全流**（"先看有没有 `Errno 2` / `SAFE_DELETE_BULK_CONFIRM_REQUIRED`，别把基础设施错配读成本单缺陷；**不许 `--no-verify`**"）。
+
+★ **同处还有一个独立的小缺陷（可核、易修）**：`exit=2` 是**输入错误**（本项目自己的约定：`2`=输入异常、`1`=违规），
+但 `pre-commit.sh` 把两者**同款报成"阻断"** ⇒ 把**判据与对象不同源**伪装成**"你改坏了"**。
+**建议**：脚本不存在时报 `[INPUT-ERROR] 门禁脚本不在被检树里：判据与对象不同源（G-61）`，**保持 `exit=2` 阻断**
+（**不跳过** —— 跳过会掩盖"真缺一道门禁"），但**不写"阻断"**。
+★ 我**没有**去改 `pre-commit.sh` / `run_all_gates.py`：它们此刻**在别人的暂存区里**，一动就制造冲突 —— 这也正是"不进他人工作区"这条纪律的自然后果。
+
+★ **本单的处置（留痕）**：
+1. **没有 `--no-verify`**，也不会用 —— 绕过门禁得到的绿不算证据；
+2. 中间为绕开"树不干净 ⇒ 不能合并"做过一次 `git stash` / `git stash pop`，**用 blob SHA 逐字校验复原**：
+   测试文件 `d7977a94f7c9…`、报告 `e98546e88aa9…`，pop 后**两个 SHA 与 stash 前完全一致**（另有 `/tmp/probe13j/` 下的备份）；
+3. **`git merge main` 两次**把 `quote_provenance_guard` 等已合并的新门禁脚本取回本树（第一次解决了它，第二次 `Already up to date` 说明第二轮起就卡在幽灵门禁上）。
+
+### §17.9 幽灵门禁**闭合**（`main` 前移到 `53de9a3`）+ 一个可复用的手法「合并前先干跑」
+
+**对象**：worktree `/Users/gaza/Developer/InvestSigh/.worktrees/ws-ch2-rules`（分支 `ws/ch2-rules`）；时点：本单提交之前。
+（口径 10：本节所有读数都出自这棵树 + 下面写出的那些 SHA。）
+
+**① §17.8 的两形态在 `53de9a3` 上同时闭合（实测，不是转述）**
+
+```
+$ git log --oneline f5dbc6f..53de9a3      # f5dbc6f = 我上一轮合进来的那个 main 头（= 当时的 main）
+53de9a3 merge ws/step56-skipped（口径 11 补合）
+f2d1371 merge ws/fixture-cost（口径 11 补合）—— 冲突取分支侧：guards 维持 300s…
+8aa7862 merge ws/ch13-e-benchmark-fields: G-55 跨载体绑定守卫（门禁清单冲突取并集 ⑫/⑬…）
+7e608c0 docs(ws/step56-skipped): `G-60` 归因更正 —— 那只日间歇 ERROR 是删除预算的**未越顶阶段**
+e18aedd Merge branch 'main' into ws/fixture-cost
+5f80ea5 docs(g55): 报告按口径 9/10 订正 —— 所有读数带树+SHA
+664252f Merge branch 'main' into ws/ch13-e-benchmark-fields
+7835c0b feat(guards): G-55 —— 跨载体取值域绑定守卫（rules/scenario.yaml ↔ 实现侧枚举）+ 双落点登记
+
+$ git merge-base --is-ancestor 8aa7862 main        → YES（8aa7862 已是 main 祖先）
+$ git ls-files --error-unmatch system/scripts/checks/scenario_tag_binding_guard.py   → 命中
+$ grep -n scenario_tag_binding_guard system/scripts/ops/pre-commit.sh
+119:run_gate "scenario_tag_binding_guard" "$CODE_ROOT/scripts/checks/scenario_tag_binding_guard.py" "$CODE_ROOT"
+```
+
+⇒ 两形态各自的出路都到位了：**判据脚本 `7835c0b` 已可达**（治"滞后可 merge 修"那半），
+**主仓索引里那份"悬空判据"也已随 `8aa7862` 合进 `main`**（治"判据只在未合并分支"那半）。
+★ 值得记一笔：**闭合方式正是我 §17.8 提的第一选项（把它提交并合并）**，而不是动主仓索引 —— 也就是说
+`G-61` 这一族当时**唯一的正解**就是"把悬空判据落成 commit 再说"，我判断"不碰主仓、只升级报主理人"这条路是对的。
+★ 附带一条**别人已经追上的**：`f2d1371` 把 `ws/fixture-cost` 的合并（含 `verify.py` 冲突解）也带进了 `main`
+（`e18aedd` 那条）⇒ `auditor-batch11` 警告的"你 `git merge main` 可能在 `verify.py` 上冲突"**本轮没有发生**，
+因为冲突解已经先一步进 `main` 了（教训同 `口径 11`：**警告的对象会过期**）。
+
+**② 手法（可复用）：合并前先 `merge-tree` 干跑，别急着 stash**
+
+上一轮我为了"树不干净 ⇒ 不能合并"付了两次 `git stash` 的代价，其中一次还因为 `&&` 链断掉把活儿留在了 stash 里（§17.8）。这次换了顺序：
+
+```
+$ git merge-tree --write-tree --name-only HEAD main
+db8e4c6662b2423f46ad88afe41372c19e114c65        ← 只回一个树 OID、**无任何冲突行** ⇒ 干净合并
+$ git merge-base HEAD main
+f5dbc6f02fb4aa3cde99b6cb0c2ef9405ed68062
+$ git diff --name-only $(git merge-base HEAD main) HEAD
+system/reports/ws_ch2_rules_consumption_review.md      ← 我这边相对祖先只改了这一个文件（已提交的那部分）
+```
+⇒ **`merge-tree --write-tree` 是"不落地、不改索引、不改工作区"的冲突探测**（`git 2.50.1`）。
+**这一步应在任何 stash 之前做** —— 它把"要不要 stash、会不会冲突"从**试探**变成**判读**。
+我这次据此判定"我的两个文件都不在合并面上"，于是**只 stash 了我自己的两处改动**（避免被折进 merge commit），而不是盲目 stash 整个工作区。
+
+**③ 落地与逐字复验**
+
+| 步骤 | 命令 | 结果 |
+|---|---|---|
+| stash 前 | `git hash-object` 两个文件 | `d7977a94f7c9d5d8…` / `6c37ac21284224954b…` |
+| stash | `git stash push -m ws-ch2-rules-13J -- <两文件>` | `RC=0`，`git status` **干净**，报告回到 HEAD 的 1788 行 |
+| 合并 | `git merge main --no-edit` | **`RC=0`，零冲突**（`ort` 策略，11 files changed, +1234/−107）⇒ 新 HEAD `da8254e`，无 `MERGE_HEAD` 残留 |
+| pop 后 | `git hash-object` 两个文件 | **`d7977a94f7c9d5d8a8564b8fe1539be4c181ba45` / `6c37ac21284224954b5d73e85f0ea7e57d2db171` ⇒ 与 stash 前逐字节一致** |
+| 行数 | `wc -l` | 报告 **1969** 行、测试 **1285** 行 |
+| `rules/` 权限 | `ls -l system/rules/{freeze,metric-sets}.yaml` | 均 **`-r--r--r--`（0444）** ⇒ 本次合并**未**重置（与 `V-07` 一致：只有**会 stage `rules/` 的** git 操作才重置；本次合并面不含 `system/rules/**`） |
+
+★ 顺带更正我 §17.8 的一条**路径口误**：我当时写的 `rules/freeze.yaml` 是**错的**，
+真路径在 `system/rules/`（`git ls-files | grep -E 'rules/(freeze|metric-sets)\.yaml$'`
+⇒ `system/rules/freeze.yaml` / `system/rules/metric-sets.yaml`）。这正是我 §17.6 抱怨别人"指不到对象"的同族毛病，故自我登记。
+
+**④ ★ 我第二次犯同一个操作失误（根因不是粗心，是**把校验和变更串在 `&&` 里**）**
+
+```
+$ ls -l rules/freeze.yaml rules/metric-sets.yaml && git stash pop
+ls: rules/: No such file or directory
+--- pop RC=1 ---            ← pop 从未执行，但看起来"pop 了却没效果"
+```
+上一次（§17.8 第 2 条）也是同一形状：`ls`/`grep` 之类**校验命令**失败 ⇒ `&&` 短路 ⇒ **紧随其后的状态变更命令根本没跑**，
+而输出里"有报错、有 RC"很容易被读成"执行了但失败了"。**改法（纳入纪律）**：
+**状态变更命令（`stash pop` / `merge` / `add` / `commit`）永远单独一条命令执行，不许和校验命令串在 `&&` 里。**
+我是这么补救的：单跑一次 `git stash pop` ⇒ `RC=0`、`Dropped refs/stash@{0} (b6d52264…)`，再单跑 `hash-object` 复验（即上表）。
+★ 另外注意 `stash@{1}: On ws/ch4-valuelayer: wip-ch4` **不是我的** —— 共享 stash 栈里还有别人的条目，**不许 `stash clear`**（同 `G-59`/共享资源的性质）。
+
+**⑤ 未做 / 未验证**
+1. 本节**不含提交 hash**（报告无法自含自身 commit 的 hash）—— 13-J 主提交的 hash 由我发给 team-lead 的交付消息携带；
+   落盘后若要复核，命令是 `git log --oneline -1 ws/ch2-rules` 与 `git rev-parse <hash>:<path>` 对上面两个 blob SHA。
+2. `G-60` 的**整文件 29 条全绿**仍然**没拿到**（§17.4/§17.7 不变：本回合删除配额仍受限）。
+3. 13-B 面仍未闭合（§17.7 第 3 条不变）。
