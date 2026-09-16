@@ -283,6 +283,17 @@ sh system/scripts/ops/bootstrap_worktree.sh
 SHA256 抓到，故仍是"检测得到"，非"静默"）。
 ⇒ 一律在 `git merge` 之后立刻跑本脚本；**不要**在各人自己的 `chmod` 上打补丁，更**不是**用 `--no-verify` 绕过。
 
+★★ **触发面比"新建工作树 + `git merge`"更宽（批次 13 追加，`ws-ch2-rules` 实测）**：
+**任何把该文件纳入索引的 git 操作**都会把它翻回 `0644` —— 实测**一条 `git add system/rules/<某件>.yaml` 就足够**。
+⇒ 触发面应读作：`worktree add` / `clone` / **`git add`** / **`git commit`** / `checkout` / `merge`。
+⇒ **稳妥做法**：**提交前**先跑一次本脚本（它只改权限位、`git status` 恒为空、不污染提交）；
+**提交后**再用 `rules_lock_guard` 核一次。
+
+★★ **并且`pre-commit` 不是经验上的沙箱**（同一个实测来源）：它**可被 `--no-verify` 绕过** ⇒
+**不能作为纪律 9 的唯一强制点**。本项目对这一点已有结构性冗余：
+`rules_lock_guard.py` **同时**在 `scripts/ops/run_all_gates.py` 的 `GATES`（24 项/25 条）里 ---- 
+⇒ 即使有人绕过钩子，**全量门禁仍会拦**。**新增纪律 9 相关守卫时，必须同时进 `pre-commit` 与 `run_all_gates`（`G-07`）。**
+
 **天天误报的门禁一定会被关掉**（`G-01`）→ 必须在流程层根治，而不是让每个工程师各自 `chmod`，
 更**不是**用 `--no-verify` 绕过。
 
