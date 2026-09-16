@@ -2556,3 +2556,152 @@ None                                          False
      我当天给 13-O 那条长信息用的就是 `-F`（**同一手法，一处做对一处做错**）。
    ★ 处置：该提交**未被任何其他 ref 引用**（`git show-ref` 只列本分支）⇒ 用 `-F` 重写其信息，
      **未用 `--no-verify`、未改任何文件内容以求脱身**。
+
+---
+
+### §17.16 卡 `#95` 实现：`G-64` 收口（谓词**从真源派生** + 分列计数 + 8 条可判红反例）
+
+#### 17.16.1 对象与取样钉死（`口径 10` / `口径 9`）
+
+| 项 | 值 |
+|---|---|
+| 实施树（对象） | `/Users/gaza/Developer/InvestSigh/.worktrees/ws-ch2-rules` @ 分支 `ws/ch2-rules`，改动前 HEAD = `3a43098` |
+| 取样时刻 | 2026-09-16 深夜 CST |
+| 被测脚本 | `system/scripts/tasks/gap_to_task.py`、`system/scripts/daily/degrade.py` |
+| 被检真源 | `facts/tasks.jsonl`（**行全部由唯一写入方 `Pipeline._write_check_record` 产出**，不手工拼） |
+| 门禁读数所属树 | 上述工作树（**不是**主仓）；主仓读数另标 |
+
+★ 本轮**未**用 `git diff main..` 之类 tip-to-tip 判"main 改了什么"（`口径 11 扩展之四`）：
+  凡涉及"谁改的"一律回落到 `git log HEAD..main -- <path>` 与 `git diff HEAD main -- <path>`
+  的**逐文件**读法（见 §17.16.7 第 3 条，我本轮又差点误读一次）。
+
+#### 17.16.2 改了什么（**三处**，且刻意**不是**"只加一个 `or`"）
+
+| # | 文件 | 改动 | 为什么这样改 |
+|---|---|---|---|
+| ① | `scripts/daily/degrade.py` | **新增**行级原语 `is_degraded_run_record(row)`（`check_record` 存在 且 `degraded is True`，**严格同一性**）；并抽出共用的 `_check_record(row)`（取 `check_record` 且必须是 `Mapping`），`is_valid_run_record()` 改为经它取记录（**行为逐字不变**） | 卡的第 2 条不许"只加一个 `or degraded`"：`G-64` 的根因是 `gap_to_task.py` 对 `degrade.py` **零引用**，"降级"这件事两个模块各有一套局部口径。新原语放在**真源模块**，供全局复用 |
+| ② | `scripts/tasks/gap_to_task.py` | **import** 上述真源；新增薄派生 `is_degraded_empty_output(row)`（**函数体内零字段读取**，整条 `return is_degraded_run_record(row)`）；`check()` 改为 **`degraded` 优先的 if/elif/else**，并新增 `degraded_empty_output` / `empty_output_violations` 两列 | 把"合法空产出"从**一支**改成**两支**；分列计数治 `G-62`（合法态与违规态读数等价） |
+| ③ | `tests/daily/test_no_change_day.py` | 原 **12** 例 → **20** 例（+8）；`_rec()` 增 `degraded` 形参 | 补正例 B/B2、严格性反例 3 条、同源绑定 1 条、计数闭合 1 条、归类优先级 1 条 |
+
+★ **为什么 `is_degraded_empty_output()` 不算"第 4 个同族局部谓词"**（这是本节最容易被质疑的一点，
+  故先答）：它**不读任何字段** —— 判据整条在真源里，本函数只做"降级轮 ⇒ 空产出合法"这一步语义命名。
+  可判定的证据不是我的措辞，而是测试
+  `test_degraded_predicate_is_derived_from_truth_source`：在 `degraded ∈ {True, False, None, 1, 0,
+  "true", "false"}` × `changed` × `status` 的**全矩阵**上断言
+  `is_degraded_empty_output(row) is is_degraded_run_record(row)` —— 后人把它改成第二套判据就会当场红。
+
+#### 17.16.3 五态实测（**修前 → 修后**）—— `B2 ≡ C` 是决定修法的那一格
+
+每态**一个全新 root**（不复用 —— 上一轮我正是在这里踩过"探针污染"）。行字段取自真源文本。
+
+| 态 | `changed` | `degraded` | `last_valid_result_ref` | 实义 | 修前 `exit` | 修后 `exit` |
+|---|---|---|---|---|---|---|
+| A | False | False | `None` | 无变化日（合法） | `0` | `0` |
+| B | True | True | `check_2026-09-16_full` | 降级 + 有上次成功（合法） | **`1` 假红** | `0` |
+| **B2** | True | **True** | **`None`** | 降级 + 此前**无**成功运行（合法） | **`1` 假红** | `0` |
+| **C** | True | **False** | **`None`** | **真违规**（空执行） | `1` | `1` |
+| D | False | True | `None` | 两态重叠（合法） | `0` | `0` |
+
+★★ **`B2` 与 `C` 的差异只有 `degraded` 一格**（`status='done'` / `output_refs=[]` /
+`last_valid_result_ref=None` / `changed=True` 全同）⇒ 这把卡上"必须 predicate `degraded is True`、
+**排除** `last_valid_result_ref is not None`"的论证从**推断**变成**实测**：后者会漏掉 B2，
+假红只是从 B 挪到 B2（**换个字段复发**，`G-43` 的形状）。E4 反例把这条钉住了（见 17.16.4）。
+
+★ `D` 那一行不是装饰：它证明"降级优先"的归类是**可判定的**（否则 `changed=False` 与
+`degraded=True` 同时成立时归类悬空 ⇒ 计数闭合性无法判定）。
+
+#### 17.16.4 可判红反例：`E0`–`E5`（每个实验都"一行打回"，用完**无条件还原**）
+
+探针 `/tmp/g64_killtest.py`：备份 → 改一行 → 跑用例 → **`finally` 还原并逐字断言还原成功** → 打印。
+判据是"**期望 exit≠0**"：若某个反例在"打回"后仍绿，它就没有判别力（`G-03`）。
+
+| 实验 | 打回成什么 | 结果 | 判定 |
+|---|---|---|---|
+| `E0` | 不改 | `20 passed` | 基线 |
+| `E1` | `is_degraded_empty_output` 恒 `False`（= **修前行为**：只认无变化日一支） | `exit=1`，**4 failed** / 16 deselected | ✅ |
+| `E2` | `degrade.is_degraded_run_record` 恒 `False`（真源被掏空） | `exit=1`，**2 failed** | ✅ |
+| `E3` | 真源换成**真值性**写法（`bool(record.get("degraded"))`） | `exit=1`，**1 failed**（`test_degraded_one_does_not_exempt`） | ✅ |
+| `E4` | 豁免**换字段**：改用 `last_valid_result_ref is not None` | `exit=1`，**1 failed**（B2 正例） | ✅ |
+| `E5` | 去掉 `degraded_empty_output` 这一列（计数不闭合） | `exit=1`，**1 failed** | ✅ |
+| `E9` | 全部还原后复跑 | `20 passed` | 现场未留补丁 |
+
+★ `E3` 与 `E4` 是**两个方向的"换字段复发"**：前者是"同一字段的宽松读法"，后者是"换一个字段"。
+  这正是卡里"必须严格同一性 + 必须 predicate `degraded`"两条要求的**可执行依据**。
+
+#### 17.16.5 分列计数与**闭合恒等式**
+
+`check()` 现在报四列，并满足（测试 `test_counters_are_exhaustive_over_the_three_classes` 断言）：
+
+```
+done_empty_output_rows == no_change_day_exempt + degraded_empty_output + empty_output_violations
+```
+
+| 态 | 修前读数 | 修后读数 |
+|---|---|---|
+| B | `{rows:1, exempt:0}` | `{rows:1, exempt:0, degraded:1, violations:0}` |
+| B2 | `{rows:1, exempt:0}` ← **与 C 完全相同** | `{rows:1, exempt:0, degraded:1, violations:0}` |
+| C | `{rows:1, exempt:0}` | `{rows:1, exempt:0, degraded:0, violations:1}` |
+
+⇒ 修前 **B2 与 C 在读数上一字不差**（`G-62`：两个不同事实在同一观测通道上等价）；
+修后两者由 `degraded` / `violations` 两列分开。★ 三列之和恒等于"形状行数"这一条，
+把"某一行被两支重复计数"或"某一行没被任何一支接住"都变成**可判**（不是靠读代码相信）。
+
+#### 17.16.6 ★ **举证半径更正**：卡里对 `Ch8 §E.4` 的引用**过宽**（`V-11`，我自己也照抄过一次）
+
+卡的产物段写：「`Ch8 §E.4` 明令降级时 `output_refs` 必须如实为空」。我逐字核对设计正文后，
+**这条不成立**，如实更正如下（`08_产品入口与每日运行/02_实现方案.md`）：
+
+| 行 | 逐字原文 | 它实际规定的是 |
+|---|---|---|
+| `:312 §E.1` | 「**共同红线**：故障时**保留上次有效结果并清楚显示日期 + 失效状态**；**不覆盖为无意义空值**；**不把旧数据标为最新**」 | 降级三红线（**没有**"output_refs 必须为空"） |
+| `:330 §E.2` | 「`degraded` ｜ `check_record`（复用 Ch1 §C.2）｜ **当日降级运行 = true**」 | 字段归属与写入语义 |
+| `:346 §E.4` | 标题 = 「"不置 null" / "不标最新" 的**写路径断言设计**」，正文代码为 `assert_no_null_overwrite` / `assert_not_labeled_latest` | **禁止**把字段**覆盖为**空值（是"不得置空"，方向**相反**） |
+| `:76 N8.4-06` | 「禁止在降级时把字段**覆盖**为无意义空值」 | 同上 |
+
+⇒ **"降级轮 `output_refs` 必须为空"是本仓写路径的语义取舍，不是设计逐字规定** ——
+  这一点的**最早出处不是我的推断**：`reports/ws_degrade_contract_report.md §④-3`
+  已经**自己明说**「`output_refs` 在"失败运行"上的语义是**本单的取舍**（非设计逐字规定）」，
+  并由 `pipeline.py:391/415`（`valid_run = not (blocked or degraded)`）落地。
+  ★ 故本卡的判据与它**同源**：**不新增任何要求**，只是**承认已经落地的写路径契约**，
+  从而不再把合法行判成空执行。措辞已按此写进 `gap_to_task.py` 的 docstring（带 ⚠️ 标注）。
+  ⇒ 教训与 `V-11` 一致：**引用条款前必须读到那一行**，否则"我引了设计"会给出**比实际更宽**的权威半径。
+
+★ 附带登记一条**未改**的张力（不属本卡、**未验证**，只记账，不静默）：
+  `§E.4` 的 `assert_no_null_overwrite(old_row, new_row)` 是**跨行**比较（旧行非空 → 新行空即抛），
+  若有人把它施加到 **task 行**的 `output_refs` 上，就会与 `_write_check_record` 的
+  "降级轮写空 `output_refs`"**直接冲突**。设计正文的代码样例比较的是**数据对象**的
+  `old_row.data_fields`（`stale` 那一族），故当前无实现冲突；但两者**同时存在**这件事本身
+  没有机器绑定 ⇒ 如实登记，**未改任何文件**。
+
+#### 17.16.7 边界与未证（如实）
+
+1. **B2 的生产可达性仍未证**（`G-03`）。本轮 B2 由**真实写路径**（`Pipeline._write_check_record`
+   ← `RunResult(degraded=True)`）在"该 root 内此前无成功运行"时产出 —— 但"实际调度里会不会出现
+   '降级且此前从未成功过'的那一天"**未核**。★ 与 `auditor-batch11` 的差别仅在于证据路径：
+   他直接注入 `RunResult`，我经 `conftest.write_check_records`（**同一个唯一写入方**）。
+2. **未改状态映射**（按卡的边界）：`pipeline.py:412` 仍把 `degraded → done`（只有 `blocked → failed`），
+   而 `TaskStatus` 是 `Ch1 §C.3` 五态、**没有 degraded 槽位** ⇒ 改它 = 改设计，另开卡。
+3. ★ **`traceback.py` 这道门禁在本树上"本来就红"**（不是我造成的）：`run_all_gates.py` 27 道里
+   26 道 `exit=0`，唯 `traceback.py exit=1`（`G1-03` `rec-nvda-001` 四要素缺 `assumptions`/`computation`）。
+   我按 `口径 11 扩展之四` 的教训做了**逐文件**归因，而不是拿 tip-to-tip 差分猜：
+   `git log HEAD..main -- scripts/trace/traceback.py`（空）+ `git stash` 后**在原树上复跑**得到
+   **完全相同的 2 条违例** ⇒ **继承自 `main`、与本卡无关**。
+   （★ 复跑时我先用 `| tail -5` 读它的退出码，那是 `tail` 的 `rc` —— 违反 `口径 17`；
+   已改为单独执行取 `rc=1`，见本节末的自查。）
+4. **本卡未跑"整仓 29 条回归"**：`G-60` 的删除配额约束下，本轮只跑了**同源面**
+   （`tests/daily` 全目录 + `tests/injection/test_wiring_guards.py` = **81 passed**）与
+   **14 道 pre-commit 门禁**（全绿）+ **27 道全量门禁**（26 绿 / 1 项继承自 main）。
+   跨面全量回归按纪律留给新的回合（不静默：这是**未跑**，不是**跑过**）。
+5. 我**未**改动 `stage_gate.py`（`G-63` 的两个落点仍在）—— 那是另一张卡的范围。
+
+#### 17.16.8 我本轮的自查（又一次把"读数"读成"结论"的前一刻停住）
+
+- ★ 我在复跑 `traceback.py` 时写了 `python3 … | tail -5; echo rc=$?` ⇒ 打印的是 **`tail` 的 `rc`**，
+  而 `traceback` 的真实 `rc=1` 是**单独执行**才拿到的。这正是 `口径 17`（凡我要读它的结果的命令一律单独执行）
+  与 `V-10` 家族的同型错误：**仪器的读数被我当成被检对象的读数**。已在 17.16.7 第 3 条按
+  "单独执行得到的 `rc=1`"重述，未把管道读数写进结论。
+- ★ 本节的过程里我**第三次**撞上"tip-to-tip 差分不携带归属"：`git diff --name-status HEAD main`
+  对 `pre-commit.sh` / `install_hooks.sh` 显示 `M`，而 `git log HEAD..main -- <这两个路径>` **为空**
+  ⇒ 差异 100% 来自**我方**（13-O 的改动），**不是** main 改了它们。
+  我没有据此得出"main 也动了"的结论，而是先查 `git log` 再落纸。
+

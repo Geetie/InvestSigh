@@ -18,10 +18,16 @@ python system/scripts/tasks/gap_to_task.py [code_root]
 
 ★ G1-04：同 `gap_id` 建两次同型任务 → **只落 1 条**。
 
-★ G1-04 的另一半「终态必须有输出」有一个**设计规定的例外**：**无变化日**
-（`C123-2` / `N7.3-04`：仅变化时产信号、无变化写 `check_record`；`02_实现方案.md:78`：必写 `check_record`）
-—— `done` + 空 `output_refs` 当且仅当 `check_record.changed is False` 时合法。
-详见 `is_no_change_day()`。
+★ G1-04 的另一半「终态必须有输出」有**两个**合法例外类（`G-64` 收口前只实现了一个）：
+
+| # | 例外类 | 判据 | 谓词 |
+|---|---|---|---|
+| ① | **无变化日**（`C123-2` / `N7.3-04`：仅变化时产信号、无变化写 `check_record`；`02_实现方案.md:78`：必写 `check_record`） | `check_record.changed is False` | `is_no_change_day()` |
+| ② | **本轮降级**（`Ch8 §E`：当日降级 ⇒ 保留上次有效结果、本轮不产新有效结果） | `check_record.degraded is True` | `is_degraded_empty_output()` |
+
+⇒ `done` + 空 `output_refs` **合法当且仅当** `check_record` 存在且（`changed is False` **或**
+`degraded is True`）；否则仍按 `G1-04` 判空执行。★★ 此前只认 ① ⇒ **降级轮被误报成空执行**
+（`G-64`：假红；实测四态表见 `is_degraded_empty_output()`）。
 """
 
 from __future__ import annotations
@@ -40,12 +46,18 @@ if str(_ROOT) not in sys.path:
 from scripts._common import CheckReport, Violation, run_checker  # noqa: E402
 from scripts._common import EXIT_INPUT_ERROR, EXIT_OK, EXIT_VIOLATION  # noqa: E402
 
+# ★ 降级判定的**唯一真源**（`G-06`；`G-64` 的修复面）：本文件此前对该模块**零引用**，
+#   于是"本轮是否降级"在 `scripts/daily/degrade.py` 与这里**各有一套局部口径**（同族第 3、4 个谓词）。
+#   本层**不自己读** `check_record["degraded"]`，一律经此原语。
+from scripts.daily.degrade import is_degraded_run_record  # noqa: E402
+
 TASK_TYPES = ("research", "verify", "parse", "recheck", "dedup_override")
 STATES = ("queued", "researching", "pending_evidence", "done", "failed")
 
 # 终极态：`done` 是唯一**无出边**的状态（见 `ALLOWED_TRANSITIONS['done'] == []`）。
 # 它不是"可以空着收尾"的许可 —— 终态必须有 `output_refs`，否则是空执行。
-# ★ 唯一例外：**设计允许的无变化日**（见 `is_no_change_day()`）。
+# ★ 合法例外**有两个**（`G-64` 收口）：① 设计允许的**无变化日**（`is_no_change_day()`）
+#   ② **本轮降级**（`is_degraded_empty_output()`，派生自 `daily/degrade.py` 真源）。
 TERMINAL_STATES = ("done",)
 
 BUDGET_EXHAUSTED_STATE = "pending_verification"
@@ -65,13 +77,22 @@ def is_no_change_day(row: Mapping[str, Any]) -> bool:
     ⇒ 无变化日"报了完成、却没有新产出"是**设计规定的正确行为**：那一轮的产出就是
     **一份核查记录**（`check_record`），不是空执行。
 
+    ★★ 本函数只承载**两个合法空产出类中的第 ① 类**。合法的 `done` + 空产出**不是只有无变化日**
+    —— **本轮降级**同样合法（`Ch8 §E`：降级轮保留上次有效结果、本轮不产新有效结果），
+    那一支见 `is_degraded_empty_output()`。
+    ⚠️ 本 docstring 曾写"每条 `done` 行**穷尽**落入合法/违例两态、**无第三态**"，并把"合法"等同于
+    `changed is False` 一支 —— 该断言**已被 `G-64` 证伪**（降级轮实测 `exit=1` 假红）。
+    现行表述：**合法 = ① ∪ ②**（两支互斥性/穷尽性由 `check()` 的**分列计数**机器绑定，
+    见 `empty_output_violations` 那一行的恒等式）。
+
     ★★ 这是**可判定的正向标记**，不是放宽判据（`R-06` ①）：
 
     - 只认 `check_record.changed is **False**`（**严格同一性**）——
       `changed` **缺失 / `None` / `True` 都不豁免**（缺字段不得被当成"无变化"，否则
       同族缺陷会从"缺字段"这一侧复发：这正是 `G-43` 的教训 —— 判据被一个恒假的谓词空转）。
-    - **不依赖任何 id 名单**：每条 `done` 行**穷尽**落入"合法 / 违例"两态，无第三态。
-    - **判别力不放松**：`changed` 不是 `False`（或压根没有 `check_record`）⇒ **照样按 `G1-04` 红**。
+    - **不依赖任何 id 名单**：只看字段，不看 `task_id`。
+    - **判别力不放松**：`changed` 不是 `False`（或压根没有 `check_record`）**且**本轮未降级
+      ⇒ **照样按 `G1-04` 红**。
     - **字段全部复用**：`check_record` 由 `pipeline._write_check_record()` 真实写出，
       **不新增真源**（`G-06`）。
     """
@@ -79,6 +100,47 @@ def is_no_change_day(row: Mapping[str, Any]) -> bool:
     if not isinstance(record, Mapping):
         return False
     return record.get("changed") is False
+
+
+def is_degraded_empty_output(row: Mapping[str, Any]) -> bool:
+    """`done` + 空 `output_refs` 的第 ② 类合法情形：**本轮降级**（`Ch8 §E`）。
+
+    ★ **本函数不含任何字段读取** —— 它整条判据都**派生自唯一真源**
+      `scripts/daily/degrade.py::is_degraded_run_record()`（`G-06`）：
+      `check_record` 存在 且 `check_record.degraded is True`（严格同一性）。
+      换言之它是真源的**薄派生**（"这条行是不是一次降级运行" ⇒ "它的空产出合法"），
+      **不是**第 4 个同族局部谓词；两者一致由测试机器绑定
+      （`tests/daily/test_no_change_day.py::test_degraded_predicate_is_derived_from_truth_source`）。
+
+    ★ **为什么降级轮的空产出是合法的**：`pipeline._write_check_record()` 对
+      `valid_run = not (blocked or degraded)` 为假的行**写空 `output_refs`**
+      （`pipeline.py:391/415`），并把有效结果指向 `last_valid_result_ref` ——
+      与设计正文一致：`Ch8 §E.1` 共同红线「故障时**保留上次有效结果**并清楚显示日期 + 失效状态；
+      **不覆盖为无意义空值**」、`§E.2`「`degraded` | `check_record` | 当日降级运行 = true」、
+      `N8.4-05`「故障时旧结果仍在且…`last_valid_result_ref` 指向旧结果」。
+      ⚠️ **举证半径如实标出**：「降级轮 `output_refs` 必须为空」这一句**不是设计逐字规定**，
+      而是本仓写路径的**语义取舍**（`system/reports/ws_degrade_contract_report.md §④-3`
+      已明说"非设计逐字规定"）。本判据与那条取舍**同源**：它不新增要求，
+      只是**承认已落地的写路径契约**，从而不再把合法行判成空执行。
+
+    ★★ **为什么必须是这个谓词，而不是几个看起来等价的候选**（`G-64` 四态实测，
+    每态一个全新 root，行全部由**真实写路径** `Pipeline._write_check_record` 产出）：
+
+    | 态 | `changed` | `degraded` | `last_valid_result_ref` | 实义 | 修前 → 修后 |
+    |---|---|---|---|---|---|
+    | A  | False | False | `None`      | 无变化日（合法） | `exit 0` → `exit 0` |
+    | B  | True  | True  | `check_…`   | 降级 + 有上次成功（合法） | `exit 1`**假红** → `exit 0` |
+    | B2 | True  | True  | **`None`**  | 降级 + 此前无成功运行（合法） | `exit 1`**假红** → `exit 0` |
+    | C  | True  | **False** | `None`  | 真违规（空执行） | `exit 1` → `exit 1` |
+
+    - **B2 与 C 在行上字段逐一相同，只有 `degraded` 不同**（`status` / `output_refs` /
+      `last_valid_result_ref` / `changed` 全同）⇒ 任何**不看 `degraded`** 的谓词都无法把两者分开。
+      特别地，候选 `last_valid_result_ref is not None` **会漏掉 B2**（该字段为 `None`）
+      ⇒ 假红只是从 B 挪到 B2（**换个字段复发**，正是 `G-43` 的形状）。故排除该候选。
+    - 抗"缺字段复发"同理：只认 `is True`，`degraded` 缺失 / `None` / `1` 都**不**豁免
+      （反例见测试 `test_degraded_field_missing_does_not_exempt` 等三条）。
+    """
+    return is_degraded_run_record(row)
 
 
 @dataclass(frozen=True)
@@ -202,6 +264,15 @@ def check(root: Path) -> CheckReport:
       ⇒ `done` + `output_refs=[]` 在**无变化日**是**正确行为**，不是空执行。
       认定方式见 `is_no_change_day()`：**可判定的正向标记**（`check_record.changed is False`），
       **不是放宽** —— `changed` 不是 `False` 或缺 `check_record` ⇒ **照样红**。
+
+    ★★ **第二个**合法例外：**本轮降级**（`Ch8 §E`，`G-64` 补）
+      —— `done` + 空产出**不只有无变化日这一支**：降级轮按写路径契约同样"如实为空"
+      （有效结果在 `last_valid_result_ref`）。认定方式见 `is_degraded_empty_output()`
+      （派生自 `scripts/daily/degrade.py::is_degraded_run_record()`，`G-06`）。
+      ⚠️ 本 docstring 曾写"`changed` 不是 `False` ⇒ 照样红"作为**穷尽**表述 ——
+      对降级轮**不成立**（实测假红：`G-64`）。每行的归类由 `scanned` 的**分列计数**可见，
+      且满足恒等式 `done_empty_output_rows == no_change_day_exempt + degraded_empty_output
+      + empty_output_violations`（无第三态、无静默丢弃）。
     """
     report = CheckReport(checker="gap_to_task")
     path = root / "facts" / "tasks.jsonl"
@@ -214,8 +285,12 @@ def check(root: Path) -> CheckReport:
     seen: dict[str, str] = {}
     # ★ 配对计数（`G-43` 的教训）：只看"豁免 0 条"**无法区分**"没有这类行"与"判据恒假"。
     #   故把"落进该形状的行数"与"其中被豁免的行数"**成对**报出。
+    # ★★ 并且**按例外类分列**（`G-64`）：单一豁免计数器下"合法降级"与"真违规"都记 0
+    #   ⇒ 两个不同事实在同一观测通道上等价（`G-62`）。
     done_empty_output_rows = 0
     no_change_day_exempt = 0
+    degraded_empty_output = 0
+    empty_output_violations = 0
     for row in rows:
         key = row.get("idempotency_key", "")
         if key in seen:
@@ -233,27 +308,42 @@ def check(root: Path) -> CheckReport:
                 Violation("G1-04", "预算到限的任务不得标 done（**不伪装完成**）", "facts/tasks.jsonl")
             )
         # ★ 终态必须有输出（docstring 曾声称、代码曾缺失）
-        #   唯一合法例外：**设计允许的无变化日**（`C123-2` / `N7.3-04`：
-        #   "仅变化时产信号、无变化写 check_record"）⇒ 该日 `done` + 空产出是**正确行为**。
-        #   ★ 这是把一刀切换成**可判定的正向标记**，**不是放松**：`changed` 不是 `False`
-        #     （或没有 `check_record`）照样红。
+        #   **两个**合法例外（`G-64`：此前只实现了一个 ⇒ 降级轮被误报空执行）：
+        #   ① 设计允许的**无变化日**（`C123-2` / `N7.3-04`："仅变化时产信号、无变化写 check_record"）；
+        #   ② **本轮降级**（`Ch8 §E`：降级轮保留上次有效结果，本轮的 `output_refs` 如实为空）。
+        #   ★ 这是把一刀切换成**可判定的正向标记**，**不是放松**：两支都不成立照样红。
         if status in TERMINAL_STATES and not (row.get("output_refs") or []):
             done_empty_output_rows += 1
-            if is_no_change_day(row):
+            # ★ 顺序 = **降级优先**：`Ch8 §E` 的降级是"本轮结果不完整"的**更强**理由
+            #   （它强制本轮产出为空，与 `changed` 无关）；两态同时成立时归入降级列。
+            #   该优先级有测试钉住（`test_row_both_degraded_and_no_change_is_counted_as_degraded`）。
+            if is_degraded_empty_output(row):
+                degraded_empty_output += 1
+            elif is_no_change_day(row):
                 no_change_day_exempt += 1
             else:
+                empty_output_violations += 1
                 report.violations.append(
                     Violation(
                         "G1-04",
                         f"{row.get('task_id')} 状态为终态 {status!r} 但 output_refs 为空，"
-                        "且不满足无变化日豁免"
-                        "（需 `check_record` 存在且 `check_record.changed is False`）"
+                        "且不满足两个合法空产出例外（需 `check_record` 存在，且"
+                        "`check_record.changed is False`（无变化日）"
+                        "或 `check_record.degraded is True`（降级轮））"
                         "（空执行：报了完成却没有产出）",
                         "facts/tasks.jsonl",
                     )
                 )
+    # ★★ 分列计数（`G-64` 的第二个产物）：单一 `no_change_day_exempt` 计数器下，
+    #   **B2（合法降级、无上次成功）与 C（真违规）都记 0** —— 一个合法态与一个违规态
+    #   在读数上被完全合并（`G-62`：两个不同事实在同一观测通道上等价）。
+    #   故按**例外类分列**，并另报违规数，使下面这条恒等式可判：
+    #     done_empty_output_rows == no_change_day_exempt + degraded_empty_output + empty_output_violations
+    #   （即"每一行都恰好落进一支"，由 `if/elif/else` 结构性保证 + 测试机器绑定）
     report.scanned["done_empty_output_rows"] = done_empty_output_rows
     report.scanned["no_change_day_exempt"] = no_change_day_exempt
+    report.scanned["degraded_empty_output"] = degraded_empty_output
+    report.scanned["empty_output_violations"] = empty_output_violations
     if not rows:
         report.notes.append("NO_TASK_DATA：阶段① 真源为空；断言已就绪，阶段③/④ 起作用于真数据")
     return report

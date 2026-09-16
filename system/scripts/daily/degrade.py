@@ -81,6 +81,51 @@ def run_gaps(result: Any) -> list[str]:
     return [str(g) for g in (getattr(result, "gaps", None) or [])]
 
 
+def _check_record(row: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """取出 `row["check_record"]`，且**必须是 Mapping**（缺失 / 非 Mapping → `None`）。
+
+    ★ 抽成一处是为了让 `is_valid_run_record()` 与 `is_degraded_run_record()` **共用同一个**
+      "记录是否存在"判定：各写一遍就是 `G-62` 那种"两条判据各自自洽、改一侧另一侧不动"的形状
+      （`G-64` 的成因正是这类各写一套）。
+    """
+    record = row.get("check_record")
+    return record if isinstance(record, Mapping) else None
+
+
+def is_degraded_run_record(row: Mapping[str, Any]) -> bool:
+    """该行是否**一条降级运行记录** —— "本轮降级 ⇒ 产出合法为空"的**唯一原语**（`Ch8 §E.4`）。
+
+    判据：带 `check_record` 且 **`check_record.degraded is True`**（**严格同一性**）。
+
+    ★ **为什么必须严格同一性**（不是 `not record.get("degraded")` 的宽松形态、不是 `== True`）：
+      这是**豁免**谓词（它让一条"终态却无产出"的行免于空执行判定），故只认编排器
+      （`pipeline._write_check_record` ← `RunResult.degraded`）写入的**规范布尔** `True`；
+      缺字段 / `None` / `1` / `"true"` **一律不给豁免** —— 否则同族缺陷会从"缺字段"这一侧复发
+      （`G-43` 的教训：判据被一个恒假的谓词空转）。与 `gap_to_task.py` 里
+      `record.get("changed") is False` 的严格度**对称**。
+      规范取值域由 `schema/models.py::CheckRecord.degraded: bool = False` 保证（`G-06`）。
+
+    ★ **与 `is_valid_run_record()` 的严格度不对称，且两个方向都偏保守**（明说，不静默）：
+
+    | 谓词 | 写法 | 非规范取值 `degraded=1` 下 |
+    |---|---|---|
+    | `is_valid_run_record()` | `not record.get("degraded")`（真值性） | 判"**不是**有效结果" ⇒ 偏严 |
+    | `is_degraded_run_record()` | `record.get("degraded") is True`（同一性） | 判"**不是**降级" ⇒ 偏严 |
+
+    ⇒ 两者**不可能同时为真**（`x is True` ⇒ `x` 真 ⇒ `not x` 假），即"同一行不可能既是有效结果、
+    又是降级运行"；生产行经 pydantic 校验故两者取值一致，差异只在手工构造的行上出现，
+    而两处都落在保守侧。这条不变量有机器绑定（见 `tests/daily/test_degrade_keeps_last_valid.py`）。
+    ★ 未把 `is_valid_run_record()` 一并收紧为同一性：那会把 `degraded=1` 从"不是有效结果"
+    翻成"是有效结果"，是**放松**（`R-06`），且属另一张卡的范围。
+
+    ★ **不与之混同的对象**：`parent_context.degraded`（`mark_degraded()` 写的**降级标记行**，
+    见本模块 `check()`）是**另一个字段** —— 那种行是 `status=failed` 的 `recheck` 任务、
+    **没有** `check_record`，故本谓词对它返回 `False`（正确：它不是一次运行记录）。
+    """
+    record = _check_record(row)
+    return record is not None and record.get("degraded") is True
+
+
 def is_valid_run_record(row: Mapping[str, Any]) -> bool:
     """该行是否**一条成功的运行记录** —— "上次有效结果"的**唯一原语**（`G-45` 收口）。
 
@@ -94,9 +139,12 @@ def is_valid_run_record(row: Mapping[str, Any]) -> bool:
     ★ **本函数是全仓库"上次有效结果"的唯一判定原语**：`last_valid_result_ref()`（定位该引用）
       与 `holds_valid_result()`（判定豁免）都建在它之上。此前 `stage_gate._holds_valid_result()`
       **另写了一套**（`output_refs` 口径）⇒ 同一批行两个模块给出**相反结论**（`G-45`）。
+
+    ★ 第 3 条的**对偶面**（"这行确实是降级运行"）由 `is_degraded_run_record()` 承载 ——
+      两个谓词共用 `_check_record()`，且互斥性有测试（见该函数 docstring 的表）。
     """
-    record = row.get("check_record")
-    if not isinstance(record, Mapping):
+    record = _check_record(row)
+    if record is None:
         return False
     return row.get("status") != "failed" and not record.get("degraded")
 
