@@ -47,6 +47,10 @@ printf '%-12s %-22s %-9s %-9s %-9s %s\n' \
     '模式' '模式字节(od)' '裸grep' '/usr/bin' '★真值' '判定'
 echo "-------------------------------------------------------------------------"
 
+# ★ 标签列必须区分 **GNU 扩展**（`\|` `\+` `\?` `\<` `\>`）与 **POSIX BRE 本有**（`\{n,m\}` `\.` `\(…\)\1`）。
+#   初版把前者也标成了 "BRE" —— 那是**标签失真**：会让人以为"BRE 坏了一半"，
+#   而实际是"GNU 扩展在 toybox 上没实现、POSIX 本有的都在"。
+#   标签错了，即使读数为真，结论也会错（`V-11` 类别轴）。
 # 每行：模式@Python 等价正则@说明
 while IFS='@' read -r pat py label; do
     [ -z "${pat}" ] && continue
@@ -81,14 +85,14 @@ except re.error as exc:
     printf '%-12s %-22s %-9s %-9s %-9s %s\n' \
         "${label}" "${bytes}" "${out_bare}/rc${rc_bare}" "${out_real}/rc${rc_real}" "${truth}" "${verdict}"
 done <<'PATTERNS'
-a\|z@a|z@BRE 交替
-a\+b@a+b@BRE 一或多
-ab\?@ab?@BRE 零或一
-\<ab\>@\bab\b@GNU 词边界
-ab\{2\}@ab{2}@BRE 区间
-a\.b@a\.b@BRE 字面点
+a\|z@a|z@GNU扩展 交替
+a\+b@a+b@GNU扩展 一或多
+ab\?@ab?@GNU扩展 零或一
+\<ab\>@\bab\b@GNU扩展 词边界
+ab\{2\}@ab{2}@POSIX-BRE 区间
+a\.b@a\.b@POSIX-BRE 字面点
 ab@ab@纯字面(对照)
-\(abc\)\1@(abc)\1@组+反向引用
+\(abc\)\1@(abc)\1@POSIX-BRE 组+反向引用
 PATTERNS
 
 echo "-------------------------------------------------------------------------"
