@@ -376,10 +376,19 @@ BATCHES: Mapping[str, Batch] = {
         300.0, _exit_zero,
     ),
     "injection-b": Batch(
-        "injection-b", "tests/injection/ 分片 B（判据有效性 + 守卫防御性）",
+        # ★ 重平衡（2026-09-17，卡 `#109`；裁定与 `#89` 同解 = **移片、保持上限 32**）：
+        #   合并 `main` 带进了 `test_criterion_effectiveness.py` 的增量 ⇒ 本片 **34 例 > 上限 32**，
+        #   `test_shard_case_counts_within_quota` **如实变红**（当时是**唯一**的超限片）。
+        #   ⇒ 把 `test_guards_defensive.py`（**当时读数 5 例**）移入 `injection-g`：
+        #     本片 **29** · G **29**，两片均 ≤32 且余量各 3；**移片不增删用例**，总例数不变。
+        #   ★ 例数一律不写死（`#91` 政策 + `V-11` 规则 9）：上面那几个数**只是当时读数**，
+        #     真源 = `test_shard_coverage.py` 的现算断言；取数 = `verify.py --batch injection-b`
+        #     （读门禁自印的 `N passed`）。**别把这里的数当基准。**
+        #   ★ 本片移片后只剩 1 个文件 —— 合法（`test_shard_targets_are_explicit_test_file_paths`
+        #     要求的是「显式 `tests/injection/test_*.py` 路径」，不要求每片多文件）。
+        "injection-b", "tests/injection/ 分片 B（判据有效性）",
         _pytest(
             "tests/injection/test_criterion_effectiveness.py",
-            "tests/injection/test_guards_defensive.py",
         ),
         300.0, _exit_zero,
     ),
@@ -432,10 +441,16 @@ BATCHES: Mapping[str, Batch] = {
         #   ★ 移位**不改变任何删除量**：该文件**不建夹具**（它测的是分片绑定自身）；
         #     它的成本是 `test_shard_case_counts_within_quota` 起的 **7 次 `--collect-only`**
         #     子进程，实测合计 **1.72s** ⇒ 相对本片 300s 预算可忽略。
-        "injection-g", "tests/injection/ 分片 G（反编造 + 分片绑定）",
+        # ★ 三次调整（2026-09-17，卡 `#109`）：`injection-b` 现算 **34 例 > 上限 32**
+        #   （合并 `main` 带进 `test_criterion_effectiveness.py` 的增量）⇒ 把
+        #   `test_guards_defensive.py`（**当时读数 5 例**）由 B 移入本片 ⇒ B **29** / G **29**。
+        #   ★ 移位代价：该文件与 `quote_provenance` 同族（都是"反编造/防御性"守卫用例），
+        #     故并入本片语义自然；本片超时仍 **300s**（与其余各片齐平）。
+        "injection-g", "tests/injection/ 分片 G（反编造 + 分片绑定 + 守卫防御性）",
         _pytest(
             "tests/injection/test_quote_provenance.py",
             "tests/injection/test_shard_coverage.py",   # ← 由 `injection-f` 移入（见上）
+            "tests/injection/test_guards_defensive.py",  # ← 由 `injection-b` 移入（见上）
         ),
         # ★ 超时 90s → **300s**（主理人裁定）：与 `tests/injection/` 其余各片 **齐平**（同族一致性优先），
         #   并吸收一个**已复现**的宿主状态 —— 子进程若落回沙箱内，本片单次实测可达 **247s ≫ 90s**
