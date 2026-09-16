@@ -132,4 +132,13 @@ fi
 
 print_hook > "${TARGET}"
 chmod +x "${TARGET}"
-echo "已安装: ${TARGET} -> ${SOURCE}"
+
+# ★★ 收尾措辞（`V-11`「举证半径 = 结论半径」的一次自查）：
+#   本行**曾**写成 `已安装: ${TARGET} -> ${SOURCE}` —— 而 `${SOURCE}` 是**本次运行 install_hooks.sh
+#   的那棵树**的路径，读起来像"**钩子钉死了这棵树**"（= 旧钩子的毛病，我们刚把它治掉）。
+#   实际上薄壳是**运行时**用 `git rev-parse --show-toplevel` 解析根的 ⇒ **不指向任何固定的树**。
+#   ⇒ 主语必须写对：钩子**不绑定**任何一棵树；`${SOURCE}` 只说明"本次是从哪棵树取的模板"。
+echo "已安装: ${TARGET}"
+echo "  ★ 该薄壳**不绑定任何一棵树**：它在运行时用 git rev-parse --show-toplevel 解析"被检的那棵树""
+echo "    ⇒ 任一棵树提交时，跑的都是**它自己那棵**的 system/scripts/ops/pre-commit.sh（判据与对象同源）。"
+echo "  （本次模板取自: ${SOURCE} —— 仅说明来源，**不是**被写进钩子的路径）"
