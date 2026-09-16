@@ -75,6 +75,13 @@ def last_valid_result_ref(root, *, scope="full") -> str | None:
   **机器可核**：全仓库 `_holds_valid_result` 的执行体**零命中**（仅 3 处注释在叙述历史），
   `holds_valid_result` **只有一个定义点**（`degrade.py:104`），`is_valid_run_record` 一个
   （`degrade.py:84`）—— 见 §③-2 的原始输出。
+  > ★ **「零命中」结论按 `CONVENTIONS.md::V-10 / V-11` 补足三项（2026-09-16 复验）**：
+  > ① **引擎指纹**：裸 `grep` = **toybox 0.8.13**（自报 "is not GNU grep"）；`/usr/bin/grep` = **BSD grep, GNU compatible 2.6.0-FreeBSD**；
+  > ② **`rc` 原文**：两引擎均 **`rc=0`** —— 是**正命中**，不是"零命中 + `rc=1` + 无诊断"那种假阴；
+  > ③ **地板真值**：Python `re` 独立扫全仓 `*.py` → **3 命中**，与两引擎**逐条一致**
+  > （`daily/degrade.py:95`、`delivery/stage_gate.py:539`、`orchestrate/pipeline.py:364`），三条**全在注释/说明正文**里
+  > （无 `def`、无调用形态）⇒ 「执行体零命中」**成立**。
+  > 本条是本报告**唯一**一处零命中结论，已按新口径复验通过；模式为**纯字面**、未使用任何 GNU 扩展运算符。
 
 ### 1.3 写路径补齐契约：`pipeline.py::_write_check_record`（**唯一被授权的共享文件改点**）
 
