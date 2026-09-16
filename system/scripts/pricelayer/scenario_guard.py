@@ -600,11 +600,18 @@ def _rule_binding_violations(root: Path) -> tuple[list[str], list[str]]:
     | ⑦ | `scenario_method_blocking.when` / `scenario_method_promotion.record_method_version` 与代码回落值一致 | `Ch5 §E.4`（裁定 ③-3） |
 
     ★ ⑥⑦ 即主理人裁定 ③-3：**断言"回落值 == 真文件里的值"** ⇒ 让"规则改了、回落没改"变红。
+    ★ **"缺键"本身即违例**（③④⑥⑦ 一律先判"键在不在"，再判"值对不对"）：本模块读的键
+      在真文件里**都存在**（已逐键核过）⇒ 删键意味着该事实从规则面消失、代码却仍按回落值
+      行事。若把"缺键"写成"无可比对象故跳过"，门禁就**欠报**（`G-03`："跳过不是通过"）；
+      对 `probability.default` / `must_be_null_50_50` 更糟 —— 它们的**合法值就是 `null`/`false`**，
+      缺键会被 `doc.get(k) is not None` 直接读成"合规"（**假通过**）。
     ★ **`DEFAULT_SCENARIO_METHOD_STATUS` 刻意不绑定**：它是"**尚未转正**时的状态默认值"，
       而文件里的 `scenario_method_status` 是**当前状态**（转正后合法地变成 `neutral`）——
       两者**不是同一事实**，断言相等会在正常转正后假红。它的"出处"由 docstring 承担
       （`Ch5 §E.4` 逐字 `pending`）。
     ★ 规则文件不存在 → 显式 note（`G-03`：**不**当"已核"）。
+    ★ **`RULE_KEY_BLOCKING_WHEN` 上"空串"现在也是违例**：旧写法 `if declared_when and ...`
+      让 `when: ""` 静默通过；新写法按"取值必须逐字等于回落值"判，空串自然不相等 ⇒ 红。
     """
     from scripts._common import _cached_yaml
 
@@ -628,13 +635,29 @@ def _rule_binding_violations(root: Path) -> tuple[list[str], list[str]]:
 
     probability = doc.get(RULE_KEY_PROBABILITY)
     if isinstance(probability, Mapping):
-        if probability.get(RULE_KEY_PROBABILITY_DEFAULT) is not None:
+        # ★ **缺键 ≠ 值合规**：`probability.default` 的合法值**就是 `null`**，`must_be_null_50_50`
+        #   的合法值**就是 `false`** ⇒ 用 `doc.get(k) is not None` / `bool(doc.get(k))` 判，
+        #   会把"文件里根本没写这个键"读成"已确认合规"（**假通过**，`G-03` 同族）。
+        #   故先判"键在不在"，再判"值对不对"。
+        if RULE_KEY_PROBABILITY_DEFAULT not in probability:
+            violations.append(
+                f"{SCENARIO_YAML}:: {RULE_KEY_PROBABILITY}.{RULE_KEY_PROBABILITY_DEFAULT} 缺失 —— "
+                "缺键本身即违例（Ch11 §D.2）：该键的合法值**就是 `null`**，"
+                "故'缺键'与'写了 null'必须分开判，否则缺键被静默读成'已确认不默认 50/50'"
+            )
+        elif probability.get(RULE_KEY_PROBABILITY_DEFAULT) is not None:
             violations.append(
                 f"{SCENARIO_YAML}:: {RULE_KEY_PROBABILITY}.{RULE_KEY_PROBABILITY_DEFAULT}="
                 f"{probability.get(RULE_KEY_PROBABILITY_DEFAULT)!r} 非 null —— "
                 "Ch5 §D.6：情景概率默认 null（**不默认 50/50**）"
             )
-        if bool(probability.get("must_be_null_50_50")):
+        if "must_be_null_50_50" not in probability:
+            violations.append(
+                f"{SCENARIO_YAML}:: {RULE_KEY_PROBABILITY}.must_be_null_50_50 缺失 —— "
+                "缺键本身即违例（Ch11 §D.2）：该键的合法值**就是 `false`**，"
+                "故缺键会被静默读成'已确认不默认 50/50'"
+            )
+        elif bool(probability.get("must_be_null_50_50")):
             violations.append(
                 f"{SCENARIO_YAML}:: {RULE_KEY_PROBABILITY}.must_be_null_50_50 为真 —— "
                 "Ch5 §D.6 逐字：不默认 50/50"
@@ -643,29 +666,61 @@ def _rule_binding_violations(root: Path) -> tuple[list[str], list[str]]:
         notes.append(f"NO_PROBABILITY_SECTION: {SCENARIO_YAML} 缺 {RULE_KEY_PROBABILITY!r}（G-03）")
 
     # ⑥ 取值域：规则真值必须与**代码回落值**相等（否则"规则改了、回落没改"）
-    domain_raw = doc.get(RULE_KEY_DOMAIN)
-    if isinstance(domain_raw, list) and domain_raw:
-        declared_domain = tuple(str(x) for x in domain_raw)
-        if set(declared_domain) != set(DESIGN_SCENARIO_METHOD_STATUSES):
+    #    ★ 键存在性由判据① 承担；此处负责"形态"与"值"—— 形态非法**不得静默跳过**
+    #      （跳过 = 门禁欠报，`G-03`："跳过不是通过"）。
+    if RULE_KEY_DOMAIN in doc:
+        domain_raw = doc[RULE_KEY_DOMAIN]
+        if not isinstance(domain_raw, list) or not domain_raw:
             violations.append(
-                f"{SCENARIO_YAML}:: {RULE_KEY_DOMAIN}={list(declared_domain)} 与代码回落值 "
-                f"{list(DESIGN_SCENARIO_METHOD_STATUSES)} 不一致 —— 回落值未跟随规则，"
-                "属声明与实现脱节（Ch5 §E.4 / Ch11 §D.2）"
+                f"{SCENARIO_YAML}:: {RULE_KEY_DOMAIN} 形态非法（应为**非空列表**，实为 "
+                f"{type(domain_raw).__name__}）—— 取值域不可判定，不得静默跳过（G-03）"
             )
+        else:
+            declared_domain = tuple(str(x) for x in domain_raw)
+            if set(declared_domain) != set(DESIGN_SCENARIO_METHOD_STATUSES):
+                violations.append(
+                    f"{SCENARIO_YAML}:: {RULE_KEY_DOMAIN}={list(declared_domain)} 与代码回落值 "
+                    f"{list(DESIGN_SCENARIO_METHOD_STATUSES)} 不一致 —— 回落值未跟随规则，"
+                    "属声明与实现脱节（Ch5 §E.4 / Ch11 §D.2）"
+                )
 
     # ⑦ 阻塞条件 + 是否须记版本：同上
     blocking_raw = doc.get(RULE_KEY_BLOCKING)
-    if isinstance(blocking_raw, Mapping):
-        declared_when = str(blocking_raw.get(RULE_KEY_BLOCKING_WHEN) or "")
-        if declared_when and declared_when != DESIGN_BLOCKING_WHEN:
+    if RULE_KEY_BLOCKING in doc and not isinstance(blocking_raw, Mapping):
+        violations.append(
+            f"{SCENARIO_YAML}:: {RULE_KEY_BLOCKING} 形态非法（应为映射，实为 "
+            f"{type(blocking_raw).__name__}）—— 阻塞口径不可判定，不得静默跳过（G-03）"
+        )
+    elif isinstance(blocking_raw, Mapping):
+        if RULE_KEY_BLOCKING_WHEN not in blocking_raw:
+            # ★ 缺键 ⇒ 违例（**不是**"无可比对象故跳过"）：真文件里该键存在，删掉它意味着
+            #   "阻塞条件"这一事实从规则面消失，而代码仍按回落值判定 ⇒ 门禁必须红。
+            violations.append(
+                f"{SCENARIO_YAML}:: {RULE_KEY_BLOCKING}.{RULE_KEY_BLOCKING_WHEN} 缺失 —— "
+                f"缺键本身即违例（Ch11 §D.2）：回落值 {DESIGN_BLOCKING_WHEN!r} 将无从核对，"
+                "阻塞与否会静默退化为代码内置口径"
+            )
+        elif str(blocking_raw[RULE_KEY_BLOCKING_WHEN]).strip() != DESIGN_BLOCKING_WHEN:
+            declared_when = str(blocking_raw[RULE_KEY_BLOCKING_WHEN]).strip()
             violations.append(
                 f"{SCENARIO_YAML}:: {RULE_KEY_BLOCKING}.{RULE_KEY_BLOCKING_WHEN}="
                 f"{declared_when!r} 与代码回落值 {DESIGN_BLOCKING_WHEN!r} 不一致 —— "
                 "回落值未跟随规则（Ch5 §E.4 / Ch11 §D.2）"
             )
     promotion_raw = doc.get(RULE_KEY_PROMOTION)
-    if isinstance(promotion_raw, Mapping) and RULE_KEY_RECORD_METHOD_VERSION in promotion_raw:
-        if bool(promotion_raw.get(RULE_KEY_RECORD_METHOD_VERSION)) != DESIGN_RECORD_METHOD_VERSION:
+    if RULE_KEY_PROMOTION in doc and not isinstance(promotion_raw, Mapping):
+        violations.append(
+            f"{SCENARIO_YAML}:: {RULE_KEY_PROMOTION} 形态非法（应为映射，实为 "
+            f"{type(promotion_raw).__name__}）—— 转正口径不可判定，不得静默跳过（G-03）"
+        )
+    elif isinstance(promotion_raw, Mapping):
+        if RULE_KEY_RECORD_METHOD_VERSION not in promotion_raw:
+            violations.append(
+                f"{SCENARIO_YAML}:: {RULE_KEY_PROMOTION}.{RULE_KEY_RECORD_METHOD_VERSION} 缺失 "
+                f"—— 缺键本身即违例（Ch11 §D.2）：回落值 {DESIGN_RECORD_METHOD_VERSION} 将无从"
+                "核对（Ch5 §E.4：转正后须记 method_version）"
+            )
+        elif bool(promotion_raw[RULE_KEY_RECORD_METHOD_VERSION]) != DESIGN_RECORD_METHOD_VERSION:
             violations.append(
                 f"{SCENARIO_YAML}:: {RULE_KEY_PROMOTION}.{RULE_KEY_RECORD_METHOD_VERSION}="
                 f"{promotion_raw.get(RULE_KEY_RECORD_METHOD_VERSION)!r} 与代码回落值 "
