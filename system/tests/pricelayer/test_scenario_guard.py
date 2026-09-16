@@ -2,6 +2,10 @@
 
 覆盖 DoD：「`scenario_guard`：`probability` 缺省 = `null`（**有断言**）；情景不一致被拒」
 + 「注入违例 → exit 非零」+ 反向对照。
+
+★ **夹具纪律（修 `G-43`/`G-45` 同族病）**：凡涉及规则解析的用例，一律用 `real_rules` 夹具把
+  **真** `rules/scenario.yaml` 原样复制进副本 —— 手写夹具会造出"真文件里不存在的形状"，
+  让"代码读一个不存在的键"这类缺陷在夹具上永远绿。
 """
 
 from __future__ import annotations
@@ -14,14 +18,22 @@ import pytest
 from scripts.pricelayer import ProbabilityWithoutBasis, ScenarioMethodPending, ScenarioMismatch
 from scripts.pricelayer.scenario_guard import (
     DEFAULT_SCENARIO_METHOD_STATUS,
+    DESIGN_SCENARIO_METHOD_STATUSES,
     PROBABILITY_DEFAULT,
-    SCENARIO_METHOD_STATUSES,
+    REQUIRED_RULE_KEYS,
+    RULE_KEY_BLOCKING,
+    RULE_KEY_CONSISTENCY,
+    RULE_KEY_DOMAIN,
+    RULE_KEY_PARAM_REF,
+    RULE_KEY_STATUS,
+    RULE_KEY_TAGS,
     ScenarioEstimate,
     ScenarioGuardError,
     ScenarioPolicy,
     ScenarioTag,
     assert_probability_has_basis,
     assert_relative_judgment_allowed,
+    assert_rule_tags_match,
     assert_scenario_match,
     load_scenario_policy,
 )
@@ -97,7 +109,7 @@ def test_unknown_scenario_tag_is_rejected() -> None:
 def test_default_status_is_pending() -> None:
     """`Ch5 §E.4` 逐字：默认 `pending`（**不静默默认**成 neutral）。"""
     assert DEFAULT_SCENARIO_METHOD_STATUS == "pending"
-    assert SCENARIO_METHOD_STATUSES == ("pending", "neutral", "probability_weighted")
+    assert DESIGN_SCENARIO_METHOD_STATUSES == ("pending", "neutral", "probability_weighted")
     policy = load_scenario_policy(None)
     assert policy.status == "pending"
     assert policy.value_source == "design_default"
@@ -110,29 +122,228 @@ def test_pending_blocks_relative_judgment() -> None:
 
 
 def test_reverse_control_neutral_allows_relative_judgment() -> None:
-    """反向对照：`neutral` → 放行。"""
+    """反向对照：`blocking=False` → 放行。"""
     assert_relative_judgment_allowed(
-        ScenarioPolicy(status="neutral", value_source="rules", method_version="scenario-v1")
+        ScenarioPolicy(status="neutral", value_source="rules", blocking=False)
     )
 
 
-def test_policy_reads_from_rules_scenario_yaml(scratch: Path, write_rules) -> None:
-    """规则文件存在时按 `rules/scenario.yaml` 读（**唯一真源**），并记方法版本。"""
-    write_rules(
-        scratch,
-        "scenario.yaml",
-        {"scenario_method_status": "probability_weighted", "method_version": "scenario-v2"},
+# ───────── 规则↔代码绑定：**在真 rules/scenario.yaml 上**（防 G-43/G-45 同族病）─────────
+
+
+def test_real_rules_file_contains_every_key_the_guard_reads(scratch: Path, real_rules) -> None:
+    """★ 机器绑定：本模块读取的每个键在**真** `rules/scenario.yaml` 里**真实存在**。
+
+    这是"夹具与真文件不同源"病的正面封堵：若代码读了一个真文件没有的键
+    （如曾经的 `method_version`），本用例当场红，而不是靠人手看夹具。
+    """
+    real_rules(scratch, "scenario.yaml")
+    import yaml
+
+    doc = yaml.safe_load((scratch / "rules" / "scenario.yaml").read_text(encoding="utf-8"))
+    missing = [key for key in REQUIRED_RULE_KEYS if key not in doc]
+    assert not missing, f"真 rules/scenario.yaml 缺本模块读取的键: {missing}"
+    # 指针与阻塞条件必须真的在文件里（此前这两处是硬编码的）
+    assert doc[RULE_KEY_CONSISTENCY][RULE_KEY_PARAM_REF] == "p05"
+    assert doc[RULE_KEY_BLOCKING]["when"] == f"{RULE_KEY_STATUS} == pending"
+
+
+def test_real_rules_policy_reads_blocking_and_domain_from_file(
+    scratch: Path, real_rules
+) -> None:
+    """在**真文件**上：`domain` / `blocking` / `param_ref` 全部**读**出来的，非硬编码。"""
+    real_rules(scratch, "scenario.yaml")
+    policy = load_scenario_policy(scratch)
+    assert policy.value_source == "rules"
+    assert policy.status == "pending"
+    assert policy.domain == ("pending", "neutral", "probability_weighted")
+    assert policy.blocking is True
+    assert policy.required_field_at_downstream == "benchmark_forecast"
+    assert policy.param_ref == "p05"
+    assert policy.record_method_version is True
+    # pending ⇒ 转正尚未发生 ⇒ §E.4 的"记 method_version"尚未适用，空串是**正确值**
+    assert policy.method_version == ""
+    assert policy.method_version_source == "not_applicable_pending"
+    assert policy.notes == ()
+
+
+def test_real_rules_tags_match_code_enum(scratch: Path, real_rules) -> None:
+    """真 `scenario_tags` 与代码枚举**逐字一致**（`Ch5 §J4` + `Ch11 §D.2`）。"""
+    real_rules(scratch, "scenario.yaml")
+    assert assert_rule_tags_match(scratch) == tuple(t.value for t in ScenarioTag)
+    assert assert_rule_tags_match(scratch) == ("bear", "neutral", "bull", "custom")
+
+
+def test_rule_tags_divergence_from_code_is_rejected(scratch: Path, real_rules) -> None:
+    """★ 反例：规则文件标签集改了、代码没改 → **响亮失败**（防声明与实现脱节）。"""
+    real_rules(scratch, "scenario.yaml")
+    path = scratch / "rules" / "scenario.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "scenario_tags: [bear, neutral, bull, custom]",
+            "scenario_tags: [bear, neutral, bull, custom, sideways]",
+        ),
+        encoding="utf-8",
     )
+    with pytest.raises(ScenarioGuardError, match="scenario_tags"):
+        assert_rule_tags_match(scratch)
+
+
+def test_rule_domain_read_from_file_governs_validation(scratch: Path, real_rules) -> None:
+    """★ 取值域**读**文件：把域缩到 `pending` 后，`neutral` 立即被判非法（`Ch11 §D.2`）。"""
+    real_rules(scratch, "scenario.yaml")
+    assert load_scenario_policy(scratch).domain == DESIGN_SCENARIO_METHOD_STATUSES
+    path = scratch / "rules" / "scenario.yaml"
+    text = path.read_text(encoding="utf-8")
+    text = text.replace(
+        "scenario_method_status_domain: [pending, neutral, probability_weighted]",
+        "scenario_method_status_domain: [pending]",
+    ).replace("scenario_method_status: pending", "scenario_method_status: neutral")
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(ScenarioGuardError, match="非法"):
+        load_scenario_policy(scratch)
+
+
+def test_rule_domain_key_absent_falls_back_with_note(scratch: Path, real_rules) -> None:
+    """缺 `scenario_method_status_domain` → 回落设计逐字域 + **显式 note**（非"已核"）。"""
+    real_rules(scratch, "scenario.yaml")
+    path = scratch / "rules" / "scenario.yaml"
+    kept = [
+        line
+        for line in path.read_text(encoding="utf-8").splitlines(keepends=True)
+        if not line.startswith(f"{RULE_KEY_DOMAIN}:")
+    ]
+    path.write_text("".join(kept), encoding="utf-8")
+    assert RULE_KEY_DOMAIN not in path.read_text(encoding="utf-8")
+    policy = load_scenario_policy(scratch)
+    assert policy.domain == DESIGN_SCENARIO_METHOD_STATUSES
+    assert any("NO_DOMAIN_KEY" in note for note in policy.notes)
+
+
+def test_rule_blocking_when_is_read_not_hardcoded(scratch: Path, real_rules) -> None:
+    """★ 阻塞条件**读** `scenario_method_blocking.when`：改成 `== neutral` 后行为随之改变。"""
+    real_rules(scratch, "scenario.yaml")
+    assert load_scenario_policy(scratch).blocking is True
+    path = scratch / "rules" / "scenario.yaml"
+    text = path.read_text(encoding="utf-8").replace(
+        f'when: "{RULE_KEY_STATUS} == pending"', f'when: "{RULE_KEY_STATUS} == neutral"'
+    )
+    path.write_text(text, encoding="utf-8")
+    policy = load_scenario_policy(scratch)
+    assert policy.status == "pending"
+    assert policy.blocking is False, "阻塞条件改了，代码行为必须跟着改（不得硬编码）"
+    assert_relative_judgment_allowed(policy)  # 不再阻塞
+
+
+def test_rule_blocking_when_unknown_shape_fails_loudly(scratch: Path, real_rules) -> None:
+    """★ 反例：`when` 形态不认识 → **响亮失败**（不发明表达式求值器、不当"不阻塞"）。"""
+    real_rules(scratch, "scenario.yaml")
+    path = scratch / "rules" / "scenario.yaml"
+    text = path.read_text(encoding="utf-8").replace(
+        f'when: "{RULE_KEY_STATUS} == pending"', 'when: "A and B or C"'
+    )
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(ScenarioGuardError, match="形态不认识"):
+        load_scenario_policy(scratch)
+
+
+def test_rule_blocking_key_absent_falls_back_with_note(scratch: Path, real_rules) -> None:
+    """缺 `scenario_method_blocking` → 回落 `§E.4` 逐字条件 + **显式 note**。"""
+    real_rules(scratch, "scenario.yaml")
+    path = scratch / "rules" / "scenario.yaml"
+    text = path.read_text(encoding="utf-8").replace(f"{RULE_KEY_BLOCKING}:", "renamed_blocking:")
+    path.write_text(text, encoding="utf-8")
+    policy = load_scenario_policy(scratch)
+    assert policy.blocking is True
+    assert any("NO_BLOCKING_RULE" in note for note in policy.notes)
+
+
+# ──────── `method_version` 的真实载体：**不再从 scenario.yaml 读**（修静默空串）────────
+
+
+def test_promoted_status_without_available_method_version_fails_loudly(
+    scratch: Path, real_rules
+) -> None:
+    """★ 修 1 的核心反例：`status != pending` 而 `method_version` **不可用** → **响亮失败**。
+
+    真文件把 `method_version` 的值面指向 `rules/freeze.yaml::p05`（`return_forecast_method`），
+    而 `p05` 现为 `freeze_status: tbd` / `suggested_value.algorithm: tbd`
+    ⇒ 未冻结参数就转正状态 ⇒ 必须报错，**不得静默取空串**（旧实现 `doc.get("method_version") or ""`）。
+    """
+    real_rules(scratch, "scenario.yaml", "freeze.yaml")
+    path = scratch / "rules" / "scenario.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "scenario_method_status: pending", "scenario_method_status: neutral"
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ScenarioGuardError, match="method_version 不可用"):
+        load_scenario_policy(scratch)
+
+
+def test_promoted_status_with_frozen_method_version_resolves(
+    scratch: Path, real_rules
+) -> None:
+    """反向对照：把 `p05` 冻结成真算法后，转正即能解析出 `method_version`。"""
+    import yaml
+
+    real_rules(scratch, "scenario.yaml", "freeze.yaml")
+    scenario = scratch / "rules" / "scenario.yaml"
+    scenario.write_text(
+        scenario.read_text(encoding="utf-8").replace(
+            "scenario_method_status: pending", "scenario_method_status: probability_weighted"
+        ),
+        encoding="utf-8",
+    )
+    freeze = scratch / "rules" / "freeze.yaml"
+    doc = yaml.safe_load(freeze.read_text(encoding="utf-8"))
+    for row in doc["freeze_params"]:
+        if row.get("param_id") == "p05":
+            row["value"] = {"same_period_same_scenario_as_benchmark": True, "algorithm": "scenario-v2"}
+            row["freeze_status"] = "frozen"
+    freeze.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+
     policy = load_scenario_policy(scratch)
     assert policy.status == "probability_weighted"
-    assert policy.value_source == "rules"
     assert policy.method_version == "scenario-v2"
+    assert policy.method_version_source == "freeze:p05"
+    assert policy.blocking is False
 
 
-def test_illegal_status_value_is_rejected(scratch: Path, write_rules) -> None:
-    """取值不在 `§E.4` 的三值域内 → 响亮失败（不许"未知状态当 pending 用"）。"""
-    write_rules(scratch, "scenario.yaml", {"scenario_method_status": "maybe"})
-    with pytest.raises(ScenarioGuardError):
+def test_promoted_status_with_dangling_param_ref_fails_loudly(
+    scratch: Path, real_rules
+) -> None:
+    """★ 反例：指针悬空（`param_ref` 指向不存在的参数）→ 响亮失败，不静默取空串。"""
+    real_rules(scratch, "scenario.yaml", "freeze.yaml")
+    path = scratch / "rules" / "scenario.yaml"
+    text = path.read_text(encoding="utf-8")
+    text = text.replace("scenario_method_status: pending", "scenario_method_status: neutral")
+    text = text.replace("param_ref: p05", "param_ref: p99")
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(ScenarioGuardError, match="指针悬空"):
+        load_scenario_policy(scratch)
+
+
+def test_pending_status_never_touches_freeze(scratch: Path, real_rules) -> None:
+    """`pending` 时**不读** `freeze.yaml`（转正尚未发生）—— 删掉 freeze 仍可解析。"""
+    real_rules(scratch, "scenario.yaml")
+    assert not (scratch / "rules" / "freeze.yaml").exists()
+    policy = load_scenario_policy(scratch)
+    assert policy.status == "pending" and policy.method_version == ""
+
+
+def test_illegal_status_value_is_rejected(scratch: Path, real_rules) -> None:
+    """取值不在取值域内 → 响亮失败（不许"未知状态当 pending 用"）。"""
+    real_rules(scratch, "scenario.yaml")
+    path = scratch / "rules" / "scenario.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "scenario_method_status: pending", "scenario_method_status: maybe"
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ScenarioGuardError, match="非法"):
         load_scenario_policy(scratch)
 
 
@@ -142,6 +353,25 @@ def test_missing_scenario_yaml_falls_back_to_design_default_with_note(scratch: P
     assert policy.status == "pending"
     assert policy.value_source == "design_default"
     assert any("NO_SCENARIO_YAML" in note for note in policy.notes)
+
+
+def test_tests_never_write_real_rules_files(scratch: Path, real_rules) -> None:
+    """★ 纪律：测试只**读**真 `rules/**` —— 全流程 SHA256 必须不变（副本内随便改）。
+
+    ★ 另注：真 `rules/` 的 **0444 锁纪律**（`Ch9 §3.10 J9` / 纪律 10）由 `rules_lock_guard.py`
+      承担；本卡实测**该门禁当前是红的**（`baseline/metric-sets/scenario/valuation-methods`
+      四个新装文件为 0644）—— 属 `rules/` 安装方，已在报告 §④ 上报，本卡不写 `rules/**`。
+    """
+    import hashlib
+
+    real_dir = Path(__file__).resolve().parents[2] / "rules"
+    digest = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()  # noqa: E731
+    before = {p.name: digest(p) for p in sorted(real_dir.glob("*.yaml"))}
+    real_rules(scratch, "scenario.yaml", "freeze.yaml", "valuation-methods.yaml")
+    for name in ("scenario.yaml", "freeze.yaml", "valuation-methods.yaml"):
+        (scratch / "rules" / name).write_text("mutated: true\n", encoding="utf-8")
+    after = {p.name: digest(p) for p in sorted(real_dir.glob("*.yaml"))}
+    assert before == after, "测试改动了真 rules/** —— 违反只读纪律"
 
 
 # ───────────────────── CLI：注入违例 → exit 非零 + 反向对照 ─────────────────────
@@ -201,6 +431,55 @@ def test_reverse_control_cli_passes_with_null_probability(
     proc = run_script("scripts/pricelayer/scenario_guard.py", scratch, "--no-report")
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "NO_PROBABILITY_FILLED" in proc.stdout
+
+
+def test_reverse_control_cli_passes_on_real_rules_file(
+    scratch: Path, write_jsonl, real_rules, run_script
+) -> None:
+    """反向对照：**真** `rules/scenario.yaml` + 概率为空的 baseline → exit 0（无绑定违例）。"""
+    real_rules(scratch, "scenario.yaml", "freeze.yaml")
+    write_jsonl(scratch, "baselines", [_baseline_with_probability("b1", probability=None, formula_ref="tbd")])
+    proc = run_script("scripts/pricelayer/scenario_guard.py", scratch, "--no-report")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "SCENARIO-RULE-BINDING" not in proc.stdout
+
+
+def test_cli_flags_rule_key_missing_from_scenario_yaml(
+    scratch: Path, write_jsonl, write_rules, run_script
+) -> None:
+    """★ 注入违例：规则文件缺本模块读取的键 → CLI **exit 1**（`Ch11 §D.2` 声明与实现脱节）。"""
+    write_rules(scratch, "scenario.yaml", {RULE_KEY_STATUS: "pending"})
+    write_jsonl(scratch, "baselines", [_baseline_with_probability("b1", probability=None, formula_ref="tbd")])
+    proc = run_script("scripts/pricelayer/scenario_guard.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "SCENARIO-RULE-BINDING" in proc.stdout
+
+
+def test_cli_flags_non_null_probability_default_in_rule(
+    scratch: Path, write_jsonl, real_rules, run_script
+) -> None:
+    """★ 注入违例：规则文件把概率默认值改成数值 → exit 1（`Ch5 §D.6` 不默认 50/50）。"""
+    import yaml
+
+    real_rules(scratch, "scenario.yaml")
+    path = scratch / "rules" / "scenario.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["probability"]["default"] = 0.5
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    write_jsonl(scratch, "baselines", [_baseline_with_probability("b1", probability=None, formula_ref="tbd")])
+    proc = run_script("scripts/pricelayer/scenario_guard.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "SCENARIO-RULE-BINDING" in proc.stdout
+
+
+def test_cli_reports_rule_binding_indeterminate_when_file_absent(
+    scratch: Path, write_jsonl, run_script
+) -> None:
+    """`G-03`：规则文件缺失 → 绑定判据**不可判定**（显式 note），不当"已核"。"""
+    write_jsonl(scratch, "baselines", [_baseline_with_probability("b1", probability=None, formula_ref="tbd")])
+    proc = run_script("scripts/pricelayer/scenario_guard.py", scratch, "--no-report")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "NO_SCENARIO_YAML_FOR_BINDING" in proc.stdout
 
 
 def test_reverse_control_cli_passes_with_resolvable_basis(

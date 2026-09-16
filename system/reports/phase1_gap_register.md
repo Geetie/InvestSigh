@@ -668,3 +668,24 @@ $ python3 <连"零夹具"用例>   → 仍 INTERNALERROR      ← ★ 决定性�
 **残留现状**（走授权时一并清）：`system/tests/.work/` **34 项 / 4041 文件**（其中 24 项属本流）；`.work/` 已被 gitignore ⇒ **不进仓库**。
 **恢复路径**：只剩 **③ 用户授权批量删除**（守卫本名即 `BULK_CONFIRM_REQUIRED`，**是设计好的通道**）。
 ★ `.work/` 是**测试草稿目录、非真源、且不进仓库** ⇒ 删除**风险极低**（这是请需求方授权时可以明确的前提）。
+
+### 13.9 `G-61` · ★★ 共享 git 钩子跑 **`main` 工作树那份 `pre-commit.sh`** ⇒ 「判据来自 main、被检对象来自我的树」⇒ **假缺陷**
+
+| # | 缺口 | 严重度 | 状态 |
+|---|---|---|---|
+| **`G-61`** | `<git-common-dir>/hooks/pre-commit` 逐字写死 `exec sh "/Users/gaza/Developer/InvestSigh/system/scripts/ops/pre-commit.sh"` ⇒ **任何 linked worktree 提交，跑的都是 main 工作树的钩子（含其当时的未提交状态）**；而该脚本用 `git rev-parse --show-toplevel` 从 **cwd** 反解 `REPO_ROOT` ⇒ `CODE_ROOT` = **提交者的树** ⇒ **判据清单来自 main 的实时编辑、被检对象来自提交者的树**，可组合出「**我树里永远不可能满足**」的门禁 | **中高**（**假缺陷**来源，会误伤所有人） | `OPEN` |
+
+**实测（`ws-step56-skipped`，主理人采纳）**：它在 22:35 的提交被拒，原文：
+```
+pre-commit → quote_provenance_guard
+python: can't open file '…/.worktrees/ws-step56-skipped/system/scripts/checks/quote_provenance_guard.py': [Errno 2] No such file or directory
+pre-commit ✗ quote_provenance_guard 阻断（exit=2）
+```
+⇒ **根因（主理人自认）**：当时**我正在 main 工作树里做 `ws/real-collect-2` 的试合并**，
+main 的工作树**瞬时**处于「`pre-commit.sh` 已带入 `quote_provenance_guard`、但对应脚本尚未进树」的**逐文件中间态**
+⇒ 他的提交恰好撞上。其只读佐证：`main/system/reports/quote_provenance_guard.py_*.json` **存在**且 `passed:true`、
+而 `main/system/scripts/checks/quote_provenance_guard.py` **不存在** ⇒ 正是中间态的组合。
+★ **它的处置正确**：**同一条门禁原样重试**（未绕过、未改脚本、未动环境变量）⇒ 11 道全绿 ⇒ 提交成功。
+
+★ **它不是唯一的受害者形态**：错误信息**指向提交者自己树里不存在的文件** ⇒ 极易被误读成"我删了文件/我改坏了"——
+**又一个"工具会把证据变假"的实例**（与口径 1′、`G-60` 同族）。

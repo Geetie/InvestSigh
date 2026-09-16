@@ -69,16 +69,111 @@ else:  # 直接以脚本方式运行（CLI 出口；仓库既有守卫都是这�
 
 VALUATION_METHODS_YAML = "rules/valuation-methods.yaml"
 METHOD_ROUTING_KEY = "method_routing"
-"""路由表的**候选键名**（`Ch5 §D.1` 未给键名 ⇒ 登记为待裁定；键不符即响亮失败，不静默兜底）。"""
+"""路由表键名。**真文件里就叫这个名字**（`rules/valuation-methods.yaml:27` 逐字），
+原"设计未给键名 ⇒ 待裁定"的登记已由安装件落实（`ws-ch2-rules`，`bb32863`）。"""
+
+UNREGISTERED_FALLBACK_KEY = "unregistered_fallback"
+"""未注册类型的回落口径（**真文件里存在的键**，不硬编码 —— `Ch11 §D.2`）。"""
 
 DEFAULT_METHOD_CLASS = "generic"
-"""`Ch5 §D.1` 逐字："未注册类型归入 `generic` **并标注**"。"""
+"""`Ch5 §D.1` 逐字："未注册类型归入 `generic` **并标注**"。
+
+★ 真值取自 `rules/valuation-methods.yaml::unregistered_fallback.method_class`（现为 `generic`）；
+  本常量仅作规则文件/该键缺失时的**设计逐字回落**，并**记 note**（非"已核"）。
+"""
+
+DEFAULT_UNREGISTERED_MARK = "unregistered"
+"""`§D.1` 末句"并标注"的标注值；真值取自 `unregistered_fallback.mark`（现为 `unregistered`）。"""
 
 METHOD_VERSION = "pricelayer-valuation-v1"
+
+VALUATION_COMPUTE_KEY = "valuation_compute"
+"""真文件里声明"估值计算入口"的键（`Ch5 §D.2/§D.3`）：`guard` / `entry` / `order_constraint` /
+`method_version_field`。本模块据此做**改名脱节**的机器绑定。"""
+
+RULE_BOUND_ENTRIES: tuple[tuple[str, str], ...] = (
+    (VALUATION_METHODS_YAML, METHOD_ROUTING_KEY),
+    (VALUATION_METHODS_YAML, UNREGISTERED_FALLBACK_KEY),
+    (VALUATION_METHODS_YAML, VALUATION_COMPUTE_KEY),
+)
+"""``(规则文件, 本模块实际读取的顶层键)`` 的**机器绑定对照集合**（`Ch11 §D.2`）。"""
 
 
 class ValuationError(PriceLayerError):
     """估值层的**输入 / 契约**错误（路由表结构非法、追溯链断裂等）。"""
+
+
+def load_unregistered_fallback(root: str | Path) -> tuple[str, str]:
+    """读 `unregistered_fallback.{method_class, mark}`（`Ch5 §D.1` 末句）。
+
+    返回 `(method_class, mark)`。文件 / 键缺失 → 回落设计逐字默认值（`DEFAULT_METHOD_CLASS` /
+    `DEFAULT_UNREGISTERED_MARK`）。
+    ★ **不在代码里内置该参数**（`Ch11 §D.2`）：规则文件改了回落口径，本函数即跟着变；
+      `_rule_binding_violations` 另做"代码默认值 == 文件真值"的绑定断言。
+    """
+    from scripts._common import _cached_yaml
+
+    path = Path(root) / VALUATION_METHODS_YAML
+    if not path.exists():
+        return DEFAULT_METHOD_CLASS, DEFAULT_UNREGISTERED_MARK
+    doc = _cached_yaml(path) or {}
+    node = doc.get(UNREGISTERED_FALLBACK_KEY)
+    if not isinstance(node, Mapping):
+        return DEFAULT_METHOD_CLASS, DEFAULT_UNREGISTERED_MARK
+    method_class = str(node.get("method_class") or "") or DEFAULT_METHOD_CLASS
+    mark = str(node.get("mark") or "") or DEFAULT_UNREGISTERED_MARK
+    return method_class, mark
+
+
+def _rule_binding_violations(root: Path) -> list[str]:
+    """**规则↔代码机器绑定**：`rules/valuation-methods.yaml` 的声明必须与实现一致。
+
+    | # | 判据 | 依据 |
+    |---|---|---|
+    | ① | 本模块读取的每个顶层键**真实存在** | `Ch11 §D.2`（参数只住 `rules/`，代码不得内置） |
+    | ② | `unregistered_fallback.method_class` **真值 == 代码默认值** | `Ch5 §D.1` 末句 |
+    | ③ | `valuation_compute.entry` 指向的函数**真在本模块内**（改名即违例） | `Ch5 §D.2` / `§D.3` |
+
+    ★ 规则文件不存在 → 返回空（调用方另有 `NO_VALUATION_METHODS_RULE` note，**不**当已核）。
+    """
+    from scripts._common import _cached_yaml
+
+    path = root / VALUATION_METHODS_YAML
+    if not path.exists():
+        return []
+    doc = _cached_yaml(path) or {}
+    violations: list[str] = []
+
+    for relpath, key in RULE_BOUND_ENTRIES:
+        if key not in doc:
+            violations.append(
+                f"{relpath} 缺本模块实际读取的键 {key!r} —— 声明与实现脱节（Ch11 §D.2）"
+            )
+
+    fallback, mark = load_unregistered_fallback(root)
+    if fallback != DEFAULT_METHOD_CLASS:
+        violations.append(
+            f"{VALUATION_METHODS_YAML}:: {UNREGISTERED_FALLBACK_KEY}.method_class={fallback!r} "
+            f"与代码默认值 {DEFAULT_METHOD_CLASS!r} 不一致 —— "
+            "未注册回落口径改了而代码没改（Ch5 §D.1 / Ch11 §D.2）；"
+            "调用方应传 load_unregistered_fallback(root) 的返回值"
+        )
+    if mark != DEFAULT_UNREGISTERED_MARK:
+        violations.append(
+            f"{VALUATION_METHODS_YAML}:: {UNREGISTERED_FALLBACK_KEY}.mark={mark!r} "
+            f"与代码默认标注 {DEFAULT_UNREGISTERED_MARK!r} 不一致（Ch5 §D.1「并标注」）"
+        )
+
+    compute = doc.get(VALUATION_COMPUTE_KEY)
+    if isinstance(compute, Mapping):
+        declared = str(compute.get("entry") or "")
+        if declared and declared not in globals():
+            violations.append(
+                f"{VALUATION_METHODS_YAML}:: {VALUATION_COMPUTE_KEY}.entry={declared!r} "
+                "在本模块内不存在 —— 规则文件声明的入口与实现脱节（Ch5 §D.2）"
+            )
+    return violations
+
 
 
 def load_method_routing(root: str | Path | None = None) -> dict[str, tuple[str, ...]]:
@@ -105,7 +200,7 @@ def load_method_routing(root: str | Path | None = None) -> dict[str, tuple[str, 
     if not isinstance(raw, Mapping) or not raw:
         raise ValuationError(
             f"{VALUATION_METHODS_YAML}: 缺非空的 {METHOD_ROUTING_KEY!r} 映射 —— "
-            "设计未给键名，本模块以该键为唯一候选（键名不符即失败，不静默兜底）"
+            "该键是真文件里的路由表键（Ch5 §D.1）；键名不符即失败，不静默兜底"
         )
     routing: dict[str, tuple[str, ...]] = {}
     for model_class, value in raw.items():
@@ -136,11 +231,21 @@ class MethodRoute:
         return self.method_classes[0] if self.method_classes else DEFAULT_METHOD_CLASS
 
 
-def route_method(model_class: str, routing: Mapping[str, tuple[str, ...]]) -> MethodRoute:
+def route_method(
+    model_class: str,
+    routing: Mapping[str, tuple[str, ...]],
+    *,
+    fallback_method_class: str = DEFAULT_METHOD_CLASS,
+    fallback_mark: str = DEFAULT_UNREGISTERED_MARK,
+) -> MethodRoute:
     """把 `business.model_class` 路由到估值方法类（`Ch5 §D.1`）。
 
-    未注册的 `model_class` → `method_class = "generic"` **且 `registered=False` +
-    `note`**（`§D.1`："未注册类型归入 generic **并标注**"）。
+    未注册的 `model_class` → `method_class = fallback_method_class`（真值取自
+    `rules/valuation-methods.yaml::unregistered_fallback.method_class`）**且 `registered=False` +
+    `note`（带 `fallback_mark`）**（`§D.1`："未注册类型归入 `generic` **并标注**"）。
+
+    ★ 回落口径**不是硬编码**：默认参数只是"规则文件缺失时的设计逐字回落"，正常路径由
+      调用方经 `load_unregistered_fallback(root)` 传入（`Ch11 §D.2`）。
     """
     if not model_class or model_class == "tbd":
         raise ValuationError(
@@ -151,9 +256,12 @@ def route_method(model_class: str, routing: Mapping[str, tuple[str, ...]]) -> Me
         return MethodRoute(model_class=model_class, method_classes=tuple(classes), registered=True)
     return MethodRoute(
         model_class=model_class,
-        method_classes=(DEFAULT_METHOD_CLASS,),
+        method_classes=(fallback_method_class,),
         registered=False,
-        note=f"UNREGISTERED_MODEL_CLASS: {model_class!r} 未注册，归入 {DEFAULT_METHOD_CLASS}（Ch5 §D.1）",
+        note=(
+            f"UNREGISTERED_MODEL_CLASS: {model_class!r} 未注册，归入 {fallback_method_class} "
+            f"并标注 {fallback_mark!r}（Ch5 §D.1）"
+        ),
     )
 
 
@@ -371,7 +479,15 @@ def check(root: str | Path) -> Any:
     |---|---|---|
     | ① | `formula_ref` 非空且非 `tbd` | `Ch5 §D.2` / `N5.3-02` |
     | ② | `formula_ref` 能解析到 `derived/derived_values.jsonl` 的 `DerivedValue` | `Ch5 §D.2`（追得回公式与操作数） |
-    | ③ | `method_class` 非 `tbd`，且 ∈ 路由表（或显式 `generic` 标注） | `Ch5 §D.1` |
+    | ③ | `method_class` 非 `tbd`，且 ∈ 路由表（或未注册回落方法类标注） | `Ch5 §D.1` |
+
+    另含**规则↔代码机器绑定**判据（与 `facts/` 数据无关，故空样本也照跑）：
+
+    | # | 判据 | 依据 |
+    |---|---|---|
+    | ④ | 本模块读取的 `rules/valuation-methods.yaml` 键**真实存在** | `Ch11 §D.2` |
+    | ⑤ | `unregistered_fallback.method_class` 与代码默认值一致 | `Ch5 §D.1` 末句 |
+    | ⑥ | `valuation_compute.entry` 指向的函数**真在本模块内**（防改名脱节） | `Ch5 §D.2` / `§D.3` |
 
     ★ 空样本 → 显式 note（`G-03`）。
     """
@@ -380,6 +496,10 @@ def check(root: str | Path) -> Any:
 
     root_path = Path(root)
     report = CheckReport(checker="pricelayer_valuation")
+    report.scanned["rule_binding_checks"] = len(RULE_BOUND_ENTRIES)
+    for text in _rule_binding_violations(root_path):
+        report.violations.append(Violation("VALUATION-RULE-BINDING", text))
+
     baselines = read_records(root_path, "baselines")
     report.scanned["baselines"] = len(baselines)
     if not baselines:
@@ -404,6 +524,10 @@ def check(root: str | Path) -> Any:
             "方法注册判据③不可判定（未安装规则时属输入缺口，非'守卫已通过'）"
         )
     report.scanned["routing_model_classes"] = len(routing)
+    # ★ 未注册回落口径**读规则文件**（`unregistered_fallback.method_class`），不硬编码
+    #   （`Ch11 §D.2`）。规则文件缺失时回落设计逐字值；与文件真值的一致性由
+    #   `_rule_binding_violations`（已在 `check` 开头跑过）断言。
+    fallback_method_class, _fallback_mark = load_unregistered_fallback(root_path)
 
     checked = 0
     for row in baselines:
@@ -445,16 +569,18 @@ def check(root: str | Path) -> Any:
             # 已注册的**方法类** = 路由表各 `model_class` 取值（`method_class`）的并集。
             # ★ 不能拿路由表的**键**（那是 `model_class`）去比对 `Valuation.method_class` ——
             #   两者是不同的集合（`Ch5 §D.1`："`method_class → business.model_class` 绑定"）。
+            # ★ 未注册回落方法类**取自规则文件**（`unregistered_fallback.method_class`），
+            #   不硬编码 —— 否则规则文件改了、判据却按老值放宽/收紧（`Ch11 §D.2`）。
             registered_method_classes = {
                 method_class for classes in routing.values() for method_class in classes
-            } | {DEFAULT_METHOD_CLASS}
+            } | {fallback_method_class}
             if method_class not in registered_method_classes:
                 report.violations.append(
                     Violation(
                         "VALUATION-METHOD-UNREGISTERED",
                         f"baseline {baseline_id!r}: method_class={method_class!r} 不在 "
-                        f"{VALUATION_METHODS_YAML} 的注册方法类内，且未标注为 {DEFAULT_METHOD_CLASS} "
-                        "（Ch5 §D.1：未注册类型归入 generic **并标注**）",
+                        f"{VALUATION_METHODS_YAML} 的注册方法类内，且未标注为 {fallback_method_class} "
+                        "（Ch5 §D.1：未注册类型归入回落方法类 **并标注**）",
                     )
                 )
     report.scanned["valuations_checked"] = checked

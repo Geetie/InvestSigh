@@ -6,7 +6,11 @@
 - **审计员立场**：**尽力证伪**。凡我构造过用例但**未能**推翻的，逐条明说"我试了 X、Y，未推翻"。
 - **审计时 HEAD**：审计开始为 `1c35154`，主体收尾时为 **`d1efa1d`**；**报告定稿时 `main` 已推进到 `d5a37f8`**（`git reflog` 实测：`d5a37f8 ← c2933c3 ← d1efa1d ← 1c35154`）。三者**均已超出被审范围**。本报告只对被审的 11 个提交下结论；范围外的改动只在 §⑥ 以"环境事实"登记，不作为交付结论。
 - **定稿前复验（在本轮会话内重跑，非引用记忆）**：`G-42`（A1 击穿）在**当前 HEAD 的副本上重跑仍成立**（违例 6 → 0）；并新增一条 `G-RC-12`（夹具副本不完整时**静默继续**）。见 §③ 第 4 条与 §⑥ 第 6–7 条。
-- **纪律遵守声明**：全程**未修改任何被审文件**；一切实验在副本（仓库外的 `/tmp/investsigh-audit-b11/`，以及该目录在仓库内的旧位置 `system/tests/.audit-b11/`）中进行；**真仓库真源未被我触碰**：实测 `git status --porcelain system/registry system/audit system/facts system/state.json` 为**空**，`system/derived/` 下唯一一条 `?? system/derived/compute_gaps.jsonl` 系**他人**跑 `run_daily` 所留（见 §⑥ 第 7 条），**非我所为**。
+- **纪律遵守声明**：全程**未修改任何被审文件**；一切实验在副本（仓库外的 `/tmp/investsigh-audit-b11/`，以及该目录在仓库内的旧位置 `system/tests/.audit-b11/`）中进行。
+  ★ **"真源未被我触碰"的可核对表述（含时点，避免被后来的他人改动误读）**：
+  - 审计期间（2026-09-16）实测 `git status --porcelain system/registry system/audit system/facts system/state.json` 为**空**。
+  - **交付后该状态会变** —— 例如 `ws-real-collect-2` 会把真实采集结果落库（实测出现 `M system/facts/claims.jsonl`、`M system/facts/sources.jsonl`、`A system/raw/2026-*.txt`，且与 `A system/scripts/ingest/public_fetcher.py`、`A system/reports/ws_real_collect_2_report.md` 同批）—— **那些不是我的改动**，属另一条流的正常交付。
+  - **判断依据（不依赖我的自述）**：我在整份报告中只产出 `system/reports/ws_independent_audit_batch11.md` **一个**文件；我没有任何脚本写 `facts/`、`registry/`、`audit/`、`state.json`（我的脚本只在自己的副本目录下 `copytree`/`rmtree`）。
 
 ---
 
@@ -223,6 +227,14 @@
   # 对照：同一脚本、同一 Python、只把宿主 broker 关掉
   ==> 10 次中 0 次不完整
   ```
+- **★ 与 `G-60`（`ws-ch2-rules` 的独立实测）的关系 —— 同一个宿主闸门、两种拒绝形态**（我**不**声称因果已证，只登记为**待闭合的假设**）：
+  | | 我的 `G-RC-12` 观测 | `G-60` 观测（`ws/ch2-rules` 的树，22:32） |
+  |---|---|---|
+  | 宿主消息 | `SAFE_DELETE_FAIL_CLOSED` + `trash-failed` + `FSPathMakeRefWithOptions failed (status -43)` | `SAFE_DELETE_BULK_CONFIRM_REQUIRED` `{"count":100267,"threshold":99999,"scope":"turn","targetCount":1}` |
+  | 后果 | `copytree` **静默**少拷（30 次里 7 次，各缺约 30 项） | 连**删 1 项**都被拒 ⇒ `_clear_work_dir()` 必失败 ⇒ 需夹具的用例集体 `ERROR` |
+  | 我实测到其**代码级放大器** | `_ENSURE_DIRS` 不含 `facts`/`registry`/`audit`；`_reset_truth_source` 用 `if facts.is_dir()` 静默跳过；`code_root` 无完整性断言 | `pytest_sessionstart` 的 `_clear_work_dir()` 无降级路径 |
+  - **共同点（这才是关键）**：**两者的失败都不会被代码侧识别** —— 一个静默少文件、一个直接 `E`，但**都没有任何一处说"是宿主闸门拒了我，不是产品坏了"**。⇒ `G-RC-12` 与 `G-60` **应合并排期**：`_clear_work_dir()` 改**逐文件删除**（`ws-ch2-rules` 提议的方向）能同时压掉两侧的量级；再加一条**夹具完整性断言**即可把"静默少文件"变成响亮报错。
+  - ⚠️ **我保留的不确定项（如实写）**：我这 7 次的缺件发生在**复制**阶段（每轮用新 uuid 目录、`rmtree` 在其后），而**复制侧为何会少拷，我没有证明其机制**（`copytree` 未抛异常）。⇒ 登记为**假设**："宿主闸门处于 fail-closed 时，同一轮内的文件系统操作会**静默部分失败**"。**闭合它需要一条直接的因果实验**（在闸门被拒的状态下反复 `copytree` 并逐次比对），这一条我**没做成**（重测时进程被宿主 SIGKILL，见下）。
 - **为什么这是缺陷（与宿主无关的那一半）**：**代码侧没有任何"副本必须完整"的守卫**。`facts/` 不在 `_ENSURE_DIRS` 里（不会被补出来），`_reset_truth_source` 用 `is_dir()` 守卫（**缺了就跳过、不响**），`code_root` 也不断言。⇒ **一旦复制缺件，测试会以"`FileNotFoundError: .../facts/claims.jsonl`"或"某守卫 `exit=1`"的形式失败，而这两者看起来都像产品缺陷。** 这正是本项目自己的铁律 **V-07「测试失败必须先区分『产品坏了』与『夹具坏了』」** 要防的事，而当前夹具**没有能力**做这个区分。
 - **可判定复现步骤**：见上框（脚本 `/tmp/investsigh-audit-b11/exp_fixture_integrity2.py`，逻辑即 `copytree(SYSTEM_ROOT, t, ignore=_ignore)` → `_ENSURE_DIRS` → `_make_writable` → `_reset_truth_source`，然后逐项核对 `_TRUTH_STEMS` + `registry/{corporate-actions,quality-labels,idempotency}.jsonl` + `audit/rule_changes.jsonl`；`N` 由 `sys.argv[1]` 给定）。
 - **贡献向量（实测发现）**：`system/tests/probe-f177bb76/` 是**不受 `.gitignore` 忽略的非点号目录**（`git status` 显示 `?? system/tests/probe-f177bb76/`，**1.7 MB**，内含 `system/tests/probe-f177bb76/system/tests/probe-f177bb76/…` **5 层递归自嵌套**）。而 `_ignore()` 只排除 `_COPY_SKIP` 与**以 `.` 开头**的名字 ⇒ **这个目录会被原样复制进每一个夹具副本**，且在源目录里它把"待复制项数"抬高 —— 而宿主对**单轮批量删除**有阈值（`G-RC-09`：`threshold: 9999, scope: "turn"`）。⇒ 它**同时**加重"复制更可能缺件"与"清理更可能被拒"两件事。（`system/tests/.probe-step56/` 因以 `.` 开头**不会**进副本 — 见 `_ignore()` 的 `n.startswith(".")`。）
@@ -270,7 +282,7 @@
    - **独立旁证**：该修复随后合入为 **`d1efa1d`**（**在我被审范围之外**），其提交信息**独立复述了我上面这个诊断**——"`ps` 显示当时**至少 5 个 pytest 会话并发**，其中**两个在同一工作树**里跑 `tests/injection`…而 `conftest.pytest_sessionstart` **会整个清空同一个 `system/tests/.work/`** ⇒ **互删对方正在用的夹具副本**"。⇒ 我的结论与实现方的复核**互相印证**。
 3. **一致性旁注（登记时**仍**成立，故登记为可判定缺陷，**不计入被审 11 个提交**）**：`CONVENTIONS.md:132`「V-05 **强制手段**：⚠️ **人工**（守卫无法可靠检测并发进程）」与 `:241` 表格行 `| V-05 | ⚠️ 人工（并发不可靠检测）；…`，**在 `d1efa1d` 落地后仍未被更新**（实测 `grep -n "V-05" system/CONVENTIONS.md` 仍是原文），而同提交已交付 `tests/guards/test_session_lock.py`（PID 存活检测 + 陈旧锁自愈 + 专用测试）⇒ **规范条文与实现相反**（此处方向是**代码强于文档**）。按本项目自己的铁律第 5 条（"声明与实现必须有机器绑定"），**建议由 `d1efa1d` 作者顺手把 V-05 的"强制手段"改为"机器 + `tests/guards/test_session_lock.py`"**。★ **该条已闭合**：`2a8ca32` 已把 `CONVENTIONS.md:257` 改为"**人工（动测前 `ps`）+ 机器（`tests/.work/.session.lock` 排他会话锁，`returncode=4`）**"，我在收口前复验通过（见 §⑧ 第 4 条）。
 4. **我的实验目录被外部清空**：审计中途 `system/tests/.audit-b11/` 下除我**刚写的一个文件**外的全部内容（`base/`、全部 `case-*/`、全部 `exp_*.py`）被**外部清空**（目录 mtime 20:06–20:07）。我**没有**任何脚本会删这个目录（我的脚本只删自己创建的 `case-*/probe-*` 子目录）。**为不引用"记忆里的数字"，我把关键结论（A1 击穿、B1 绕过、B3 新旧对比）在本轮用重建的脚本 + `git show 4f95c3d:…` **全部重跑了一遍**，报告中的数字**全部来自本轮的实测输出**。顺带确认：`.audit-b11` 以 `.` 开头 ⇒ 被 `_ignore()` 排除，**从未**污染夹具副本。
-5. **审计纪律**：未修改任何被审文件（`git status` 中被审范围内的文件无我的改动）；真仓库真源未被我触碰 —— 实测 `git status --porcelain system/registry system/audit system/facts system/state.json` **为空**；`system/derived/` 下唯一一条 `?? system/derived/compute_gaps.jsonl` 是**他人**跑 `run_daily` 落下的（见下第 7 条），**非我所为**（我的全部实验在副本内进行）。我自己的实验目录**全部在仓库之外**（`system/tests/.audit-b11/` 与 `/tmp/investsigh-audit-b11/`），**其中 `.audit-b11` 以 `.` 开头、被 `_ignore()` 排除，从未污染夹具副本**；该目录我在定稿前**移出仓库**（`mv system/tests/.audit-b11/* /tmp/investsigh-audit-b11/`，随后 `rmdir`），现 `git status` 中由我新增的文件**只有本报告**。
+5. **审计纪律**：未修改任何被审文件（`git status` 中被审范围内的文件无我的改动）。**真仓库真源未被我触碰**，但这条**必须带时点**才可核对 —— 审计期间实测 `git status --porcelain system/registry system/audit system/facts system/state.json` **为空**；**交付后**该状态会被**他人的正常交付**改变（实测：`ws-real-collect-2` 把真实采集落库，出现 `M system/facts/claims.jsonl`、`M system/facts/sources.jsonl`、`A system/raw/2026-*.txt`，与 `A system/scripts/ingest/public_fetcher.py` 同批；更早还有他人跑 `run_daily` 留下的 `system/derived/compute_gaps.jsonl`）—— **均非我所为**。**不依赖我自述的判据**：整份审计我只产出本报告**一个**文件，且我没有任何脚本会写 `facts/`/`registry/`/`audit/`/`state.json`（我的脚本只在仓库外副本里 `copytree`/`rmtree`）。我自己的实验目录**全部在仓库之外**（`system/tests/.audit-b11/` 与 `/tmp/investsigh-audit-b11/`），**其中 `.audit-b11` 以 `.` 开头、被 `_ignore()` 排除，从未污染夹具副本**；该目录我在定稿前**移出仓库**（`mv system/tests/.audit-b11/* /tmp/investsigh-audit-b11/`，随后 `rmdir`）。
 6. **★ 定稿前新增的两条实测（本轮会话内，非引用记忆）**：
    - **A1 在当前 HEAD 上重跑仍成立**：违例 `6 → 0`；且**"要求 skipped 的 id 真实存在于真源"这一加强方案也不闭合**（见 §② A 组 A1 行与 `G-42` 修法）。
    - **`G-RC-12`（夹具副本静默不完整）**：broker 开启 30 次 **7 次**缺件 / broker 关闭 10 次 **0 次**缺件；**代码侧无完整性断言**。⇒ 我因此**撤回**本报告初稿里"E 附：夹具副本稳定完整 —— 未证伪"这条（§③ 第 4 条已改写）。
