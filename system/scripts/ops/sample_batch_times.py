@@ -63,11 +63,15 @@ PY="${HOME}/.workbuddy/binaries/python/envs/default/bin/python"
 "$PY" scripts/ops/sample_batch_times.py --scheduled --json    # 机器可读
 ```
 
-★ **取样必须在 `E`（生产/门禁口径）下跑**，否则脚本**拒绝开跑**（`exit=2`）：
+★ **取样在"子进程实际配置 = `E=0`"下即可**。自 `main@612cafe`（`3653c7c`）起
+`verify.py::_child_env()` **自己强制**置 `E=0` ⇒ **调用者不需要（也不再能左右）export 它**：
 
 ```bash
-CODEBUDDY_SAFE_DELETE_ENABLED=0 "$PY" scripts/ops/sample_batch_times.py --scheduled --max-cells 2
+"$PY" scripts/ops/sample_batch_times.py --scheduled --max-cells 2
 ```
+
+★ 脚本仍会在开跑前**打印子进程实际配置**（并列出调用者值以便对账）；
+只有"子进程实际配置不是 `E=0`"（即有人把 `_child_env()` 的第三行删了）才**拒绝开跑**。
 
 ★ **开工前**会做**配额预检**（`--quota` 的同一读数）：余量 < 本格所需 ⇒ **拒绝开跑并 `exit=2`**，
 **不重试、不降 `repeat`、不拿旧值代替**。宿主未注入诊断所需环境变量时预检**不可用** ⇒
@@ -89,17 +93,22 @@ CODEBUDDY_SAFE_DELETE_ENABLED=0 "$PY" scripts/ops/sample_batch_times.py --schedu
 
 | 配置维度 | 合法值 | 非法/不可比的值 | 后果 |
 |---|---|---|---|
-| 守卫开关 | `CODEBUDDY_SAFE_DELETE_ENABLED=0`（= 生产/门禁口径） | 未设 ⇒ 守卫开 | 夹具 teardown **每项 spawn 一个 node CLI** ⇒ 实测慢约 **30×**（`58s → 2s`，`ws-verify-shard` 实测） |
-| 夹具根位置 | **仓库内**（`<worktree>/system/tests/.work/…`） | `/tmp` 副本 | 见下 |
+| 守卫开关 | 子进程实际 `CODEBUDDY_SAFE_DELETE_ENABLED=0`（= 生产/门禁口径） | 守卫开 | 夹具 teardown **每项 spawn 一个 node CLI** ⇒ 实测慢约 **30×**（`58s → 2s`） |
+| 夹具根位置 | **仓库内**（`<worktree>/system/tests/.work/…`） | `/tmp` 副本 | 见下（主理人裁定：`#83` 不得在 `/tmp` 夹具模式下取样） |
 
-**故本脚本把这两项也当"仪器读数"**：每行都记 `profile`（守卫开关）与 `fixture_mode`（夹具根位置），
-**两者都不合法时拒绝开跑**（`exit=2`，理由是"这一轮不是生产口径的读数"）。
+★★ **取数必须同源**：本脚本读的是**被测程序自己的** `verify.py::_child_env()` 返回值，
+**不是调用者的 shell env**。
+理由（本单实测的两次更正）：`main@e9a009b` 时 `_child_env()` 只置两个开关、**继承**调用者的 `E`
+⇒ 当时"调用者 export 了什么"**就是**被测配置；而 `main@612cafe`（`3653c7c`）起它**强制**把
+`E` 也置 `0` ⇒ 调用者 export 什么都不影响批次。
+⇒ 若仍按调用者判，就会拒绝一个**本来就是合法生产口径**的读数（**假阻断**，`G-61` 家族）。
+**教训**：配置类判据也必须**与被测对象同源**，且**标明 SHA**（`V-11` 时间轴）。
 
-- `E` 未关 ⇒ 默认**拒绝**（那种数只能当**对照**）；确要跑对照时用 `--profile-baseline`，
-  读数会**逐行**标注 `BASELINE` 并写明"**不得据以定值**"。
-- ★ **`#83` 不得在 `/tmp` 夹具模式下取样**（主理人裁定）：`/tmp` 方案（若验证通过）只解决
-  `G-60` **配额**这一件事；而 `Batch.timeout` 对应的是**仓库内夹具**的耗时 ⇒
-  **换到 `/tmp` 会让 `code_root` 位置改变，读数与生产口径不可比**。这是**硬拒绝**，**不提供覆盖开关**。
+- 子进程实际配置**不是** `E=0` ⇒ 默认**拒绝开跑**（`exit=2`）；确要**对照**用 `--profile-baseline`
+  （读数会**逐行**标注 `NON_E` 并写明"**不得据以定值**"）。
+- ★ **`#83` 不得在 `/tmp` 夹具模式下取样**（主理人裁定）：`/tmp` 方案只解决 `G-60` **配额**这一件事；
+  而 `Batch.timeout` 对应的是**仓库内夹具**的耗时 ⇒ 换位置即与生产口径不可比。
+  这是**硬拒绝**，**不提供覆盖开关**。
 """
 
 from __future__ import annotations
@@ -119,7 +128,15 @@ ROOT = Path(__file__).resolve().parents[2]  # .../system
 sys.path.insert(0, str(ROOT))
 
 # ★ 超时值的**唯一真源**是 `verify.py::BATCHES`。本脚本**不复制**任何超时数字（会静默过期）。
-from scripts.ops.verify import BATCHES  # noqa: E402
+# ★ `_child_env` 也是**被测程序自己的真源** —— 被测配置以"子进程实际拿到什么"为准（见 `_env_profile`）。
+from scripts.ops.verify import BATCHES, _child_env  # noqa: E402
+
+#: 决定"这一轮算不算生产口径"的三个开关（顺序 = 守卫唯一真源 `BROKER_ENV_VARS` 的顺序）。
+_PROFILE_KEYS = (
+    "CODEBUDDY_SAFE_DELETE_ENABLED",
+    "CODEBUDDY_SAFE_DELETE_SANDBOX",
+    "CODEBUDDY_BROKERED_FS_HOOK_ENABLED",
+)
 
 #: `G-60` 的标志串（宿主 safe-delete shim 打印）。
 QUOTA_MARKER = "SAFE_DELETE_BULK_CONFIRM_REQUIRED"
@@ -263,27 +280,32 @@ def _main_sha(root: Path) -> str:
         return f"unknown({exc.__class__.__name__})"
 
 
-def _env_profile() -> dict[str, str]:
+def _env_profile() -> dict[str, dict[str, str]]:
     """本轮的**被测配置**（守卫开关）—— 它是**仪器的一部分**，必须逐行记录。
 
-    `E`（`CODEBUDDY_SAFE_DELETE_ENABLED=0`）= **生产/门禁口径**（CI 跑 `verify.py` 就是这个配置）。
-    未设 ⇒ 守卫开 ⇒ 夹具 teardown **每项 spawn 一个宿主 node CLI** ⇒ 实测慢约 **30×**
-    （`58s → 2s`；出处 `ws-verify-shard` 的 A/B 三点对照，主理人已采纳入册）。
+    ★★ **主读数必须取「子进程实际拿到什么」，不是「我导出过什么」。**
+    本仓 `verify.py::_child_env()` 自 `3653c7c`（`main@612cafe`）起**强制**把
+    `CODEBUDDY_SAFE_DELETE_ENABLED` 等三道闸门置 `0`（`{**os.environ, …}` 覆盖在**后**）
+    ⇒ **调用者 export 什么，批次都在 `E=0` 下跑**。
 
-    ★ 为什么必须在**每一行**都记：`verify.py::_child_env()` 是 `{**os.environ, SANDBOX=0, BROKERED=0}`
-    —— 它**继承调用者的 `E`**，自己**不设** `E`。故"这一轮是不是生产口径"取决于**谁怎么调的**，
-    属**外部条件**、代码里看不出来 ⇒ 只能靠记录（否则就是混用两个仪器，`口径 21` 要防的事）。
+    ★ 我上一版只读调用者 env ⇒ 在 `3653c7c` 之后它变成**假阻断**
+    （调用者 `E=1` 时会拒跑一个**本来是合法生产口径**的读数）。
+    ★ 这正是 `G-61` 家族（**判据与对象不同源**）+ `V-11` **时间轴**：
+    该结论在 `main@e9a009b` 为真、在 `main@612cafe` 为假 —— **所以必须同源取数**。
+    故这里**直接调用被测程序自己的 `_child_env()`**（唯一真源），并同时记录调用者值以便对账。
+
+    返回 `{"child": {...}, "caller": {...}}`；`child` = 子进程实际环境（定值只看它）。
     """
+    child = _child_env()  # ★ 被测程序自己的真源，不复制那个字典
     return {
-        "CODEBUDDY_SAFE_DELETE_ENABLED": os.environ.get("CODEBUDDY_SAFE_DELETE_ENABLED", "<unset>"),
-        "CODEBUDDY_SAFE_DELETE_SANDBOX": os.environ.get("CODEBUDDY_SAFE_DELETE_SANDBOX", "<unset>"),
-        "CODEBUDDY_BROKERED_FS_HOOK_ENABLED": os.environ.get("CODEBUDDY_BROKERED_FS_HOOK_ENABLED", "<unset>"),
+        "child": {k: child.get(k, "<unset>") for k in _PROFILE_KEYS},
+        "caller": {k: os.environ.get(k, "<unset>") for k in _PROFILE_KEYS},
     }
 
 
-def _profile_tag(env: dict[str, str]) -> str:
-    """把 env 折成一个**可判定**的短标签：`E=0`（生产口径）/ `NON_E`（对照口径）。"""
-    return "E=0(生产口径)" if env["CODEBUDDY_SAFE_DELETE_ENABLED"] == "0" else "NON_E(对照口径)"
+def _profile_tag(env: dict[str, dict[str, str]]) -> str:
+    """把**子进程实际环境**折成一个**可判定**的短标签：`E=0`（生产口径）/ `NON_E`（对照口径）。"""
+    return "E=0(生产口径)" if env["child"]["CODEBUDDY_SAFE_DELETE_ENABLED"] == "0" else "NON_E(对照口径)"
 
 
 def _fixture_mode(root: Path) -> str:
@@ -409,6 +431,8 @@ def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str)
     for run in range(1, repeat + 1):
         before = _concurrency()
         started = dt.datetime.now().astimezone()
+        # ★ 每次都现取（而不是每格一次）：配置是**被测对象**的一部分，取一次就假设它不变。
+        env_now = _env_profile()
         proc = subprocess.run(
             [sys.executable, "scripts/ops/verify.py", "--batch", name],
             cwd=str(root), capture_output=True, text=True, check=False,
@@ -442,9 +466,12 @@ def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str)
             "started_at_local": started.isoformat(timespec="seconds"),
             "started_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
             "main_sha": _main_sha(root),
-            # ★★ 「被测配置」也是仪器的一部分（口径 21 延伸）⇒ 逐行记录，不靠上下文记性
+            # ★★ 「被测配置」也是仪器的一部分（口径 21 延伸）⇒ 逐行记录，不靠上下文记性。
+            #    `env_child` = 子进程**实际**环境（定值只看它）；`env_caller` 只作对账。
             "env_profile": profile,
-            "env_vars": _env_profile(),
+            "env_child": env_now["child"],
+            "env_caller": env_now["caller"],
+            "caller_forced_by_child_env": env_now["child"] != env_now["caller"],
             "fixture_mode": _fixture_mode(root),
             "concurrency_before": before,
             "concurrency_after": _concurrency(),
@@ -542,9 +569,16 @@ def _print_plan(cells: tuple[Cell, ...], repeat: int) -> None:
               f"`used={st['used']} / threshold={st['threshold']}` ⇒ **余量={st['remaining']}**"
               f"（只读诊断，`13-F §⑥-7`）")
     # ★ 零成本地暴露"这一轮到底算不算生产口径"——否则要到跑完才发现仪器不对。
+    # ★★ 读数取**子进程实际环境**（同源），并把调用者值并列 —— 两者不同时读者必须看得见。
     env = _env_profile()
-    print(f"- ★ **本轮被测配置**：`{_profile_tag(env)}`（`E={env['CODEBUDDY_SAFE_DELETE_ENABLED']}`）"
+    print(f"- ★ **本轮被测配置（子进程实际）**：`{_profile_tag(env)}`"
+          f"（`E={env['child']['CODEBUDDY_SAFE_DELETE_ENABLED']}`）"
           f" ｜ **夹具模式**：`{_fixture_mode(ROOT)}`")
+    if env["child"] != env["caller"]:
+        print(f"  - 调用者 env 与子进程 env **不同**（`E`: "
+              f"caller `{env['caller']['CODEBUDDY_SAFE_DELETE_ENABLED']}` → "
+              f"child `{env['child']['CODEBUDDY_SAFE_DELETE_ENABLED']}`；"
+              f"`verify.py::_child_env()` 强制置 0）⇒ **以子进程为准**。")
     if _profile_tag(env) != "E=0(生产口径)":
         print("  ★★ 该配置**不是**生产/门禁口径 ⇒ 默认**拒绝开跑**"
               "（对照用 `--profile-baseline`，读数会逐行标注且**不得据以定值**）。")
@@ -630,18 +664,27 @@ def main(argv: list[str] | None = None) -> int:
     env = _env_profile()
     profile = _profile_tag(env)
     if profile != "E=0(生产口径)" and not args.profile_baseline:
-        print(f"★ 拒绝开跑：**本轮不是生产/门禁口径** —— 被测配置 `{profile}`"
-              f"（`CODEBUDDY_SAFE_DELETE_ENABLED={env['CODEBUDDY_SAFE_DELETE_ENABLED']}`）。", file=sys.stderr)
+        print(f"★ 拒绝开跑：**本轮不是生产/门禁口径** —— 子进程实际配置 `{profile}`"
+              f"（`_child_env()['CODEBUDDY_SAFE_DELETE_ENABLED']="
+              f"{env['child']['CODEBUDDY_SAFE_DELETE_ENABLED']}`）。", file=sys.stderr)
         print("  裁定：`#83` **应在 `E`（`CODEBUDDY_SAFE_DELETE_ENABLED=0`）下取样** —— "
               "那是 CI/门禁的配置；守卫开时夹具 teardown 实测慢约 **30×**（`58s → 2s`）⇒ "
               "两者**不可混比**（`口径 21`）。", file=sys.stderr)
-        print("  跑法：`CODEBUDDY_SAFE_DELETE_ENABLED=0 … sample_batch_times.py …`；"
+        print("  说明：判据取自**被测程序自己的** `verify.py::_child_env()`（同源），不是调用者的 shell env。"
               "确要一份**对照**用 `--profile-baseline`（读数会逐行标注 `NON_E`，**不得据以定值**）。",
               file=sys.stderr)
         return 2
     if profile != "E=0(生产口径)":
         print(f"★★ 已显式采用**对照口径** `{profile}` —— 本轮读数**不得**用来给 "
               "`Batch.timeout` 定值（只能回答「守卫开时慢多少」）。", file=sys.stderr)
+    elif env["child"] != env["caller"]:
+        # ★ 这行不是噪音：它把「调用者 export 了什么」与「批次实际在什么下跑」分开，
+        #   两者不同时**读数仍然合法**（以子进程为准），但读者必须知道这件事。
+        print(f"★ 调用者 env 与子进程 env **不同**（以子进程为准 = `E=0` 生产口径）："
+              f"caller `E={env['caller']['CODEBUDDY_SAFE_DELETE_ENABLED']}` → "
+              f"child `E={env['child']['CODEBUDDY_SAFE_DELETE_ENABLED']}`"
+              f"（`verify.py::_child_env()` 强制置 0）⇒ 读数**不因此失效**，但已逐行记录。",
+              file=sys.stderr)
 
     all_rows: list[dict] = []
     stop_reason = ""

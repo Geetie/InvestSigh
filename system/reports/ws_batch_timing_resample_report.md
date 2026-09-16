@@ -15,9 +15,17 @@
 >    我**不把它们当作"已取样"**，也**不据此改任何登记值**。
 >    除这 2 次外，**其他 13 格一次都没跑**。
 >
+> 4. ★★★ **提交后约 40 分钟内又发生一次「时间轴更正」（在我这一侧）**：
+>    我上报的「`_child_env()` 还没补 `E=0` ⇒ 收紧有顺序依赖」**当时为真、现已作废** ——
+>    `refs/heads/main` 已从 `e9a009b` 前进到 **`612cafe`**，其中 `3653c7c`
+>    **已落地 E 第三道闸门**（`_child_env()` / `run_pytest.sh` 各补一行 + 守卫 3 变量 + 运行时断言）。
+>    ⇒ 本报告 §5.3-4 的"顺序依赖"**已解除**；且**我脚本的判据因此要做同源改造**（见 §3.6）。
+>    ★ 这正是 `V-11` **时间轴**：**"零处"这类结论必须与 SHA + 时刻一起写**，
+>    否则它会在几分钟内变成一条错情报（我上一条消息就是）。
+>
 > 事实基线（`口径 10` 式，写全名与时刻）：
-> `refs/heads/main` = `e9a009b`（2026-09-16 23:17，取值时刻 = 本次读数所在的那一次运行，
-> 由脚本逐行记录在 `main_sha`）· worktree = `.worktrees/ws-real-collect-2` ·
+> `refs/heads/main` = **`612cafe`**（2026-09-16 23:2x，取值时刻 = 本节写作时）·
+> 本 worktree HEAD = `feec56d`（含一次 merge main）· worktree = `.worktrees/ws-real-collect-2` ·
 > 分支 = `ws/real-collect-2` · 夹具模式 = `repo-internal`（脚本自判）。
 
 ---
@@ -60,6 +68,12 @@ python -c "import ast,pathlib;d=pathlib.Path('system/tests/pricelayer');\
 print(sum(1 for f in d.glob('test_*.py') for n in ast.walk(ast.parse(f.read_text())) \
 if isinstance(n,ast.FunctionDef) and n.name.startswith('test_') and 'scratch' in [a.arg for a in n.args.args]))"
 ```
+
+★ **`V-11` 时间轴提醒（我给自己记一条）**：上面的 `188 / 100` 是**两个不同 SHA 上的同一个总数**，
+但**逐文件分布不**同（#81 修订轮重排过）：
+`test_daily_explain.py 35→30` · `test_scenario_guard.py 40→44` · `test_solver.py 27→29` ·
+`test_step_wiring.py 11→9` · `test_valuation.py 30→31`（总 188 不变、`scratch` 100 不变）。
+⇒ **"总数没变"是巧合，不是"没变"** ⇒ 引用时必须写 SHA：本次取值 = `feec56d`（含 merge `main@612cafe`）。
 
 **但"耗多少配额"取决于夹具的形状，不取决于用例数**：
 
@@ -218,43 +232,52 @@ $ python scripts/ops/sample_batch_times.py --batch unit
 
 ### 3.6 ★★ 新增的两条**仪器前置**（`口径 21` 的延伸：仪器也包括"被测量的配置"）
 
-主理人已裁定 **`E` 下 = 生产/门禁口径**。但 `verify.py::_child_env()` 是
-`{**os.environ, CODEBUDDY_SAFE_DELETE_SANDBOX: "0", CODEBUDDY_BROKERED_FS_HOOK_ENABLED: "0"}`
-—— 它**继承调用者的 `E`、自己并不设 `E`**（我在 `verify.py:596-600` 逐行核过；
-`run_pytest.sh:27-28` 同样只 export 两个，**没有** `E`）。
-⇒ **"这一轮算不算生产口径"是调用者的外部条件，代码里看不出来** ⇒ 只能**逐行记录**，
-否则又是一个"混用两个仪器"。
+主理人已裁定 **`E` 下 = 生产/门禁口径**。脚本在**跑任何批次之前**做两条硬检查（不满足即 `exit=2`）：
 
-故脚本在**跑任何批次之前**做两条硬检查（`exit=2` 拒绝）：
-
-| 检查 | 判定 | 处置 |
+| 检查 | 判据（**与被测对象同源**） | 处置 |
 |---|---|---|
-| **被测配置** | `CODEBUDDY_SAFE_DELETE_ENABLED == "0"` | 不满足 ⇒ **拒绝**（`NON_E` 只能当**对照**，须显式 `--profile-baseline`，读数逐行标注、**不得据以定值**） |
-| **夹具模式** | `code_root == <toplevel>/system` 且 `toplevel` 不在 `/tmp` 下 | 不满足 ⇒ **拒绝**。★ 这条是主理人裁定的「`#83` **不得在 `/tmp` 夹具模式下取样**」⇒ **不提供覆盖开关** |
+| **被测配置** | **被测程序自己的** `verify.py::_child_env()["CODEBUDDY_SAFE_DELETE_ENABLED"] == "0"` | 不满足 ⇒ **拒绝**（`NON_E` 只能当**对照**，须显式 `--profile-baseline`） |
+| **夹具模式** | `code_root == <toplevel>/system` 且 `toplevel` 不在 `/tmp` 下 | 不满足 ⇒ **拒绝**（主理人裁定「`#83` 不得在 `/tmp` 夹具模式下取样」⇒ **不提供覆盖开关**） |
 
-每行读数新增字段：`env_profile`（`E=0(生产口径)` / `NON_E(对照口径)`）· `env_vars`（三个开关的原值）
-· `fixture_mode`（`repo-internal` 或**带原因**的其它值）。
+每行读数新增字段：`env_profile`（`E=0(生产口径)` / `NON_E(对照口径)`）· `env_child`（**子进程实际**三道闸门）
+· `env_caller`（调用者值，**只作对账**）· `caller_forced_by_child_env`（两者是否不同）· `fixture_mode`。
 
-**实测（零成本，本单）**：
+★★★ **为什么判据必须是"子进程实际"而不是"我 export 了什么"** —— 本单**实测两次更正**：
+
+| 时点（`refs/heads/main`） | `_child_env()` 的行为 | "被测配置"由谁决定 | 若按调用者判会怎样 |
+|---|---|---|---|
+| `e9a009b`（我首次写这条时） | `{**os.environ, SANDBOX:0, BROKERED:0}` ⇒ **继承**调用者的 `E`、**自己不设** | **调用者的 shell env** | 判得**对** |
+| `612cafe`（`3653c7c` 之后） | **强制**加 `"CODEBUDDY_SAFE_DELETE_ENABLED": "0"`（覆盖在 `**os.environ` **之后**） | **子进程**，调用者**无法左右** | ★ **假阻断**：会拒跑一个**本来就是合法生产口径**的读数（`G-61` 家族） |
+
+**运行时实测（零成本，同源 + 对照两读数）**：
+
+```
+$ python -c "import sys;sys.path.insert(0,'.');from scripts.ops.verify import _child_env;... "
+child  CODEBUDDY_SAFE_DELETE_ENABLED = 0      ← 定值只看这个
+caller CODEBUDDY_SAFE_DELETE_ENABLED = 1      ← 仅对账（本会话宿主注入 1）
+```
+
+⇒ 改造后脚本的行为（`exit=2` 但**原因已换**，且**不跑任何批次**）：
 
 ```
 $ python scripts/ops/sample_batch_times.py --plan
-- ★ 本轮被测配置：`NON_E(对照口径)`（`E=1`） ｜ 夹具模式：`repo-internal`
-  ★★ 该配置不是生产/门禁口径 ⇒ 默认拒绝开跑
+- ★ 本轮被测配置（子进程实际）：`E=0(生产口径)`（`E=0`） ｜ 夹具模式：`repo-internal`
+  - 调用者 env 与子进程 env 不同（`E`: caller `1` → child `0`）⇒ 以子进程为准。
 
-$ python scripts/ops/sample_batch_times.py --batch unit --no-quota-check   # 未 export E
-★ 拒绝开跑：本轮不是生产/门禁口径 —— 被测配置 `NON_E(对照口径)`（`CODEBUDDY_SAFE_DELETE_ENABLED=1`）
-→ 真实 exit=2（未跑任何批次）
+$ python scripts/ops/sample_batch_times.py --batch unit          # 不再因 caller E 被拒
+★ 调用者 env 与子进程 env 不同（以子进程为准 = E=0 生产口径）…⇒ 读数不因此失效，但已逐行记录。
+（本轮没有任何读数）★ 未开跑 —— unit → QUOTA_PREFLIGHT_FAIL…        → 真实 exit=2
 ```
 
-★★ **这条实测本身是一个发现**：**本会话宿主注入的是 `E=1`，不是"未设"** ⇒
-**默认状态下这个会话跑的每一个夹具批次都是"守卫开"口径**（夹具 teardown 实测慢约 30×）。
-⇒ 这也是 `#83` 必须显式 `CODEBUDDY_SAFE_DELETE_ENABLED=0` 才能开跑的原因（脚本已强制）。
+★ 顺带一条：本会话宿主注入的是 **`E=1`**（不是"未设"）—— **只有逐行记录才看得见**，
+  因为 `_child_env()` 会把它盖掉；而**它盖掉的正是"这台机器默认是不是守卫开"这个信息**。
 
 ★ 我自己的**第一版 `_fixture_mode()` 是个假警报**：它把 `code_root`（`…/<worktree>/system`）
 直接与 `git rev-parse --show-toplevel`（`…/<worktree>`）比 ⇒ **恒不相等** ⇒ 每次都说"不同源"。
 这正是我一直在报的 `G-61` 同族错误（**判据与对象不同源**）—— 正确形状是**包含**关系
 （`code_root == toplevel/"system"`）。**已在代码注释里留痕**，因为它太容易再犯。
+★★ 而 `E` 判据的这次更正是**同一个错误的第二种形态**（同源 ≠ 只看"有没有这一行"，还要看**谁最终生效**）
+⇒ 两条都写进注释了。
 
 ---
 
@@ -329,6 +352,10 @@ $ python scripts/ops/sample_batch_times.py --batch unit --no-quota-check   # 未
 在 `E`（= 生产/门禁口径）下**不是约束** —— 但**我只有一次 A/B（2 次运行）**，
 **不足以推翻主理人已采纳的结论** ⇒ **如实上报、由主理人裁**；我**不据此改任何执行计划**。
 
+★ **主理人已裁**（见 `3653c7c` 提交信息原文）：**「`E=0` 是**已披露的配置**，不是"安全"；
+据 `E=0` 读数**不得**推论"配额不成问题"（`ws-real-collect-2 §五` 的 n=2 A/B 只登记、不采纳）」**
+⇒ **本节的推测按裁定保持"不采纳"**，分轮打包**继续按 §4 执行**。
+
 ---
 
 ## 5. ③ 判定规则（照 `V-02`，不临场发明）
@@ -357,13 +384,16 @@ $ python scripts/ops/sample_batch_times.py --batch unit --no-quota-check   # 未
 3. ★★ **「测不准」≠「标准可以松」**：若"上沿 × 4"仍超 300s ⇒ **登记薄余量、维持 300s**，
    **不**放松 `V-02`、**不**改断言、**不**把"读不准"当成"上限可以提高"。
 4. ★★（本轮新增，主理人裁定的直接推论）**"配置"也是仪器** ⇒ 参与定值的读数**必须**同时满足：
-   `E=0`（生产/门禁口径）**且** 夹具根在**工作树内**。
+   ① 子进程实际 `E=0`（生产/门禁口径，**取自 `_child_env()`**）**且** ② 夹具根在**工作树内**。
    ★ 尤其：**`/tmp` 夹具模式下的绿灯不得用于定值**（它只能证明"某件事能跑"）。
-   ★★ 这条**有顺序含义**，必须写清楚：主理人裁定「**`E` 口径下读数余量极大 ⇒ 待 `#83` 复测后统一按 `V-02` 收紧**」
-   —— 而"收紧"要成立，**前提是 `E` 真的进了 `_child_env()`**（裁定条件 ①②）：
-   补丁**未落地前**，CI/门禁上跑的仍是"守卫开"（慢约 30×）⇒ **按 `E` 读数收紧会把 CI 打红**。
-   ⇒ **建议前置顺序**：`_child_env()` 补 `E=0` + 机器绑定断言 ⇒ 再据 `#83` 读数收紧。
-   （该补丁**不在我卡内**，我只登记这个顺序依赖，不越界改。）
+   ★★ **顺序依赖 —— 报告过的版本已作废，此处更正**：
+   我曾写「`_child_env()` 未补 `E=0` ⇒ 按 `E` 读数收紧会把 CI 打红，须先落补丁」。
+   **该判断在 `main@e9a009b` 为真，在 `main@612cafe` 为假** ——
+   `3653c7c` **已落地**（`_child_env()` / `run_pytest.sh` 各补一行 + 守卫 `BROKER_ENV_VARS` 2→3
+   + 运行时断言 `I`：`_child_env()` 真把三道闸门都置 0）。
+   ⇒ **顺序依赖已解除**：现在"操作者手动 export"与"CI"**是同一个配置**（都由 `_child_env()` 保证）
+   ⇒ 收紧不再有"CI 打红"的风险。
+   ★ 更正方式：**我按 `V-11` 时间轴纪律，把结论与 SHA 绑定后重新判定**，而不是"再说一遍"。
 
 ### 5.4 一格被判合格/不合格的**二值**口径（`R-06`：可判定 + 穷尽）
 
@@ -415,6 +445,28 @@ $ python scripts/ops/sample_batch_times.py --batch unit --no-quota-check   # 未
    **是否可用由主理人裁**；我**不据此改任何登记值**，也**不把它计入已取样**。
 9. ⚠ **一处我未实证的差异**（§1.1）：`13-F §2.6` 的 **250 项/例** 与 `verify.py:48` 的 **271 项**
    是"同一件事的两个度量"还是"两件事"，**我没有实证**，只登记差异（`口径 10`：不静默挑一个）。
-10. ⚠ 本会话 `grep` 会命中 **broker 包装器**（`…/brokered-bin/grep`）⇒ **"零命中"与"没查"不可区分**。
-    ★ 本文件里所有"我核过/我 grep 过"的结论，**用的是 `Grep` 工具或 `/usr/bin/grep` 绝对路径**；
-    凡**没有**写明用哪个工具的零命中结论，**不得**采信（这也是本单的自我约束）。
+10. ⚠ 本会话 `grep` 会命中 **broker 包装器** ⇒ **"零命中"与"没查"不可区分**。
+    ★ 按主理人 `V-10`/`V-11` **定稿**（本单按它自查过一遍）：
+    - 裸 `grep` = **toybox 0.8.13**（`…/brokered-bin/grep`）；`/usr/bin/grep` = BSD grep GNU-compatible 2.6.0；
+      `rg` = ripgrep 15.2.0。**失效集合只有 GNU 扩展运算符**（`\|` `\+` `\?` `\<` `\>` `\b`），
+      形态 **0 命中 + `rc=1` + 无诊断**；**纯字面 / 锚点 / `\.` / `\{n,m\}` / `\(…\)\1` 全部正常**。
+    - ★ **`Grep` 工具也是方言**（`\|` → 0、`(.)\1` → 0，且**不报错**）⇒ **"改用 `Grep` 工具"不是解**；
+      **没有"无方言"的工具**。
+    - ⇒ **本文件所有零命中结论都按 `V-10` 补齐了三件**：引擎指纹 + `rc` 原文（**不经管道**）+ **地板真值**。
+11. ★★ **本单最关键的一条零命中结论已按 `V-10` 重新取证**（模板可复用）：
+    **命题**：`refs/heads/main@612cafe` 的 `system/scripts/**` + `system/tests/**` 里，
+    `CODEBUDDY_SAFE_DELETE_ENABLED` **是否有站点**（用于判断 `E` 补丁是否落地）。
+    - **引擎指纹**：`/usr/bin/grep` = BSD grep GNU-compatible 2.6.0-FreeBSD（`grep --version` 原文）；
+      模式 `CODEBUDDY_SAFE_DELETE_ENABLED` 是**纯字面**（不在失效集合内）；
+    - **`rc` 原文**：**`rc=0`、9 行命中**（`/usr/bin/grep -rn … > file; echo $?`，**不经管道**）
+      —— 即"**补丁已落地**"（`verification_policy_guard.py` / `verify.py` / `run_pytest.sh` /
+      `tests/guards/test_verification_policy.py` 四处）；
+    - **地板真值（第三法）**：Python `re` 独立遍历同两目录 ⇒ **4 个文件**命中，与 grep 一致 ✓；
+    - **反向对照**：同路径同方法跑 `CODEBUDDY_SAFE_DELETE_SANDBOX` ⇒ 15 行命中 ⇒ 证明**取数路径本身可用** ✓。
+    ★★ **这条把我自己上一轮的结论推翻了**：我此前（在 `e9a009b` 上）报的是"**零处**"。
+    **两次都真**，差的是 **SHA** ⇒ **"零命中"结论必须与 SHA + 时刻同写**（`V-11` 时间轴），
+    否则它会在几分钟内变成错情报（**我上一条给主理人的消息就是这么过期的**）。
+12. ⚠ **一个仍未解的读数不一致**（`V-10` 第 2 条）：我在**我的 worktree**里跑同一模式
+    得到 **11 行**（含我自己的新文件 `sample_batch_times.py` 10 处 + `.pyc` 1 处），
+    在**主仓**得到 **9 行**（4 个文件）⇒ 差异**可解释**（worktree 多了我的改动 + 主仓无我的文件），
+    但**我当时没有把 SHA 写进命令** ⇒ 严格说那 11 行读数**主语不明**。**只登记，不据此下结论。**
