@@ -706,7 +706,7 @@ def _ffd_bins(items: list[tuple[str, int]], capacity: int) -> int:
     bins: list[int] = []
     for _, cost in sorted(items, key=lambda kv: -kv[1]):
         if cost > capacity:
-            raise ValueError(f"{cost} > {capacity}：调用方必须先过滤)")   # 不静默丢弃
+            raise ValueError(f"{cost} > {capacity}：调用方必须先过滤")   # 不静默丢弃
         for i, used in enumerate(bins):
             if used + cost <= capacity:
                 bins[i] = used + cost
