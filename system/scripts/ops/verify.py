@@ -271,10 +271,16 @@ BATCHES: Mapping[str, Batch] = {
     #       工作树里跑（`V-05` 禁止的情形），f 仍可能被拖到 300s 以上而**假红**。
     #       见到本批超时的**第一步不是改断言**，而是先确认有没有第二个会话在同一工作树里跑。
     "injection-a": Batch(
-        "injection-a", "tests/injection/ 分片 A（审计回归 + 链路接线）",
+        # ★ 2026-09-16 主理人补录：`test_step56_skipped_wiring.py`（3 例，收 `G-44`）由
+        #   `merge ws/step56-skipped` 带进 ⇒ `test_shard_coverage.py` 的**穷尽性断言如实变红**
+        #   （"写了却永远不被验证"），按设计生效。本片 27 → **30**（仍 ≤32）。
+        #   ★ 给后续各流的固定约束：**新增注入测试文件必须同时登记进本文件的一片**，
+        #     否则绑定会红 —— 这是刻意的（防"写了没人跑"），不是障碍。
+        "injection-a", "tests/injection/ 分片 A（审计回归 + 链路接线 + step5/6 接线）",
         _pytest(
             "tests/injection/test_audit_regressions.py",
             "tests/injection/test_chain_steps_wiring.py",
+            "tests/injection/test_step56_skipped_wiring.py",
         ),
         300.0, _exit_zero,
     ),
