@@ -362,7 +362,10 @@ class Pipeline:
         **两个字段都不设**，于是 `facts/tasks.jsonl` 里每一行都恒为 `None` / `[]`，
         使阶段④ 的判据 `degrade_keeps_last_valid` 的首日豁免谓词（`stage_gate` 的
         `_holds_valid_result()`）**恒 False** ⇒ 每个失败行都被当"首日"豁免 ⇒
-        判据**空转、从不报任何真违规**。且全仓库 `output_refs=` **零个生产赋值点**。
+        判据**空转、从不报任何真违规**。（当时全仓库 `output_refs=` **零个生产赋值点** ——
+        补上的那一个赋值点就在**本方法下面**：`output_refs=produced if valid_run else []`。
+        ★ 该句是**改前态**读数，勿当现态；同类记号的清单见
+        `reports/ws_degrade_contract_report.md` §④-7。）
 
         ★★ **`last_valid_result_ref` 一律复用 `scripts.daily.degrade.last_valid_result_ref()`**
         （`G-06` 唯一真源 / 纪律 11）：本层**不重算第二套**判定 —— 那正是 `G-45`

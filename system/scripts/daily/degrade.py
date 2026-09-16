@@ -124,8 +124,14 @@ def holds_valid_result(row: Mapping[str, Any]) -> bool:
       下一次失败就会被误判成首日 —— 那正是 `G-43` 的同一形态（换个字段复发）。
 
     ★ **③ 为什么保留**：它是 `stage_gate` 的既有载体，删掉即**放松**判据（`R-06`：只增不减）。
-      它当前无生产写入点（`output_refs=` 在本单之前全仓库零个生产赋值点，`G-45`），
-      保留它的代价为零，收益是"将来有别的写入方按旧口径填 `output_refs` 时不被漏掉"。
+      ③ 的生效条件 = `status == "done"` **且** `output_refs` 非空。**后半已经成立**：
+      `pipeline._write_check_record()` **已**写 `output_refs`（`pipeline.py:415`）⇒
+      原句"将来有别的写入方按旧口径填 `output_refs`"**已经发生**（不是将来）；眼下 ③ 仍不生效
+      只是因为**前半**不成立（`T-18`：step 7/8 永不注册 ⇒ `blocked` 恒真 ⇒ 真仓库无 `done` 行）。
+      ⇒ **保留的收益现在是真的**：`T-18` 一旦落地、`done` 行一出现，③ 立刻是活的。
+      ★ 原句"它当前无生产写入点（`output_refs=` 零个生产赋值点）"是 `abbe7b3` **之前**的读数，
+      **勿当现态** —— 否则就是"结论侥幸还对、理由已失效"（`G-50` 形态；清单见
+      `reports/ws_degrade_contract_report.md` §④-7）。
     """
     if row.get("last_valid_result_ref"):
         return True
