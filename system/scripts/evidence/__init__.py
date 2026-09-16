@@ -25,8 +25,11 @@ __all__ = [
     # independence
     "IndependenceInputError",
     "IndependenceSummary",
+    "OriginAttribution",
     "claim_group_fingerprint",
     "classify_independence",
+    "plan_origin_attribution",
+    "record_claim_updates",
     "record_propagation",
     "classify_and_record",
     # budget_gate
@@ -50,8 +53,11 @@ __all__ = [
 _EXPORTS: dict[str, str] = {
     "IndependenceInputError": "independence",
     "IndependenceSummary": "independence",
+    "OriginAttribution": "independence",
     "claim_group_fingerprint": "independence",
     "classify_independence": "independence",
+    "plan_origin_attribution": "independence",
+    "record_claim_updates": "independence",
     "record_propagation": "independence",
     "classify_and_record": "independence",
     "BudgetConfigMissing": "budget_gate",

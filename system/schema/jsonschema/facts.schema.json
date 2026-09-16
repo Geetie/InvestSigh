@@ -1,5 +1,36 @@
 {
   "$defs": {
+    "AliasOverride": {
+      "additionalProperties": false,
+      "description": "人工别名覆盖的载荷（**逐字承载** `Ch6 §C.3` 的四要素）。\n\n`Ch6 §C.3` 原文：结果写 `{claim_id, is_independent, reason, operator, at}`（追加，不覆盖原判定）。\n并入 `claim_propagation` 后：`claim_id` → 行的 `propagated_claim_id`；\n其余四要素 → 本结构。`at` 用 `datetime`（系统时间轴，`Ch9 §2.2`）。",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "is_independent": {
+          "title": "Is Independent",
+          "type": "boolean"
+        },
+        "operator": {
+          "title": "Operator",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "is_independent",
+        "reason",
+        "operator",
+        "at"
+      ],
+      "title": "AliasOverride",
+      "type": "object"
+    },
     "Baseline": {
       "additionalProperties": false,
       "properties": {
@@ -697,6 +728,18 @@
           "title": "Impact Capability",
           "type": "object"
         },
+        "independent_evidence_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Independent Evidence Count"
+        },
         "locator": {
           "default": "",
           "title": "Locator",
@@ -848,6 +891,17 @@
     "ClaimPropagation": {
       "additionalProperties": false,
       "properties": {
+        "alias_override": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AliasOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "analyzed_at": {
           "anyOf": [
             {
@@ -909,6 +963,10 @@
           "default": false,
           "title": "Independent Evidence",
           "type": "boolean"
+        },
+        "kind": {
+          "$ref": "#/$defs/PropagationKind",
+          "default": "restatement"
         },
         "occurred_at": {
           "anyOf": [
@@ -2270,6 +2328,15 @@
       ],
       "title": "Product",
       "type": "object"
+    },
+    "PropagationKind": {
+      "description": "`claim_propagation.kind` —— 传播记录的**语义类别**（`Ch6 §C.2` 步骤④ / `§C.3`）。\n\n★ 为什么需要它（T-11 契约变更，需求方 2026-09-16 裁定）：\n  `Ch6 §C.3`（误判的纠正入口 / 人工 override）原设计把结果写独立的\n  `facts/claim_alias.jsonl`（`{claim_id, is_independent, reason, operator, at}`）；\n  但 `Ch9 §3.3.3` 把 `facts/` 锁死在 **18 个 JSONL（不得增删改名）** ⇒ `claim_alias.jsonl`\n  **无落点**。裁定：**并入既有 `claim_propagation`**，以其 `kind` 取值\n  `manual_alias_override` 承载\"人工确认这两条其实是同一事件\" —— **绝不新增第 19 个 JSONL**。\n\n- `restatement`（**默认**）：自动去重判定的**转述**（`Ch6 §C.2` 步骤④）；\n  ⚠️ **默认值必须使\"旧行\"合法**：既有 `claim_propagation` 行无 `kind` 字段\n  （`Ch9 §3.4.2` 追加式不可变，不得让既有行失效），取默认即合法。\n- `manual_alias_override`：**人工别名覆盖**（`Ch6 §C.3`：`dedup_override` 任务结果，\n  `is_independent` 由操作人强制设定，**追加不覆盖原判定**）。",
+      "enum": [
+        "restatement",
+        "manual_alias_override"
+      ],
+      "title": "PropagationKind",
+      "type": "string"
     },
     "Recommendation": {
       "additionalProperties": false,
@@ -3443,6 +3510,37 @@
   "$id": "https://investsigh.local/schema/facts.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "defs": {
+    "AliasOverride": {
+      "additionalProperties": false,
+      "description": "人工别名覆盖的载荷（**逐字承载** `Ch6 §C.3` 的四要素）。\n\n`Ch6 §C.3` 原文：结果写 `{claim_id, is_independent, reason, operator, at}`（追加，不覆盖原判定）。\n并入 `claim_propagation` 后：`claim_id` → 行的 `propagated_claim_id`；\n其余四要素 → 本结构。`at` 用 `datetime`（系统时间轴，`Ch9 §2.2`）。",
+      "properties": {
+        "at": {
+          "format": "date-time",
+          "title": "At",
+          "type": "string"
+        },
+        "is_independent": {
+          "title": "Is Independent",
+          "type": "boolean"
+        },
+        "operator": {
+          "title": "Operator",
+          "type": "string"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "is_independent",
+        "reason",
+        "operator",
+        "at"
+      ],
+      "title": "AliasOverride",
+      "type": "object"
+    },
     "Baseline": {
       "additionalProperties": false,
       "properties": {
@@ -4140,6 +4238,18 @@
           "title": "Impact Capability",
           "type": "object"
         },
+        "independent_evidence_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Independent Evidence Count"
+        },
         "locator": {
           "default": "",
           "title": "Locator",
@@ -4291,6 +4401,17 @@
     "ClaimPropagation": {
       "additionalProperties": false,
       "properties": {
+        "alias_override": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AliasOverride"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "analyzed_at": {
           "anyOf": [
             {
@@ -4352,6 +4473,10 @@
           "default": false,
           "title": "Independent Evidence",
           "type": "boolean"
+        },
+        "kind": {
+          "$ref": "#/$defs/PropagationKind",
+          "default": "restatement"
         },
         "occurred_at": {
           "anyOf": [
@@ -5713,6 +5838,15 @@
       ],
       "title": "Product",
       "type": "object"
+    },
+    "PropagationKind": {
+      "description": "`claim_propagation.kind` —— 传播记录的**语义类别**（`Ch6 §C.2` 步骤④ / `§C.3`）。\n\n★ 为什么需要它（T-11 契约变更，需求方 2026-09-16 裁定）：\n  `Ch6 §C.3`（误判的纠正入口 / 人工 override）原设计把结果写独立的\n  `facts/claim_alias.jsonl`（`{claim_id, is_independent, reason, operator, at}`）；\n  但 `Ch9 §3.3.3` 把 `facts/` 锁死在 **18 个 JSONL（不得增删改名）** ⇒ `claim_alias.jsonl`\n  **无落点**。裁定：**并入既有 `claim_propagation`**，以其 `kind` 取值\n  `manual_alias_override` 承载\"人工确认这两条其实是同一事件\" —— **绝不新增第 19 个 JSONL**。\n\n- `restatement`（**默认**）：自动去重判定的**转述**（`Ch6 §C.2` 步骤④）；\n  ⚠️ **默认值必须使\"旧行\"合法**：既有 `claim_propagation` 行无 `kind` 字段\n  （`Ch9 §3.4.2` 追加式不可变，不得让既有行失效），取默认即合法。\n- `manual_alias_override`：**人工别名覆盖**（`Ch6 §C.3`：`dedup_override` 任务结果，\n  `is_independent` 由操作人强制设定，**追加不覆盖原判定**）。",
+      "enum": [
+        "restatement",
+        "manual_alias_override"
+      ],
+      "title": "PropagationKind",
+      "type": "string"
     },
     "Recommendation": {
       "additionalProperties": false,

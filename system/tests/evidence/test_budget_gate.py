@@ -26,6 +26,7 @@ from scripts.evidence.budget_gate import (
     RETRIEVAL_CLASS,
     TIME_CLASS,
     BudgetConfigMissing,
+    BudgetLimits,
     BudgetStateError,
     BudgetUsage,
     apply_budget_gate,
@@ -265,3 +266,64 @@ def test_unknown_claim_fails_loud(code_root: Path) -> None:
         apply_budget_gate(
             code_root, "absent", importance_class="low", usage=usage, defaults={"max_model_calls": 1}
         )
+
+
+# ───────────────────────── ④ G5：`0` = 上限为 0（不得静默当无上限）─────────────────────────
+
+
+def test_zero_compute_limit_is_not_silently_unbounded(code_root: Path) -> None:
+    """**G5 正向（正向对照）**：`max_model_calls: 0` = **上限为 0**（不允许任何调用）⇒ `used=999` 必到限。
+
+    初版 `if limit is not None and limit > 0` 会把 `0` 静默当"无上限"（审计实测 `used=999`、`exhausted=False`）。
+    """
+    _seed_claim(code_root)
+    usage = BudgetUsage(now=_NOW, model_calls_used=999)
+    out = apply_budget_gate(
+        code_root, "c1", importance_class="high", usage=usage, defaults={"max_model_calls": 0}
+    )
+    assert out.exhausted is True, "上限为 0 ⇒ 必到限，不得被静默当成无上限"
+    assert COMPUTE_CLASS in out.decision.binding
+    assert out.decision.first_binding == COMPUTE_CLASS
+
+
+def test_zero_limit_binds_even_with_zero_usage(code_root: Path) -> None:
+    """**G5 边界**：上限为 0 时，**即使 `used=0`** 也已到限（不允许任何调用）。"""
+    limits = load_budget_limits(code_root, importance_class="high", defaults={"max_model_calls": 0})
+    assert limits.compute_limit == 0
+    decision = evaluate_budget(limits, BudgetUsage(now=_NOW, model_calls_used=0))
+    assert decision.exhausted is True
+    assert COMPUTE_CLASS in decision.binding
+    assert decision.ratios[COMPUTE_CLASS] == 1.0, "0 预算 + 0 用量 ⇒ 已达限（比值可判定，不除零）"
+
+
+def test_zero_search_limit_is_not_silently_unbounded(code_root: Path) -> None:
+    """**G5 正向（检索类）**：`max_searches: 0` 同理不得静默。"""
+    limits = load_budget_limits(code_root, importance_class="high", defaults={"max_searches": 0})
+    assert limits.search_limit == 0
+    decision = evaluate_budget(limits, BudgetUsage(now=_NOW, searches_used=3))
+    assert decision.exhausted is True
+    assert RETRIEVAL_CLASS in decision.binding
+
+
+def test_none_limit_means_unbounded_not_zero() -> None:
+    """**G5 反向对照**：`None` = **未设上限**（≠ 上限为 0）⇒ 不得因 `None` 误报到限。"""
+    limits = BudgetLimits(
+        deadline=None, compute_limit=None, search_limit=None, research_cap=40, source="test"
+    )
+    decision = evaluate_budget(
+        limits, BudgetUsage(now=_NOW, model_calls_used=999, searches_used=999)
+    )
+    assert decision.exhausted is False, "None = 未设上限 ⇒ 该类不约束"
+    assert decision.ratios[COMPUTE_CLASS] == 0.0
+    assert decision.ratios[RETRIEVAL_CLASS] == 0.0
+
+
+def test_unconfigured_search_limit_is_none(code_root: Path) -> None:
+    """**G5 反向（真实取法）**：未配置 `max_searches` ⇒ `search_limit is None`（未设上限，不约束）。"""
+    limits = load_budget_limits(
+        code_root, importance_class="high", defaults={"max_model_calls": 40}
+    )
+    assert limits.search_limit is None
+    decision = evaluate_budget(limits, BudgetUsage(now=_NOW, searches_used=999))
+    assert decision.exhausted is False
+    assert RETRIEVAL_CLASS not in decision.binding

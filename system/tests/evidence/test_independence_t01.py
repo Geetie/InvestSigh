@@ -165,8 +165,10 @@ def test_classify_and_record_writes_propagation_and_is_idempotent(code_root: Pat
     classify_and_record(code_root)
     assert len(read_records(code_root, "claim_propagation")) == 10, "重跑不得重复落传播行"
 
-    # 真源 claims.jsonl 逐字节未变（只读不改，Ch9 §3.4.2）
-    assert (code_root / "facts" / "claims.jsonl").read_bytes() == claims_before
+    # 真源 claims.jsonl：**既有行逐字节保留**，去重步骤只**追加新版本**（`Ch9 §3.4.2` 追加式不可变；
+    # T-12：去重步骤把 `independent_evidence_count` 落回根主张 ⇒ 只能追加，不能改既有行）
+    after = (code_root / "facts" / "claims.jsonl").read_bytes()
+    assert after.startswith(claims_before), "既有行必须逐字节保留（追加式不可变，不覆盖历史）"
 
 
 def test_latest_version_per_claim_id_not_double_counted(code_root: Path) -> None:
