@@ -1,4 +1,4 @@
-# rules/valuation-methods.yaml —— 估值方法按 `model_class` 路由（**候选**，尚未安装进 `rules/`）
+# rules/valuation-methods.yaml —— 估值方法按 `model_class` 路由
 #
 # 权威出处：`05_价格与市场预期研究/02_实现方案.md §D.1`（估值方法按商业模式路由）
 #           `§I.2`（反解搜索空间的控制手段：「限制每类假设的离散粒度 + 网格搜索上界（`rules/valuation-methods.yaml`）」）
@@ -6,10 +6,6 @@
 #           `§B.4`（假设组合表：五类假设的字段名）
 #           粒度取值出处：`00_待拍板项清单.md` **B13 / D-03**（2026-09-15 已确认）
 # 落位复核：`00_交付施工图.md` §3.1 第 133 行 / §6 第 254 行（配置 · 阶段② · 出处 `Ch5 §D`）
-#
-# ★ 本文件是**候选**（`system/registry/rule-candidates/`）：`rules/**` 是 0444 + SHA256 锁
-#   （`Ch9 §3.10 J9` / 纪律 9-10），**模型对 `rules/` 无写权**。
-#   安装 = 主理人执行 `chmod -R u+w system/rules` → 复制本文件 → `python system/scripts/ops/lock_rules.py` 重锁。
 #
 # ★ 逐字转写纪律：每个键都能指回**设计节号 + 原文片段**；设计未给值 ⇒ `tbd` + `basis`；
 #   设计没写的键**不新增**。逐键对照表见 `system/reports/ws_ch2_rules_report.md`。
@@ -23,8 +19,6 @@
 
 version: 1
 spec_anchor: "Ch5 §D.1"
-install_target: "rules/valuation-methods.yaml"
-install_note: "由主理人安装到 rules/valuation-methods.yaml 并跑 system/scripts/ops/lock_rules.py 重锁"
 
 # ── 方法路由（`§D.1` 表格逐字转写）──────────────────────────────────────
 #   §D.1 原文小标题：「`rules/valuation-methods.yaml`：`method_class → business.model_class` 绑定

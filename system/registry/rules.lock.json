@@ -6,9 +6,9 @@
       "sha256": "f6bab7ee92ac617f1ed3d7f3d89cbfc45b65049ff62f77686d98a5d15a811ca0"
     },
     "rules/baseline.yaml": {
-      "bytes": 7174,
+      "bytes": 6671,
       "locked_mode": "0o444",
-      "sha256": "bb07b9bfdcce1a2ffcb67ef69cca888822e367596d38d448fd4012b46e56be48"
+      "sha256": "90c8406fff082dd58f709d5234c0432a79924ebca240c33d9e608625d28c9328"
     },
     "rules/benchmark.yaml": {
       "bytes": 3985,
@@ -26,9 +26,9 @@
       "sha256": "eed26a53b0ffe9f137b38438a21e641912ea4b90cd176dee9db5b25ce598352a"
     },
     "rules/metric-sets.yaml": {
-      "bytes": 9121,
+      "bytes": 8612,
       "locked_mode": "0o444",
-      "sha256": "b420c67a77ad1d231d3b3ea966b86857c5b69181b2001fd6a7cb1e114400892b"
+      "sha256": "f32bd541a6ec011570880897de14866d4fa53f92ca9609766f2e9749774c2da3"
     },
     "rules/notification.yaml": {
       "bytes": 1285,
@@ -51,9 +51,9 @@
       "sha256": "58c2b918270d4d5efe5eda6aa99e4def19f1c99e7f846001cf96a29a43146ef9"
     },
     "rules/scenario.yaml": {
-      "bytes": 7216,
+      "bytes": 6713,
       "locked_mode": "0o444",
-      "sha256": "e5039163c2d52169315c758055e0ee5ae950eedef28987c05be4e69fee7db309"
+      "sha256": "ce57d570b3ee492738d69cd6a2ba6af1341be322438cc28dbd6149ac2f96f565"
     },
     "rules/schedule.yaml": {
       "bytes": 1763,
@@ -66,12 +66,12 @@
       "sha256": "7d14de8e3fcd3ae29ada7c867bc557c9a24fbd4af8b84e02f5439ae395ac2934"
     },
     "rules/valuation-methods.yaml": {
-      "bytes": 5979,
+      "bytes": 5458,
       "locked_mode": "0o444",
-      "sha256": "af49b71385c94d7ff3f603f3e0a351fd2e13b11e0c643e5c1b422ad4c18efb16"
+      "sha256": "865175aad32bfdb35c6a295f364da4faa7a47adc21c3fc3cd214845c546f0f84"
     }
   },
-  "locked_at": "2026-09-16T13:01:57+00:00",
+  "locked_at": "2026-09-16T13:15:05+00:00",
   "locked_by": "system/scripts/ops/lock_rules.py",
   "note": "本清单是 rules/ 的 SHA256 快照。校验方 scripts/checks/rules_lock_guard.py；改动流程见 lock_rules.py 文档头。",
   "owner_writable": false,

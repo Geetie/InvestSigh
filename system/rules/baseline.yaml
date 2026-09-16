@@ -1,4 +1,4 @@
-# rules/baseline.yaml —— `baselines` 底稿的上限/阈值参数（**候选**，尚未安装进 `rules/`）
+# rules/baseline.yaml —— `baselines` 底稿的上限/阈值参数
 #
 # 权威出处：`04_公司价值研究与深度标准/02_实现方案.md §D.2`（关键驱动上限 / 超限处理 / 可持续时长）
 #           `§G.2`（"不是六个空标题"的可程序校验：非空率 / 定位数 / 推导数）
@@ -6,10 +6,6 @@
 #           `§B.2`（每段证据要求：待补证段的后果）
 #           阈值取值出处：`00_待拍板项清单.md` **B5 / B6 / D-03**（2026-09-15 已确认）
 # 落位复核：`00_交付施工图.md` §3.1 第 124 行 / §6 第 253 行（配置 · 阶段② · 出处 `Ch4 §B/§G`）
-#
-# ★ 本文件是**候选**（`system/registry/rule-candidates/`）：`rules/**` 是 0444 + SHA256 锁
-#   （`Ch9 §3.10 J9` / 纪律 9-10），**模型对 `rules/` 无写权**。
-#   安装 = 主理人执行 `chmod -R u+w system/rules` → 复制本文件 → `python system/scripts/ops/lock_rules.py` 重锁。
 #
 # ★ 逐字转写纪律：每个键都能指回**设计节号 + 原文片段**；设计未给值 ⇒ `tbd` + `basis`；
 #   设计没写的键**不新增**（未转写项在报告里单列）。逐键对照表见 `system/reports/ws_ch2_rules_report.md`。
@@ -24,8 +20,6 @@
 
 version: 1
 spec_anchor: "Ch4 §D.2 / §B.2 / §G.2 / §G.4"
-install_target: "rules/baseline.yaml"
-install_note: "由主理人安装到 rules/baseline.yaml 并跑 system/scripts/ops/lock_rules.py 重锁"
 
 # ── 阈值（`§D.2` / `§G.2`）──────────────────────────────────────────────
 thresholds:
