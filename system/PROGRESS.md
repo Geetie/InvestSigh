@@ -595,10 +595,11 @@ merge 进来的 4 个 `rules/*.yaml` 是 `0644` ⇒ `rules_lock_guard` / `inject
 
 > 分支 `ws/ch4-valuelayer`　｜　工作树 `.worktrees/ws-ch4-valuelayer`
 > 报告：`system/reports/ws_ch4_valuelayer_card13n_report.md`（四段式）
-> 开工基线 **`main = ed9687b`**；交付基线 **`main = 56fd637`** —— 交付期间 `main` 前进了 **22 个提交**，
-> 因**幽灵门禁 `G-61` 的持久形态**（共享钩子跑 `main` 的 `pre-commit.sh`，`main` 已新增第 14 道
-> `rule_key_alignment_guard`，我树里没有 ⇒ `[Errno 2] exit=2` 拒提交）再次 `git merge main --ff-only`
-> + `bootstrap_worktree.sh`，**未用 `--no-verify`**；`verify.py` 只有 **1 处冲突**（见 13.5）。
+> 开工基线 **`main = ed9687b`**；交付基线 **`7917ea9`**（`main = 0346b87` 的合并点；首个提交 `10b6de1` 的基线是 `56fd637`）。
+> 期间 `main` 前进了 **30+ 个提交**，**合并 2 次**：① 因**幽灵门禁 `G-61` 的持久形态**（共享钩子跑 `main` 的
+> `pre-commit.sh`，`main` 新增第 14 道 `rule_key_alignment_guard`，我树里没有 ⇒ `[Errno 2] exit=2` 拒提交）
+> ② 因 `main` **改了同一个文件**。两次都 `git merge` + `bootstrap_worktree.sh`，**未用 `--no-verify`**；
+> `verify.py` 冲突共 **1 处**（见 13.5/13.6）。
 
 **问题**：`INJECTION_SHARDS` 已是 **7 项**，而 `verify.py` 的 docstring/注释里仍并存着同一事实的
 第二个存放处 —— 片数、**枚举上界**、各片用例数、每片上限、各批超时值。这是 `G-28`
@@ -623,7 +624,7 @@ merge 进来的 4 个 `rules/*.yaml` 是 `0644` ⇒ `rules_lock_guard` / `inject
 |---|---|---|
 | 新守卫 | `pytest tests/guards/test_verify_prose_binding.py -q` | **10 passed**，`EXIT=0` |
 | 反向对照 | `python /tmp/n13/reverse.py` | ①②③**四注入全红**且判据号吻合；**还原后 sha256 与基线一致** |
-| `guards` 批 | `verify.py --batch guards --quiet` | `✓ exit=0  37.06s/300s`（开工基线上同批 26.04s，差值为 main 与我的新测试） |
+| `guards` 批 | `verify.py --batch guards --quiet` | `✓ exit=0`（三时点读数 26.04s → 37.06s → **21.83s**，/300s；与 `main` 新立的口径 21「门禁口径自身有 ≈2.9× 波动」一致，**不宜拿单次读数下结论**） |
 | 全门禁 | `sh system/scripts/ops/pre-commit.sh` | **14 条 / 14 PASS / RC=0**（含 main 新增的 `rule_key_alignment_guard`） |
 | V-06 覆盖 | `verification_policy_guard` 读数 | `batches: 23`（未变）· `test_files: 76→78` · **`test_files_uncovered: 0`** |
 | 零代码改动（机器可核） | 剥「注释 + 模块 docstring」后逐 token 比对 | **1895 / 1895 相同**；AST（剥 docstring）相同 |
@@ -670,3 +671,19 @@ merge 进来的 4 个 `rules/*.yaml` 是 `0644` ⇒ `rules_lock_guard` / `inject
 
 ★ 顺带：主理人那句「分片那行写 `6 个` 而**实际已 7 个**」也随之不再需要写出当前值（已改为"而常量早已新增片"），
 否则它自己就成了**第三个存放处** —— 这正是本卡的判据要拦的东西。
+
+### 13.6 ★★ 第二次合并：`main` 推翻了我写的"取值理由"（**理由漂移**）
+
+`main` 的 `96d4d7e` 把 `unit` **120s→300s**、`injection-g` **90s→300s**（口径 21：两个仪器可差 16×）。
+我散文里**三处理由**随之过期：`unit` 沿革末句「现值来自修后 15.79s/11.42s ⇒ ≈7.6×」、
+`injection-g` 的「按分片规则的下限起步」、分片块的「各片不必然同值 —— g 是起步值」。
+⇒ **改口 3 处**：沿革**只留历史、不再为当前值给理由**（理由交回参数行尾注释）；
+`injection-g` 与分片块删掉过期归因。
+
+★ 这一次**没有冲突**（git 自动合并），**是我主动复核发现的** —— 正是 `口径 11`（merged ≠ closed）
+要防的事：**合并成功 ≠ 合并后的散文仍然为真**。
+★ 这是**"理由漂移"**：数字没写错，但**它被归因于一个已被推翻的依据**。建议并入 `G-28` 表述：
+**"同一事实的第二存放处"不只包括数值，也包括"对数值的解释"**。
+★ 由此得到一条**低成本中间态**（本卡采用）：**把"沿革"与"当前值的理由"物理分开** ——
+沿革写在批注释里（含历史值，声明为留档）；当前值的理由只写在该批参数之后的注释里；
+并在 `BATCHES` 前声明"真源 = 位置参数"。这样值一变，**过期的只可能是"沿革里的历史"**，不会变成假信息。
