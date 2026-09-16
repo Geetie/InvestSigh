@@ -76,24 +76,51 @@ def _exit_zero(code: int, out: str) -> tuple[bool, str]:
 
 
 def _stage_gate_verdict(code: int, out: str) -> tuple[bool, str]:
-    """`stage_gate --stage all` 的**设计预期**：① PASS + ②–⑤ 逐个 BLOCKED + exit=1。
+    """`stage_gate --stage all` 的设计预期 —— **不硬编码"哪个阶段该阻塞"**。
 
-    不能笼统放过 exit=1（那会掩盖"① 也失败了"），也不能要求 exit=0（那是不可能的）。
-    故显式要求两件事同时成立。
+    ## ★ 为什么必须改成数据驱动（实测教训，批次 11）
+
+    原实现把 `("nvidia_sample", "core_chain", "daily_run", "expansion")` **写死在期望里**，
+    要求这四者**都** `BLOCKED`。批次 11 修实 `stage_gate` 的首日豁免后，阶段④ 由
+    `BLOCKED` 转 **`PASS`** ⇒ 这条判据立刻变成**假红**（`main` 上同样红，与本改动无关）。
+    而"哪些阶段已通过"是**随进度变化的事实** —— 把它写进判据里**必然过期**。
+    这跟本文件对 `guards` / `gates` 的描述**刻意不写条数**是同一个道理：
+    **同一事实不要有第二个存放处。**
+
+    ## 新判据（可判定 + 穷尽，`R-06`）
+
+    1. **五阶段必须逐个显式出现**，且取值为 `PASS` / `BLOCKED` 之一 ——
+       ★ 这一条才是真的在防"静默跳过"（原实现只查了四个阶段的 `BLOCKED` 字样，
+       压根没查"是否五个都出现了"）；
+    2. 阶段① 必须 `PASS`（它是整条链的进入条件）；
+    3. **退出码必须与阶段取值自洽，且两个方向都查**：
+       有任一 `BLOCKED` ⇒ 退出码非零（不放过"阻塞却报成功"）；
+       全部 `PASS` ⇒ 退出码为 0（也不放过"全通过却仍报阻塞"这一反向错误）。
     """
     if code == 124:
         return False, "**超时** —— 该批有问题（极大概率是测试本身）"
-    if "prep: PASS" not in out:
-        return False, "阶段① 未 PASS（`prep: PASS` 缺失）—— 不是预期的阻塞"
-    missing = [
-        s for s in ("nvidia_sample", "core_chain", "daily_run", "expansion")
-        if f"{s}: BLOCKED" not in out
-    ]
-    if missing:
-        return False, f"以下阶段未显式标记 BLOCKED（可能静默跳过）：{missing}"
-    if code == 0:
-        return False, "后续阶段未开工却 exit=0 —— 疑似把阻塞阶段判成通过"
-    return True, "阶段① PASS + 阶段②–⑤ 全部阻塞（纪律 12 预期行为）"
+
+    stages = ("prep", "nvidia_sample", "core_chain", "daily_run", "expansion")
+    seen: dict[str, str] = {}
+    for stage in stages:
+        if f"{stage}: PASS" in out:
+            seen[stage] = "PASS"
+        elif f"{stage}: BLOCKED" in out:
+            seen[stage] = "BLOCKED"
+    absent = [s for s in stages if s not in seen]
+    if absent:
+        return False, f"以下阶段既未标 PASS 也未标 BLOCKED（可能静默跳过）：{absent}"
+    if seen["prep"] != "PASS":
+        return False, f"阶段① 未 PASS（进入条件不成立）—— 实得 {seen['prep']}"
+
+    blocked = [s for s in stages if seen[s] == "BLOCKED"]
+    if blocked and code == 0:
+        return False, f"存在阻塞阶段 {blocked} 却 exit=0 —— 疑似把阻塞阶段判成通过"
+    if not blocked and code != 0:
+        return False, f"五阶段全部 PASS 却 exit={code} —— 疑似把通过判成阻塞"
+    if blocked:
+        return True, f"阶段① PASS；{blocked} 阻塞（纪律 12 预期行为）"
+    return True, "五阶段全部 PASS"
 
 
 def _pytest(*targets: str) -> tuple[str, ...]:
@@ -180,7 +207,9 @@ BATCHES: Mapping[str, Batch] = {
         note="门禁内部已有逐项 30s 硬超时（卡死也算不合格）",
     ),
     "stage": Batch(
-        "stage", "stage_gate.py --stage all（①PASS + ②–⑤BLOCKED）",
+        # ★ 描述**不写"哪些阶段该阻塞"**（同一事实第二个存放处必然过期 —— 见 `_stage_gate_verdict`）。
+        #   真源 = 判据函数里的判据本身：五阶段逐个必须显式取值 + 退出码与取值自洽。
+        "stage", "stage_gate.py --stage all（五阶段判据台账 + 退出码自洽）",
         ("scripts/delivery/stage_gate.py", "{root}", "--stage", "all", "--no-report"),
         30.0, _stage_gate_verdict,
     ),
