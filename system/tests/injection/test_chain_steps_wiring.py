@@ -158,6 +158,103 @@ def test_no_step_claims_ok_without_output(code_root: Path) -> None:
     """
     result = Pipeline(code_root).run_daily(RUN_DATE)
     offenders = [
-        (s.step, s.name) for s in result.steps if 2 <= s.step <= 6 and s.status == STATUS_OK and not s.produced
+        (s.step, s.name)
+        for s in result.steps
+        if 2 <= s.step <= 6 and s.status == STATUS_OK and not s.produced and not s.skipped
     ]
-    assert offenders == [], f"以下步报 ok 但 produced 为空（空执行）：{offenders}"
+    assert offenders == [], f"以下步报 ok 但 produced 与 skipped 均为空（空执行）：{offenders}"
+
+
+# ───────── ★ step 2 接线（`Ch6 §6.3` 追源归因 + 独立判定）的判别式 ─────────
+#
+# 为什么单开一节：step 2 原先的 `produced = 全部核验通过的 claim_id` 属 **`C-03` 同族**缺陷 ——
+# 那个集合**与是否写入无关** ⇒ 幂等重跑时 `produced` 仍非空 ⇒ `G1-05` 的空执行判据
+# 对本步**恒假**（守卫失效），且两轮观测量完全相同（"幂等"与"非幂等"不可区分）。
+# 现按契约（`4f95c3d` 裁定 R2）切分为 `produced`（本轮真正新写入）/ `skipped`（幂等命中）。
+#
+# ★ 判别力的来源 = **两轮观测量必须不同**：
+#   若有人把 produced 改回"全部核验通过的 claim_id"，第 2 轮 `produced` 会变非空 → 本用例即红。
+
+_INBOX_NAME = "2026-09-16_nvda_q2.txt"
+_INBOX_TEXT = (
+    "NVIDIA 数据中心业务的季度收入在报告期内显著增长。\n"
+    "本行为夹具文本的第二行，用于让 locator 的行区间可核。\n"
+)
+
+
+def _seed_inbox(code_root: Path) -> None:
+    """往投递口放一份待采集文本 —— 走**真实写路径**造 claim，不手工拼 JSONL。"""
+    inbox = code_root / "raw" / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    (inbox / _INBOX_NAME).write_text(_INBOX_TEXT, encoding="utf-8")
+
+
+def _lines(code_root: Path, stem: str) -> int:
+    path = code_root / "facts" / f"{stem}.jsonl"
+    if not path.exists():
+        return 0
+    return len([ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()])
+
+
+def test_step2_wiring_discriminates_between_first_run_and_rerun(code_root: Path) -> None:
+    """★ step 2 的双跑判别式：**首轮写入 → 重跑双空 produced + 真源不增行**。
+
+    断言四件事，缺一不可：
+    1. 首轮 `produced` **非空**（否则"重跑为空"没有判别力 —— 一个永远不写的实现也能骗过）；
+    2. 首轮 `skipped` 为空；
+    3. 重跑 `produced == []`；
+    4. 重跑 `skipped` **非空**，且集合 = 首轮新写入集合（这正是 `G1-05` 修正判据
+       `not produced and not skipped` 所要保留的信息："读了 N 个对象、判定均无需追加"
+       **不是**空执行）。
+    ★ 另加**真源行数不增**：断言的是**文件**，不是模块自报（自报曾在批次 10 被证伪一次）。
+    """
+    _seed_inbox(code_root)
+
+    first = Pipeline(code_root).run_daily(RUN_DATE)
+    s2_first = {s.step: s for s in first.steps}[2]
+    claims_after_first = _lines(code_root, "claims")
+    prop_after_first = _lines(code_root, "claim_propagation")
+
+    assert s2_first.produced, (
+        "首轮 step 2 必须真正写入 —— 若为空，本用例对'重跑为空'就不具备判别力"
+    )
+    assert s2_first.skipped == [], f"首轮不应有幂等命中，实得 {s2_first.skipped}"
+
+    second = Pipeline(code_root).run_daily(RUN_DATE)
+    s2_second = {s.step: s for s in second.steps}[2]
+
+    assert s2_second.produced == [], (
+        f"幂等重跑 produced 必须为空，实得 {s2_second.produced}。\n"
+        "非空即说明 produced 又被填成'全部核验通过的 claim_id / 全部对象引用'"
+        "（与是否写入无关，C-03 同族）—— 那会让 G1-05 的空执行判据对本步**恒假**。"
+    )
+    assert s2_second.skipped, "重跑必须把幂等命中记进 skipped，否则会被误判成'空执行'"
+    assert set(s2_second.skipped) == set(s2_first.produced), (
+        "重跑的幂等命中集合必须 = 首轮新写入集合；"
+        f"实得 skipped={sorted(s2_second.skipped)} vs 首轮 produced={sorted(s2_first.produced)}"
+    )
+    assert _lines(code_root, "claims") == claims_after_first, (
+        f"幂等重跑**不得**往 facts/claims.jsonl 追加行："
+        f"首轮 {claims_after_first} → 重跑 {_lines(code_root, 'claims')}"
+    )
+    assert _lines(code_root, "claim_propagation") == prop_after_first, (
+        f"幂等重跑**不得**往 facts/claim_propagation.jsonl 追加行："
+        f"首轮 {prop_after_first} → 重跑 {_lines(code_root, 'claim_propagation')}"
+    )
+
+
+def test_step2_still_declares_model_side_gap(code_root: Path) -> None:
+    """接线**不得**把"接线了"洗成"这一步做完了"（A 方案的核心）。
+
+    `Ch6 §6.3` 七步判定中的**交叉验证 / 采纳与否**仍属模型侧、阶段②③ ——
+    故本步必须**继续**记 `gap` 并给出原因；`produced` 非空**不**构成"该步已完成"的证据。
+    """
+    _seed_inbox(code_root)
+    result = Pipeline(code_root).run_daily(RUN_DATE)
+    s2 = {s.step: s for s in result.steps}[2]
+    assert s2.status == STATUS_GAP, (
+        f"step 2 接线后仍必须是 gap（模型侧未交付），实得 {s2.status} —— "
+        "不得因为接上了确定性骨架就把'未完成'洗成'已完成'"
+    )
+    assert s2.gap, "记了 gap 却没给原因（不得静默）"
+    assert "交叉验证" in s2.gap, f"gap 应指明仍缺的模型侧部分，实得：{s2.gap}"

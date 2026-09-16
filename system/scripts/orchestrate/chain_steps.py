@@ -69,13 +69,25 @@ def make_verify_handler(root: str | Path, *, step_no: int = 2) -> Callable[[date
     - **已实现的确定性部分**：`scripts/validators/locator_check.py`（`Ch6 §D` 的
       `full_text_read` 定位校验器）—— 它把"原文是否真的被整份读过"从"模型自称"
       变成**机械可复查**的哈希 + 行数判定。
-    - **未实现的模型侧部分**：`Ch6 §6.3` 的**七步判定**（追源 / 交叉验证 / 采纳与否）。
-    - `produced` = 定位核验**通过**的 `claim_id`；核验失败时**不放进** `produced`
-      （只报 gap），以免"未通过核验的主张"被当成 step 2 的产出。
+    - **已实现的模型侧确定性骨架**：`scripts/evidence/independence.classify_and_record(root)`
+      —— `Ch6 §C.2` 的**追源归因**（`origin_claim_id`）+ **独立判定**（`independent_evidence_count`）
+      + 转述行落 `facts/claim_propagation.jsonl`。**唯一写入口**（`G-06`：本层不重算任何判定）。
+    - **仍属阶段②③的模型侧部分**：`Ch6 §6.3` 七步判定中的**交叉验证 / 采纳与否**。
+    - `produced` = 本轮**真正新写入**的对象引用（claim 版本行 ∪ 传播行，取自模块回传的
+      `written_claim_ids` / `written_propagation_ids`）；
+      本步**考察过、但派生值已在真源中记录故未重复写入**的对象走 `skipped`
+      （契约：`pipeline.py` 的 `StepOutcome`，裁定 R2 / commit `4f95c3d`）。
+      ★ **不要**再用"全部核验通过的 `claim_id`"：该集合**与是否写入无关** ⇒ 幂等重跑时
+      `produced` 仍非空 ⇒ `G1-05` 的空执行判据对本步**恒假**（守卫失效），
+      且两轮观测量完全相同 —— "幂等"与"非幂等"在输出上不可区分。
+      这与 `C-03`（`derived_ids` 当作 `produced`）是**同一族**缺陷。
+    - 定位核验**失败**时 `produced` / `skipped` **均为空** + `incomplete_reason`（不静默）。
     """
     root_path = Path(root)
 
     def handler(_run_date: date, _scope: str) -> Any:
+        # 惰性导入（避免包级急切依赖与循环导入；与 `scripts/compute/step.py` 同范式）
+        from scripts.evidence.independence import classify_and_record
         from scripts.orchestrate.pipeline import StepOutcome
         from scripts.validators.locator_check import check as locator_check
 
@@ -90,27 +102,46 @@ def make_verify_handler(root: str | Path, *, step_no: int = 2) -> Callable[[date
                     f"定位核验未通过（{len(report.violations)} 条违例，`Ch6 §D` / `Ch9 §3.4.6`）：{bad}"
                 ),
             )
-        # ★ **追源去重 / 独立判定的产出方尚未接线 —— 原因：它会污染真源**（实测，批次 11 待修）
-        #   证据层（`scripts/evidence/`）已建成产出方 `classify_and_record(root)`，但**实测非幂等**：
-        #     起点 `claims=5` → 副本上 `run_daily` 第 1 次 → `claims=10`（+5）；
-        #     第 2 次 → `claims=12`（**+2，仍在新增**）。
-        #   ⇒ 若接进 step 2（日度步骤），**每次真跑都会往 `facts/claims.jsonl` 追加行** ——
-        #     这与 `G-B10-02`（编排层重复落库）**同类**，且该流自报"重复调用 0 新增（幂等）"，
-        #     与实测不符 ⇒ **先不接，等幂等被修实**。
-        #   （设计位置无误：`Ch6 §6.3` 正是 step 2 的模型侧；缺的是**幂等性**，不是位置。）
-        #   登记：`G-B10-07`。
+        # ★ **接线已恢复**（批次 11 末）：此前因"实测非幂等"撤回接线并登记 `G-B10-07`，
+        #   现两条修复均已合入 `main` ——
+        #     ① `ws/idempotency`（`a29ec90`）：step 1 按 `(source_id, quote_hash)` 行幂等，
+        #        不再每次追加一版**丢派生字段**的重复 claim；
+        #     ② `ws/evidence-fix`（`35758a7` / `16b791b`）：基线改为"最近记录到的非空值"，
+        #        并回传本轮**真正新写入**的 `written_*_ids`。
+        #   叠加后实测：run#1 写入、**run#2 双文件 0 新增**。
         #
-        # 定位核验过了，但 `Ch6 §6.3` 的七步判定（追源 / 交叉验证 / 采纳）属模型侧，未实现。
+        # `produced` / `skipped` 的切分遵守契约（`4f95c3d` 裁定 R2）：
+        #   `produced` = 本轮**真正新写入**的对象引用；
+        #   `skipped`  = 本步**考察过**、但派生值已在真源中记录故**未重复写入**的对象引用。
+        #   ★ 为什么必须切分（原先 `produced = 全部核验通过的 claim_id`，属 `C-03` 同族）：
+        #     那个集合**与是否写入无关** ⇒ 幂等重跑时 `produced` 仍非空
+        #     ⇒ `G1-05` 的「空执行」判据对本步**恒假**（守卫失效）。
+        #   `written_*_ids` 由**模块**回传，本层**零重算**（`G-06` 唯一真源）。
+        summary = classify_and_record(root_path)
+        written = {*summary.written_claim_ids, *summary.written_propagation_ids}
+        considered = (
+            set(summary.roots)
+            | set(summary.independent_evidence_count)
+            | {str(row.propagated_claim_id) for row in summary.propagation_rows}
+        )
+        produced = sorted(written)
+        skipped = sorted(considered - written)
+        # 仍属阶段②③的模型侧部分：`Ch6 §6.3` 七步判定中的交叉验证 / 采纳与否。
         return StepOutcome(
-            produced=claims,
+            produced=produced,
+            skipped=skipped,
             degraded=not claims,
             incomplete_reason=(
-                f"`Ch6 §6.3` 追源去重与核验的**七步判定**（追源 / 交叉验证 / 采纳与否）属模型侧、"
+                f"`Ch6 §6.3` 七步判定中的**交叉验证 / 采纳与否**属模型侧、"
                 # ★ 此处用**直白措辞**（而非先前的委婉语）—— 需求方 2026-09-16 裁定
                 #   「开豁免清单」，本文件的 `PLACEHOLDER-CN` 已在
                 #   `config/placeholder_exemptions.yaml` 逐条登记豁免。
                 #   运行时缺口文案的职责是**让人一眼看出"这步没做"**，委婉语恰恰削弱它（`G-27`）。
-                f"阶段②③，本批次**未实现**；本次仅完成**定位机械复查**（{len(claims)} 条 claim 通过）。{_T08}"
+                # ★ 位置未变（**仍是同一个** `incomplete_reason=` 实参的内容更新，不是新增落点）
+                #   —— 符合该豁免 `scope_note` 的「若用于新增位置必须重新评估」。
+                f"阶段②③，本批次**未实现**；本次已完成**定位机械复查**"
+                f"（{len(claims)} 条 claim）与**追源归因 / 独立判定**"
+                f"（新写入 {len(produced)} 条对象引用、幂等命中 {len(skipped)} 条）。{_T08}"
             ),
         )
 
