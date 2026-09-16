@@ -248,11 +248,16 @@ tests/injection/test_guards_reject.py                                           
 ### 2.6 零污染
 
 ```
-$ git status --short          # worktree（提交 9eff294 之后、写本报告之前）
-（空 —— 只有本报告待提交）
+$ git status --short                                    # 本 worktree（两个提交之后）
+（空）
 
 $ cd /Users/gaza/Developer/InvestSigh && git status --short   # 真仓库（主工作树）
 ?? system/tests/.audit-b11/    ← **不是我的**：`auditor-batch11` 的工作目录
+
+$ git log --oneline -3
+81d8e2a docs(reports): 判据有效性（G9）交付报告 —— 逐条反例原始输出 + H3 三组对照 + 空实现复现
+9eff294 feat(guards): 判据有效性门禁 —— 把"绑定"从「接了」强化到「真的会拦」（缺口 G9）
+5a314a3 fix(fixture/gitignore): derived/ 纠正为非唯一真源 + 夹具不再复制真仓库派生输出（G-RC-07/08）
 ```
 
 我的全部实验都在 `system/tests/.probe-ce/` 副本内完成（该目录**已删除**），
