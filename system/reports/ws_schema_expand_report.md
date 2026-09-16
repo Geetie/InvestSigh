@@ -12,7 +12,10 @@
 `facts/` 已由 **18 张表扩至 22 张**（新增 `businesses` / `drivers` / `implied_requirements` / `relation_flows`），
 表清单已收敛为**单一真源**（`schema/stems.py::JSONL_STEMS`）并由**两处机器绑定**强制；
 `baseline.driver_model` 的双真源风险按**默认方案**消解（收窄为可派生投影 + 校验器防孤儿）；
-HEAD 上 **13 批 698 条测试全绿**，`run_all_gates` **23/24 绿**（唯一红项 `traceback.py` 经证实为**基点既有的真实数据问题**，与本次扩表无关）。
+HEAD 上 **13 批 700 条测试全绿**，`run_all_gates` **23/24 绿**（唯一红项 `traceback.py` 经证实为**基点既有的真实数据问题**，与本次扩表无关）。
+
+**另外发现并修掉一处既有假绿**（§1.8，`纪律 4` 的 pre-commit 手段在**所有 linked worktree 上失效**）——
+这条超出 18→22 的字面范围，但正覆盖本次 4 张新表，故一并修了并提出证据。
 
 ---
 
@@ -83,7 +86,75 @@ HEAD 上 **13 批 698 条测试全绿**，`run_all_gates` **23/24 绿**（唯一
 故在 `report.notes` 增加一行 `staged facts files = <排序后的文件名>`（`reports` 的 `scanned` 仍是 `dict[str,int]`，未破坏类型契约）。
 这条同时让原先无法成立的用例 `tests/injection/test_append_only.py::test_new_stem_append_passes`（断言 `relation_flows` 出现在输出里）变成**真话**。
 
-### 1.7 提交范围（`git diff --stat bc26933..HEAD`）
+### 1.8 ★ 修掉一处**既有假绿**：`append_only_guard` 在 linked worktree 上恒「空放行」
+
+> 这一项**超出** 18→22 的字面范围，但**必须**做：`纪律 4`（追加式不可变）是本次扩表 4 张新表的直接约束，
+> 而我在实测它的覆盖时发现——**它在所有 worktree 上都是失效的**。留着不修，§2.5 那份"新表受保护"的证据就是假的。
+
+**根因（一行）**：`git` 在钩子里把 `GIT_DIR` 导出给子进程；此时**不带** `GIT_WORK_TREE` 的
+`git rev-parse --show-toplevel` **不查仓库**，直接把 **cwd 当工作树根**返回。守卫用 `root`（= `.../system`）作 cwd 去问 toplevel，于是：
+
+| 仓库形态 | `--show-toplevel` 被判成 | pathspec | `git diff --cached` 看到 |
+|---|---|---|---|
+| 普通仓库（cwd == 仓库根） | 仓库根 | `system/facts/*.jsonl` | ✅ 暂存改动 |
+| **linked worktree**（cwd == `<wt>/system`） | `<wt>/system` | `facts/*.jsonl` | ❌ **恒为空** |
+
+⇒ 在 worktree 里 `git commit` 时守卫**恒报 `staged_facts_files: 0` + 「无被检对象」+ `RESULT: PASS`**。
+而本项目干活方式**就是** `git worktree`（`.worktrees/ws-*`）。
+
+**失效证据（`git worktree` 实测；基点与修复前均复现）**：
+```
+# 建 worktree → 改写 facts/dependency_edges.jsonl 的**既有行** → git add → git commit
+--- 修复前（基点 bc26933 与本分支修复前，两者逐字相同）---
+  scanned staged_facts_files: 0
+  note: pathspec = facts/*.jsonl（相对仓库根 /private/tmp/wt-link2/system）
+  note: NO_STAGED_FACTS_CHANGES：暂存区没有 facts JSONL 的改动；本次**无被检对象**……
+  RESULT: PASS（0 violations）
+--- 提交结果 ---
+  0d185ac tamper-base                          ← **提交成功**
+  被改写行是否入库: 1                          ← 被改写的既有行**进了版本库**
+```
+
+**修法（两处，缺一不可）**：
+1. **根因**：`_git_env()` —— 问 toplevel 时去掉 `GIT_DIR` / `GIT_WORK_TREE` / `GIT_PREFIX`，
+   **保留 `GIT_INDEX_FILE`**（它是**本工作树自己的**索引，去掉会去读主仓库的索引、看错暂存区）。
+   `repo_toplevel` 另加自检：`root/facts` 必须真在 toplevel 之下，否则**响亮失败**。
+2. **记账**：把「空 diff」的**两种成因**分开 —— 新增 `scanned.pathspec_tracked_files`
+   （pathspec 匹配到几个**被跟踪**文件）与 `PATHSPEC_MATCHES_NOTHING` note。
+   因为「pathspec 指错」与「暂存区真没改」在 `git diff` 输出上**一模一样**，
+   只靠 `NO_STAGED_FACTS_CHANGES` 一条 note 抓不住（该缺陷能长期存活正是因为它看起来完全正常）。
+
+**修复验证（同一 worktree 探针，逐字）**：
+```
+--- 修复后 ---
+  scanned staged_facts_files: 1
+  note: pathspec = system/facts/*.jsonl（相对仓库根 /private/tmp/wt-link3）   ← toplevel 正确了
+  [FATAL] Ch9 §3.4.2 / 纪律 4 @ system/facts/*.jsonl:0 —
+          system/facts/dependency_edges.jsonl: 存在被删除/改写的既有行 → {"edge_id": "edge-nvda-q4-claim-baseline", …
+  RESULT: FAIL（1 violations）
+  pre-commit ✗ append_only_guard 阻断（exit=1）
+--- 结果 ---
+  40cdb61 seed                                 ← 提交被拦，HEAD 未动
+  被改写行是否入库: 0                          ← 拦住了
+```
+
+**回归绑定**（`tests/injection/test_append_only.py`，+2 条；两条都必不可少）：
+- `test_hook_env_git_dir_does_not_blind_the_guard`：**导出 `GIT_DIR`/`GIT_INDEX_FILE`**（= 钩子环境）后
+  改写既有行必须**仍被拦下**，且 `staged_facts_files: 1`（证明确实"看见了"，不是"没扫到"）。
+  这条是**把根因钉死**的机器绑定——若有人把 `_git_env` 去掉，它会红。
+- `test_empty_diff_causes_are_distinguishable`：pathspec 匹配不到被跟踪文件时，
+  `pathspec_tracked_files: 0` + `PATHSPEC_MATCHES_NOTHING` 必须出现在输出里（两种成因可分）。
+
+**为什么第二处只记 note、不判 `exit 2`**：`tests/guards/test_exit_code_contract.py::test_guard_exits_zero_and_reports_scanned_on_pristine_tree[append_only_guard]`
+的**既定契约**要求「干净**副本树**上守卫 `exit 0`」，而副本（`<仓库>/…/_pristine/system`）里的
+`facts/*.jsonl` 本就**不在 git 跟踪范围内** ⇒ 那种 `0` 是合法的。
+（我最初把它写成 `exit 2`，被这条契约测试当场拦下 —— 记在这里，因为它是"改了别人的契约"的反例。）
+
+**声明**：这是**既有**缺陷（`repo_toplevel` / `facts_pathspec` 的逻辑我一行未动，
+`git diff bc26933..HEAD -- append_only_guard.py` 可证），不是 18→22 引入的。
+但它使 `纪律 4` 对所有用 worktree 干活的人失效，故我按 `CONVENTIONS.md` 底线 2 的精神一并修了，并附正反证据。
+
+### 1.9 提交范围（`git diff --stat bc26933..HEAD`）
 
 ```
  system/facts/businesses.jsonl                    |    0
@@ -141,22 +212,23 @@ python -m pytest tests/test_ch11_invariants.py -q -p no:cacheprovider
 ```
 
 ```
-claim        exit=0  24 passed in 4.56s
-compute      exit=0  95 passed in 2.70s
-conflict     exit=0  6 passed in 0.20s
-daily        exit=0  43 passed in 7.19s
-decision     exit=0  93 passed in 4.86s
-evidence     exit=0  48 passed in 6.28s
-graph        exit=0  38 passed in 3.49s
-guards       exit=0  56 passed in 8.44s
-injection    exit=0  167 passed in 58.40s
-transmit     exit=0  29 passed in 2.93s
-unit         exit=0  70 passed in 2.42s
-validators   exit=0  21 passed in 3.03s
-ch11         exit=0  8 passed in 0.08s
+claim        exit=0  24 passed in 7.58s
+compute      exit=0  95 passed in 3.99s
+conflict     exit=0  6 passed in 0.35s
+daily        exit=0  43 passed in 7.95s
+decision     exit=0  93 passed in 4.45s
+evidence     exit=0  48 passed in 7.03s
+graph        exit=0  38 passed in 4.87s
+guards       exit=0  56 passed in 7.68s
+injection    exit=0  169 passed in 72.47s
+transmit     exit=0  29 passed in 3.55s
+unit         exit=0  70 passed in 2.63s
+validators   exit=0  21 passed in 4.53s
+ch11         exit=0  8 passed in 0.14s
 ```
 
-**13 批全部 `exit=0`，合计 698 条通过、0 失败、0 error。**
+**13 批全部 `exit=0`，合计 700 条通过、0 失败、0 error。**
+（`injection` 由 167 增至 169：新增 §1.8 的 2 条回归用例。）
 
 ### 2.2 全门禁（**真 worktree**，权威）
 
@@ -293,6 +365,11 @@ exit=0
 **B/C 是"真覆盖"的硬证据**：若新表没被扫到，B/C 会 `exit=0`（假绿）。它们红了 ⇒ 新表确实在判据范围内。
 （对应的回归用例：`tests/injection/test_append_only.py::test_new_stem_append_passes` / `test_new_stem_rewrite_is_rejected`。）
 
+> ⚠️ **这四组是手工跑守卫（未导出 `GIT_DIR`）**，所以它们一直是正常的 ——
+> 而**通过 `git commit` 触发的钩子路径**上，上面 4 组结论**不成立**：守卫恒报「无被检对象」并放行。
+> 这正是 §1.8 那个缺陷能长期存活的原因 —— **手工验证看得见，钩子里看不见**。
+> 修复后两条路径一致（§1.8 的修复验证有逐字输出）。
+
 ### 2.6 四张新表 schema 正/反向（`tests/unit/test_schema_expand.py`，28 条）
 
 | 断言 | 实测 |
@@ -359,7 +436,7 @@ import schema.models : 624 ms
 | 2 | `facts/` 建 4 个空 JSONL | §1.1；§2.7 行数表；`test_every_registered_stem_has_a_facts_file` |
 | 3 | ★★ `_TRUTH_STEMS` 18→22 **且与注册表机器绑定**（不得手写两份） | `conftest.py:91 _TRUTH_STEMS = tuple(JSONL_STEMS)`；§2.3 探针 1/2；§2.6 三方集合相等断言 |
 | 4 | ★★ `schema_sync_guard` 对象数**从注册表派生** | `schema_sync_guard.py:104` `registry = build.__globals__["JSONL_MODELS"]`；§2.4（`registry_stems: 22` + 能红的对照） |
-| 5 | `append_only_guard` glob 覆盖实测 | §2.5 A/B/C/D 四组真实输出（B/C 是硬证据） |
+| 5 | `append_only_guard` glob 覆盖实测 | §2.5 A/B/C/D 四组真实输出（B/C 是硬证据）；§1.8 修掉"钩子路径上恒空放行"并补 2 条回归用例 |
 | 6 | 4 新模型 schema 正/反向用例 | §2.6；`tests/unit/test_schema_expand.py` 28 条 |
 | 7 | 向后兼容（旧行仍合法，新字段一律默认值） | §2.7（61 行）+ 非真空保护 |
 | 8 | 既有测试全绿（一次只跑一个目录） | §2.1（13 批、698 条、全 exit=0） |
@@ -457,6 +534,17 @@ RESULT: FAIL（2 violations）
 | 历史基线 | 沿用 `historical_numeric_claims` | **不新增** `historicals`（`Ch4 §G.1⑤` 用 `historicals` 是行文简称；再加字段即一概念两名） |
 | `drivers` 的依赖与时间 | `dependencies[]` / `timeline` | 与 `relation_progress_stage` 消歧（`Ch2 §C.2 R-15`：同名不同域必须可区分） |
 | 价格隐含要求的时间 | 只用 `computed_at`，**不叠** `TimeMixin` | 否则 `analyzed_at` 与 `computed_at` 同时表达"什么时候算的" |
+
+### G-7 越界修复的**知情登记**：§1.8 的 `append_only_guard` 修复需要 team-lead 知悉
+
+- 该缺陷**不是** 18→22 引入的（`git diff bc26933..HEAD -- scripts/checks/append_only_guard.py` 可证我没碰根因逻辑）。
+- 但它让 `纪律 4` 的 pre-commit 手段在**所有 worktree 上失效**，而本次 4 张新表正受该纪律约束 ⇒ 我判断"不修则本次的覆盖证据是假的"，故修了。
+- **行为变化**：修复后，在 worktree 里 `git commit` 若**改写/删除 `facts/*.jsonl` 既有行**将**被拦下**（此前会静默放行）。
+  这是**正确**的方向，但会影响其他 teammate 的提交流程 —— **若有人的工作流依赖"改既有 facts 行能提交"，请立刻提出**（那本身就是违反 `Ch9 §3.4.2` 的操作）。
+- 另一个**已知的、我未修**的相邻问题：主仓库 `.git/hooks/pre-commit` 是**绝对路径**指向 `.../ws-schema-expand` 之外的
+  `/Users/gaza/Developer/InvestSigh/system/scripts/ops/pre-commit.sh`（即**主仓库的那一份**，见 §四 G-4 的现场输出）。
+  在 worktree 里提交时跑的是主仓库的脚本副本，而不是当前分支的脚本 —— 这意味着**守卫代码的版本与分支可能不一致**。
+  我未改动钩子（属于仓库级基础设施，且会立即影响所有人），**在此登记**：建议由 team-lead 决定是否让钩子按 `git rev-parse --git-path hooks` / 当前工作树解析脚本路径。
 
 ---
 
