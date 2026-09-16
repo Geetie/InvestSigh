@@ -532,3 +532,28 @@ def test_cli_reports_fallback_source_even_without_baselines(scratch: Path, run_s
     assert "unregistered_fallback_value_source: 0" in proc.stdout
     assert "NO_UNREGISTERED_FALLBACK" in proc.stdout
     assert "NO_BASELINE_ROWS" in proc.stdout, "早退 note 仍须在（两者不可互相顶掉）"
+
+
+# ── 第四轮：**缺子键 ≠ 无可比对象**（`valuation_compute.entry` 被删也必须是红）──
+
+
+def test_missing_valuation_compute_entry_is_flagged(
+    scratch: Path, real_rules, run_script
+) -> None:
+    """★ 第四轮反例：**删** `valuation_compute.entry` ⇒ 必须 `exit 1`。
+
+    旧写法 `if declared and declared not in globals()` 在缺键时 `declared == ""` ⇒
+    **静默跳过**（"无可比对象"）⇒ "规则文件声明的入口"这一事实从规则面消失而门禁全绿。
+    真文件里该键**存在**（`compute_valuation`），故缺键即"声明与实现脱节"（`Ch11 §D.2`）。
+    """
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml", "scenario.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["valuation_compute"].pop("entry")
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/valuation.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "VALUATION-RULE-BINDING" in proc.stdout
+    assert "valuation_compute.entry 缺失" in proc.stdout

@@ -171,33 +171,3 @@ def test_run_price_guards_clean_on_real_rules_files(scratch: Path, real_rules) -
     binding = [v for v in report.violations if "RULE-BINDING" in v]
     assert binding == [], binding
     assert report.scenario_blocking is True
-
-
-def test_run_price_guards_surfaces_rule_binding_violations(
-    scratch: Path, real_rules
-) -> None:
-    """★ 规则↔代码绑定违例必须**在流水线里**被拦到（不只 CLI）—— 与 `valuation.check` 对称。
-
-    注入：真 `rules/valuation-methods.yaml` 的 `unregistered_fallback.method_class` 改名，
-    而代码默认值没改 ⇒ `run_price_guards` 必须产出违例。
-    """
-    import yaml
-
-    real_rules(scratch, "valuation-methods.yaml", "scenario.yaml")
-    path = scratch / "rules" / "valuation-methods.yaml"
-    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
-    doc["unregistered_fallback"]["method_class"] = "misc"
-    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
-
-    report = pricelayer_step.run_price_guards(scratch)
-    assert any("VALUATION-RULE-BINDING" in v for v in report.violations), report.violations
-    assert report.passed is False
-
-
-def test_run_price_guards_clean_on_real_rules_files(scratch: Path, real_rules) -> None:
-    """反向对照：真 `rules/` 文件（`valuation-methods` + `scenario`）→ **无规则绑定违例**。"""
-    real_rules(scratch, "valuation-methods.yaml", "scenario.yaml", "freeze.yaml")
-    report = pricelayer_step.run_price_guards(scratch)
-    binding = [v for v in report.violations if "RULE-BINDING" in v]
-    assert binding == [], binding
-    assert report.scenario_blocking is True
