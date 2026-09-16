@@ -93,15 +93,30 @@ ABNORMAL_DROP_3D = Decimal("-0.12")
 ★ `Ch5 §F.5` 逐字："**不自动止损/抄底**"（`N5.5-06` / `T08`）—— 本阈值**只触发复查**。
 """
 
+DESIGN_KEEP_ORIGINAL_JUDGMENT_TIME = True
+"""`Ch5 §F.5` / `T08` 逐字："价格涨跌**只触发复查**，**保留原判断时间**" —— `True`。
+
+★ 真值取自 `rules/review.yaml::forced_recheck.on_hit.keep_original_judgment_time`（现为 `true`）；
+  本常量仅作规则文件/该键缺失时的**设计逐字回落**，并由 `_rule_binding_violations`
+  核"代码回落值 == 文件真值"（否则"规则改了、回落没改"不会被发现）。
+"""
+
 
 @dataclass(frozen=True)
 class RecheckTrigger:
-    """`rules/review.yaml::forced_recheck` 的解析结果（**带来源标注**）。"""
+    """`rules/review.yaml::forced_recheck` 的解析结果（**带来源标注**）。
+
+    - `value_source`：`"rules"` = 取自规则文件；`"design_default"` = 文件/键缺失，取
+      **设计逐字值**（B2 的 `-7%`/`-12%` + `Ch5 §F.5`/`T08` 的"保留原判断时间"）。
+    - `notes`：**`value_source == "design_default"` 时必非空** —— 逐条写明缺的是什么
+      （主理人裁定 ③-2：`design_default` 必须打 note，否则单独特调本函数就看不出"缺键"）。
+    """
 
     single_day_drop: Decimal
     three_day_cumulative: Decimal
     keep_original_judgment_time: bool = True
     value_source: str = "design_default"
+    notes: tuple[str, ...] = ()
 
 
 def load_recheck_trigger(root: str | Path | None = None) -> RecheckTrigger:
@@ -109,27 +124,34 @@ def load_recheck_trigger(root: str | Path | None = None) -> RecheckTrigger:
 
     ★ 比例口径归正：规则文件写的是**百分点**（`-7` / `-12`），本层内部用**小数**
       （`-0.07` / `-0.12`）。换算在**这一处**完成，避免两套口径并存。
-    - 文件/键缺失 → 回落设计逐字值（B2）并标 `value_source="design_default"`。
+    - 文件/键缺失 → 回落**设计逐字值**（B2 + `Ch5 §F.5`）并标 `value_source="design_default"`
+      **且记一条写明缺失对象的 note**（主理人裁定 ③-1/③-2）。
     - 取值非负或非数值 → `DailyExplainError`（**响亮失败**；阈值必须是负的下跌阈值）。
     """
     from scripts._common import _cached_yaml  # `P-02`
 
-    def _fallback() -> RecheckTrigger:
+    def _fallback(reason: str) -> RecheckTrigger:
         return RecheckTrigger(
             single_day_drop=ABNORMAL_DROP_1D,
             three_day_cumulative=ABNORMAL_DROP_3D,
+            keep_original_judgment_time=DESIGN_KEEP_ORIGINAL_JUDGMENT_TIME,
             value_source="design_default",
+            notes=(
+                f"NO_FORCED_RECHECK: {reason} —— 回落设计逐字值 "
+                f"单日 {ABNORMAL_DROP_1D} / 三日累计 {ABNORMAL_DROP_3D}（B2）、"
+                f"保留原判断时间 {DESIGN_KEEP_ORIGINAL_JUDGMENT_TIME}（Ch5 §F.5 / T08）（非'已核'）",
+            ),
         )
 
     if root is None:
-        return _fallback()
+        return _fallback("未给 code_root")
     path = Path(root) / REVIEW_YAML
     if not path.exists():
-        return _fallback()
+        return _fallback(f"{REVIEW_YAML} 不存在")
     doc = _cached_yaml(path) or {}
     node = doc.get(RULE_KEY_FORCED_RECHECK)
     if not isinstance(node, Mapping):
-        return _fallback()
+        return _fallback(f"{REVIEW_YAML} 缺/非法键 {RULE_KEY_FORCED_RECHECK!r}")
     try:
         one_day = Decimal(str(node.get(RULE_KEY_SINGLE_DAY_DROP_PCT))) / Decimal(100)
         three_day = Decimal(str(node.get(RULE_KEY_THREE_DAY_CUMULATIVE_PCT))) / Decimal(100)
@@ -145,14 +167,29 @@ def load_recheck_trigger(root: str | Path | None = None) -> RecheckTrigger:
             f"{one_day} / {three_day}（B2：单日 ≤ −7% / 3 日累计 ≤ −12%）"
         )
     on_hit = node.get(RULE_KEY_ON_HIT)
-    keep = True
+    keep = DESIGN_KEEP_ORIGINAL_JUDGMENT_TIME
+    notes: list[str] = []
     if isinstance(on_hit, Mapping) and RULE_KEY_KEEP_ORIGINAL_JUDGMENT_TIME in on_hit:
         keep = bool(on_hit.get(RULE_KEY_KEEP_ORIGINAL_JUDGMENT_TIME))
+    else:
+        notes.append(
+            f"NO_ON_HIT_KEY: {REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK}.{RULE_KEY_ON_HIT}."
+            f"{RULE_KEY_KEEP_ORIGINAL_JUDGMENT_TIME} 缺失 —— 取设计逐字回落值 "
+            f"{DESIGN_KEEP_ORIGINAL_JUDGMENT_TIME}（Ch5 §F.5 / T08：涨跌只触发复查，保留原判断时间）"
+            "（非'已核'）"
+        )
+    for key in (RULE_KEY_SINGLE_DAY_DROP_PCT, RULE_KEY_THREE_DAY_CUMULATIVE_PCT):
+        if key not in node:
+            notes.append(
+                f"NO_FORCED_RECHECK_KEY: {REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK}.{key} "
+                "缺失 —— 该阈值取设计逐字回落值（B2）（非'已核'）"
+            )
     return RecheckTrigger(
         single_day_drop=one_day,
         three_day_cumulative=three_day,
         keep_original_judgment_time=keep,
         value_source="rules",
+        notes=tuple(notes),
     )
 
 FACTOR_KINDS: tuple[str, ...] = ("benchmark", "peer", "company_event", "environment")
@@ -475,23 +512,32 @@ def _rule_binding_violations(root: Path, trigger: RecheckTrigger) -> list[str]:
             violations.append(
                 f"{relpath} 缺本模块实际读取的键 {key!r} —— 声明与实现脱节（Ch11 §D.2）"
             )
-    if trigger.value_source == "rules":
-        if trigger.single_day_drop != ABNORMAL_DROP_1D:
-            violations.append(
-                f"{REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK}.{RULE_KEY_SINGLE_DAY_DROP_PCT} "
-                f"= {trigger.single_day_drop} 与代码回落值 {ABNORMAL_DROP_1D} 不一致（B2）"
-            )
-        if trigger.three_day_cumulative != ABNORMAL_DROP_3D:
-            violations.append(
-                f"{REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK}.{RULE_KEY_THREE_DAY_CUMULATIVE_PCT} "
-                f"= {trigger.three_day_cumulative} 与代码回落值 {ABNORMAL_DROP_3D} 不一致（B2）"
-            )
-        if not trigger.keep_original_judgment_time:
-            violations.append(
-                f"{REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK}.{RULE_KEY_ON_HIT}."
-                f"{RULE_KEY_KEEP_ORIGINAL_JUDGMENT_TIME} 为假 —— `T08`：复查未完成时"
-                "必须显示原判断时间"
-            )
+    if trigger.value_source != "rules":
+        # 规则文件在（上面已 `path.exists()` 过）却读不到值 ⇒ 键缺失/非法；此时**不得**拿
+        # 回落值去和代码常量比 —— 那会把"文件里根本没写"判成"一致"（静默通过）。
+        violations.append(
+            f"{REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK} 读不到值"
+            f"（{trigger.notes[0] if trigger.notes else '原因未标注'}）—— "
+            "**不**按回落值判'一致'（Ch11 §D.2；缺键本身即违例）"
+        )
+        return violations
+    if trigger.single_day_drop != ABNORMAL_DROP_1D:
+        violations.append(
+            f"{REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK}.{RULE_KEY_SINGLE_DAY_DROP_PCT} "
+            f"= {trigger.single_day_drop} 与代码回落值 {ABNORMAL_DROP_1D} 不一致（B2）"
+        )
+    if trigger.three_day_cumulative != ABNORMAL_DROP_3D:
+        violations.append(
+            f"{REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK}.{RULE_KEY_THREE_DAY_CUMULATIVE_PCT} "
+            f"= {trigger.three_day_cumulative} 与代码回落值 {ABNORMAL_DROP_3D} 不一致（B2）"
+        )
+    if trigger.keep_original_judgment_time != DESIGN_KEEP_ORIGINAL_JUDGMENT_TIME:
+        violations.append(
+            f"{REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK}.{RULE_KEY_ON_HIT}."
+            f"{RULE_KEY_KEEP_ORIGINAL_JUDGMENT_TIME}={trigger.keep_original_judgment_time} "
+            f"与代码回落值 {DESIGN_KEEP_ORIGINAL_JUDGMENT_TIME} 不一致 —— `T08`：复查未完成时"
+            "必须显示原判断时间（Ch5 §F.5）"
+        )
     return violations
 
 
@@ -511,6 +557,8 @@ def check(root: str | Path) -> Any:
     report.scanned["rule_binding_checks"] = len(RULE_BOUND_ENTRIES)
     trigger = load_recheck_trigger(root_path)
     report.scanned["recheck_value_source"] = 1 if trigger.value_source == "rules" else 0
+    # `design_default` 的 note 必须**真的上报**（主理人裁定 ③-2）。
+    report.notes.extend(trigger.notes)
     for text in _rule_binding_violations(root_path, trigger):
         report.violations.append(Violation("DAILY-RULE-BINDING", text))
 

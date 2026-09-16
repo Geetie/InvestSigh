@@ -98,6 +98,11 @@ def copy_real_rules(root: Path, *names: str) -> list[Path]:
     ★ 为什么必须有：`G-43`/`G-45` 的病灶是"夹具形状 = 生产代码写不出来的形状"。
       只用手写 YAML 夹具，会让"代码读一个真文件里不存在的键"这种缺陷在夹具上**永远绿**。
       故凡涉及规则解析的用例，一律优先用**真文件内容**。
+
+    ★ **副本一律放开写位（0644）**：真 `rules/*.yaml` 是 **0444**（纪律 9 + SHA256 锁），
+      而"改规则再跑守卫"的注入用例必须能改**副本**。放开的是**拷贝**，真文件仍只读
+      —— 由 `test_tests_never_write_real_rules_files` 的 SHA256 前后对比把关。
+      （同时这也让"宿主是否保留只读位"这个环境差异不再影响用例：两种环境都写得进。）
     """
     import shutil
 
@@ -110,6 +115,7 @@ def copy_real_rules(root: Path, *names: str) -> list[Path]:
             raise FileNotFoundError(f"真规则文件不存在: {src}")
         dst = target_dir / name
         shutil.copyfile(src, dst)
+        dst.chmod(0o644)          # 只放开**副本**的写位（真文件保持 0444）
         out.append(dst)
     return out
 

@@ -131,6 +131,14 @@ DEFAULT_SCENARIO_METHOD_STATUS = "pending"
 DESIGN_BLOCKING_WHEN: str = "scenario_method_status == pending"
 """`Ch5 §E.4` 逐字阻塞条件。**仅作**规则文件缺 `scenario_method_blocking.when` 时的回落 + 显式 note。"""
 
+DESIGN_RECORD_METHOD_VERSION: bool = True
+"""`Ch5 §E.4` 逐字：「`status` 转 `neutral`/`probability_weighted` **后记** `method_version`」⇒ `True`。
+
+★ 真值取自 `rules/scenario.yaml::scenario_method_promotion.record_method_version`（现为 `true`）；
+  本常量仅作该键缺失时的**设计逐字回落** + 显式 note，并由 `_rule_binding_violations` 判据⑦
+  核"回落值 == 文件真值"。
+"""
+
 PROBABILITY_DEFAULT: None = None
 """`Ch5 §D.6` 逐字：`probability` 默认 `null`（**不是 50/50**）。
 
@@ -292,7 +300,14 @@ def load_scenario_policy(root: str | Path | None = None) -> ScenarioPolicy:
     from scripts._common import _cached_yaml  # `P-02`：配置读取走统一缓存
 
     if root is None:
-        return ScenarioPolicy(status=DEFAULT_SCENARIO_METHOD_STATUS, value_source="design_default")
+        return ScenarioPolicy(
+            status=DEFAULT_SCENARIO_METHOD_STATUS,
+            value_source="design_default",
+            notes=(
+                "NO_SCENARIO_ROOT: 未给 code_root —— 按 Ch5 §E.4 的逐字默认 pending 取值"
+                "（非'已核'：本次**未读** rules/scenario.yaml）",
+            ),
+        )
     root_path = Path(root)
     path = root_path / SCENARIO_YAML
     if not path.exists():
@@ -330,9 +345,16 @@ def load_scenario_policy(root: str | Path | None = None) -> ScenarioPolicy:
 
     blocking = _blocking_from_rule(doc, notes)
     promotion = doc.get(RULE_KEY_PROMOTION)
-    record_required = True
+    record_required = DESIGN_RECORD_METHOD_VERSION
     if isinstance(promotion, Mapping) and RULE_KEY_RECORD_METHOD_VERSION in promotion:
         record_required = bool(promotion.get(RULE_KEY_RECORD_METHOD_VERSION))
+    else:
+        notes.append(
+            f"NO_PROMOTION_KEY: {SCENARIO_YAML}:: {RULE_KEY_PROMOTION}."
+            f"{RULE_KEY_RECORD_METHOD_VERSION} 缺失 —— 取设计逐字回落值 "
+            f"{DESIGN_RECORD_METHOD_VERSION}"
+            "（Ch5 §E.4：转正后**须记** method_version）（非'已核'）"
+        )
     consistency = doc.get(RULE_KEY_CONSISTENCY)
     param_ref = ""
     if isinstance(consistency, Mapping):
@@ -574,7 +596,14 @@ def _rule_binding_violations(root: Path) -> tuple[list[str], list[str]]:
     | ③ | `probability.default` **恒为 `null`** | `Ch5 §D.6`「不默认 50/50」 |
     | ④ | `probability.must_be_null_50_50` 为 `false` | `Ch5 §D.6` 逐字 |
     | ⑤ | `scenario_method_status` 能解析（含转正后 `method_version` 可用） | `Ch5 §E.4`（**无静默兜底**） |
+    | ⑥ | `scenario_method_status_domain` 与代码回落值 `DESIGN_SCENARIO_METHOD_STATUSES` **一致** | `Ch5 §E.4`（裁定 ③-3） |
+    | ⑦ | `scenario_method_blocking.when` / `scenario_method_promotion.record_method_version` 与代码回落值一致 | `Ch5 §E.4`（裁定 ③-3） |
 
+    ★ ⑥⑦ 即主理人裁定 ③-3：**断言"回落值 == 真文件里的值"** ⇒ 让"规则改了、回落没改"变红。
+    ★ **`DEFAULT_SCENARIO_METHOD_STATUS` 刻意不绑定**：它是"**尚未转正**时的状态默认值"，
+      而文件里的 `scenario_method_status` 是**当前状态**（转正后合法地变成 `neutral`）——
+      两者**不是同一事实**，断言相等会在正常转正后假红。它的"出处"由 docstring 承担
+      （`Ch5 §E.4` 逐字 `pending`）。
     ★ 规则文件不存在 → 显式 note（`G-03`：**不**当"已核"）。
     """
     from scripts._common import _cached_yaml
@@ -612,6 +641,36 @@ def _rule_binding_violations(root: Path) -> tuple[list[str], list[str]]:
             )
     else:
         notes.append(f"NO_PROBABILITY_SECTION: {SCENARIO_YAML} 缺 {RULE_KEY_PROBABILITY!r}（G-03）")
+
+    # ⑥ 取值域：规则真值必须与**代码回落值**相等（否则"规则改了、回落没改"）
+    domain_raw = doc.get(RULE_KEY_DOMAIN)
+    if isinstance(domain_raw, list) and domain_raw:
+        declared_domain = tuple(str(x) for x in domain_raw)
+        if set(declared_domain) != set(DESIGN_SCENARIO_METHOD_STATUSES):
+            violations.append(
+                f"{SCENARIO_YAML}:: {RULE_KEY_DOMAIN}={list(declared_domain)} 与代码回落值 "
+                f"{list(DESIGN_SCENARIO_METHOD_STATUSES)} 不一致 —— 回落值未跟随规则，"
+                "属声明与实现脱节（Ch5 §E.4 / Ch11 §D.2）"
+            )
+
+    # ⑦ 阻塞条件 + 是否须记版本：同上
+    blocking_raw = doc.get(RULE_KEY_BLOCKING)
+    if isinstance(blocking_raw, Mapping):
+        declared_when = str(blocking_raw.get(RULE_KEY_BLOCKING_WHEN) or "")
+        if declared_when and declared_when != DESIGN_BLOCKING_WHEN:
+            violations.append(
+                f"{SCENARIO_YAML}:: {RULE_KEY_BLOCKING}.{RULE_KEY_BLOCKING_WHEN}="
+                f"{declared_when!r} 与代码回落值 {DESIGN_BLOCKING_WHEN!r} 不一致 —— "
+                "回落值未跟随规则（Ch5 §E.4 / Ch11 §D.2）"
+            )
+    promotion_raw = doc.get(RULE_KEY_PROMOTION)
+    if isinstance(promotion_raw, Mapping) and RULE_KEY_RECORD_METHOD_VERSION in promotion_raw:
+        if bool(promotion_raw.get(RULE_KEY_RECORD_METHOD_VERSION)) != DESIGN_RECORD_METHOD_VERSION:
+            violations.append(
+                f"{SCENARIO_YAML}:: {RULE_KEY_PROMOTION}.{RULE_KEY_RECORD_METHOD_VERSION}="
+                f"{promotion_raw.get(RULE_KEY_RECORD_METHOD_VERSION)!r} 与代码回落值 "
+                f"{DESIGN_RECORD_METHOD_VERSION} 不一致（Ch5 §E.4：转正后须记 method_version）"
+            )
 
     try:
         policy = load_scenario_policy(root)
