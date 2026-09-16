@@ -1,9 +1,9 @@
 """`store.py` —— `derived/` 追加式持久化（`Ch9 §3.3.3` `derived/` / `§3.5` 阶段④）。
 
 `Ch9 §3.3.3` 把 `derived/` 定义为"**确定性计算结果（带公式与操作数引用）**"，
-与 `facts/` 的 18 个 JSONL **分开** —— 故本层把 `DerivedValue` 落 `derived/`，
-**不**往 `facts/` 写（`facts/` 恰为 18 个 JSONL，**不得增删改名**，见
-`tests/unit/test_contracts.py::test_facts_dir_holds_exactly_the_18_files`）。
+与 `facts/` 的事实表 **分开** —— 故本层把 `DerivedValue` 落 `derived/`，
+**不**往 `facts/` 写（`facts/` 的表集合**不得增删改名**，见
+`tests/unit/test_contracts.py::test_facts_dir_holds_exactly_the_22_files`）。
 
 追加式不可变（`Ch9 §3.4.2` / 纪律 4）：
 

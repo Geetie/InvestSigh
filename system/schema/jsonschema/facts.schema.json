@@ -31,6 +31,48 @@
       "title": "AliasOverride",
       "type": "object"
     },
+    "AssumptionInput": {
+      "additionalProperties": false,
+      "description": "五因素之一的估值输入（`Ch5 §D.5`：**事实输入 / 模型估计 / 人工设定三类分开存**）。\n\n- `input_source` **必填**：不声明来源的假设不得入库（\"三类分开存\"是 `N5.3-04` 的验收面）；\n- `author` + `modified_at`：`§D.5` 逐字\"谁有权写 `manual`：授权用户……须留痕（`author` + `modified_at`）\"\n  ⇒ 当 `input_source=manual` 时二者**必须非空**（下面的校验器强制）；\n  同时这也是 `§D.4` \"无历史假设\"倒填检测的输入（`assumption_source=manual` 且无变更记录 → 标可疑）。\n- `conflict_status`：`§D.5` 逐字\"冲突时标 `conflict_status=\"unresolved\"`\"（**不用加权**，并列展示）。",
+      "properties": {
+        "author": {
+          "default": "",
+          "title": "Author",
+          "type": "string"
+        },
+        "conflict_status": {
+          "default": "",
+          "title": "Conflict Status",
+          "type": "string"
+        },
+        "input_source": {
+          "$ref": "#/$defs/InputSource"
+        },
+        "modified_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modified At"
+        },
+        "value": {
+          "default": "tbd",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "input_source"
+      ],
+      "title": "AssumptionInput",
+      "type": "object"
+    },
     "Baseline": {
       "additionalProperties": false,
       "properties": {
@@ -68,6 +110,28 @@
           "title": "Business Mechanism",
           "type": "string"
         },
+        "business_model_note": {
+          "default": "tbd",
+          "title": "Business Model Note",
+          "type": "string"
+        },
+        "business_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Business Refs",
+          "type": "array"
+        },
+        "cash_runway": {
+          "default": "tbd",
+          "title": "Cash Runway",
+          "type": "string"
+        },
+        "changed_by": {
+          "default": "",
+          "title": "Changed By",
+          "type": "string"
+        },
         "company_id": {
           "title": "Company Id",
           "type": "string"
@@ -82,6 +146,13 @@
             "$ref": "#/$defs/DriverModel"
           },
           "title": "Driver Model",
+          "type": "array"
+        },
+        "driver_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Driver Refs",
           "type": "array"
         },
         "effective_from": {
@@ -136,6 +207,11 @@
           "title": "Falsifiers",
           "type": "array"
         },
+        "fcf_persistence": {
+          "default": "tbd",
+          "title": "Fcf Persistence",
+          "type": "string"
+        },
         "first_seen_at": {
           "anyOf": [
             {
@@ -149,11 +225,51 @@
           "default": null,
           "title": "First Seen At"
         },
+        "funding_need": {
+          "default": "tbd",
+          "title": "Funding Need",
+          "type": "string"
+        },
         "historical_numeric_claims": {
           "items": {
             "type": "string"
           },
           "title": "Historical Numeric Claims",
+          "type": "array"
+        },
+        "increment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Increment"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "is_profitable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Is Profitable"
+        },
+        "margin_persistence": {
+          "default": "tbd",
+          "title": "Margin Persistence",
+          "type": "string"
+        },
+        "moat": {
+          "items": {
+            "$ref": "#/$defs/Moat"
+          },
+          "title": "Moat",
           "type": "array"
         },
         "occurred_at": {
@@ -168,6 +284,25 @@
           ],
           "default": null,
           "title": "Occurred At"
+        },
+        "path_to_profitability": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Path To Profitability",
+          "type": "array"
+        },
+        "prev_version_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Version Id"
         },
         "published_at": {
           "anyOf": [
@@ -194,12 +329,33 @@
           "default": null,
           "title": "Recorded Seq"
         },
+        "reinvestment_return": {
+          "default": "tbd",
+          "title": "Reinvestment Return",
+          "type": "string"
+        },
+        "share_dilution_impact": {
+          "default": "tbd",
+          "title": "Share Dilution Impact",
+          "type": "string"
+        },
+        "unit_economics": {
+          "default": "tbd",
+          "title": "Unit Economics",
+          "type": "string"
+        },
         "unmet_conditions": {
           "items": {
             "type": "string"
           },
           "title": "Unmet Conditions",
           "type": "array"
+        },
+        "valuation": {
+          "$ref": "#/$defs/Valuation"
+        },
+        "valuation_inputs": {
+          "$ref": "#/$defs/ValuationInputs"
         },
         "value_state_refs": {
           "$ref": "#/$defs/ValueStateRefs"
@@ -452,6 +608,186 @@
       "title": "BenchmarkRole",
       "type": "string"
     },
+    "Business": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "business_id": {
+          "title": "Business Id",
+          "type": "string"
+        },
+        "business_type": {
+          "title": "Business Type",
+          "type": "string"
+        },
+        "change_log": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Change Log",
+          "type": "array"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "mechanism": {
+          "$ref": "#/$defs/BusinessMechanism"
+        },
+        "metric_set_id": {
+          "title": "Metric Set Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "unregistered_model_class": {
+          "default": false,
+          "title": "Unregistered Model Class",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "business_id",
+        "company_id",
+        "business_type",
+        "metric_set_id",
+        "mechanism"
+      ],
+      "title": "Business",
+      "type": "object"
+    },
+    "BusinessMechanism": {
+      "additionalProperties": false,
+      "description": "赚钱机制（`Ch4 §B.1` yaml 块的 `mechanism:` 子树）。\n\n★ `cost_structure` / `capital_requirements` 用 `dict[str, Any]`：\n  §B.1 原文写作 `cost_structure: {main_cogs[], fixed[], ...}` —— 那个 `...` 表示\n  **科目集合开放**（随业务不同）。`extra=\"forbid\"` 下无法表达\"开放键\"，故按本项目既有约定\n  （`Task.cost` / `Benchmark.coverage_profile`）用开放 dict，并把设计的键名写进字段说明 ——\n  **不伪造成封闭结构**。\n★ 二者**不在阶段①骨架内**：`04_公司价值研究与深度标准/01_需求拆解.md §4` 的\n  阶段①必填是\"赚钱机制骨架（`payer`/`offering`/`conversion_chain`）\"，\n  而 `N4.1-02`（`cost_structure` + `capital_requirements`）标的是**阶段②**。",
+      "properties": {
+        "capital_requirements": {
+          "additionalProperties": true,
+          "title": "Capital Requirements",
+          "type": "object"
+        },
+        "conversion_chain": {
+          "items": {
+            "$ref": "#/$defs/ConversionSegment"
+          },
+          "title": "Conversion Chain",
+          "type": "array"
+        },
+        "cost_structure": {
+          "additionalProperties": true,
+          "title": "Cost Structure",
+          "type": "object"
+        },
+        "offering": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Offering",
+          "type": "array"
+        },
+        "payer": {
+          "$ref": "#/$defs/Payer"
+        },
+        "revenue_model": {
+          "$ref": "#/$defs/RevenueModel"
+        }
+      },
+      "required": [
+        "payer",
+        "offering",
+        "revenue_model",
+        "conversion_chain"
+      ],
+      "title": "BusinessMechanism",
+      "type": "object"
+    },
     "BusinessPosition": {
       "additionalProperties": false,
       "properties": {
@@ -588,6 +924,29 @@
         "node_id"
       ],
       "title": "BusinessPosition",
+      "type": "object"
+    },
+    "CapitalFlow": {
+      "additionalProperties": false,
+      "description": "资金流（`Ch7 §B.3` 表：方向**付款方 → 收款方**，与产品流**相反**；关键字段 `amount`、`currency`、`period`）。",
+      "properties": {
+        "amount": {
+          "default": "tbd",
+          "title": "Amount",
+          "type": "string"
+        },
+        "currency": {
+          "default": "tbd",
+          "title": "Currency",
+          "type": "string"
+        },
+        "period": {
+          "default": "tbd",
+          "title": "Period",
+          "type": "string"
+        }
+      },
+      "title": "CapitalFlow",
       "type": "object"
     },
     "CheckRecord": {
@@ -1191,6 +1550,105 @@
       "title": "Company",
       "type": "object"
     },
+    "ConfidenceLevel": {
+      "description": "判断置信度（`Ch4 §E.1`：`{high, medium, low}`，**不默认给数值概率**）。\n\n`tbd` = 尚未判定（一律显式存，**不得**用 0.5 / 50% 之类的伪概率顶上，`Ch5 §D.6` / `C45-2`）。",
+      "enum": [
+        "tbd",
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "ConfidenceLevel",
+      "type": "string"
+    },
+    "ConversionSegment": {
+      "additionalProperties": false,
+      "description": "转化链路的**一段**（`Ch4 §B.1`：`{stage, input, output, evidence: [claim_id...]}`）。\n\n§B.1 的通用四段模型：**获取 → 交付 → 使用 → 变现**（按商业模式实例化：\n硬件 = 订单→排产/出货→验收→收入/回款；云 = 签约→通电/上线→利用率→收费；\n软件 = 使用→付费→续约/留存→增购）。\n\n★ `stage` **刻意是自由字符串**（不是封闭枚举）：段名由**注册表驱动**\n  （`Ch4 §C.1` `rules/metric-sets.yaml` 的 `stages:`；`§C.3` 明写\"新增第 4 类**只改 yaml**、\n  **不改代码**\"）。把它写成枚举会让 §C.3 的扩展机制失效。\n\n★ `pending_evidence` 与 `evidence` **必须一致**（§B.1 / §B.2 逐字）：\n  每段必有 `evidence`（`claim_id[]`，接第六章），否则该段**必须**显式标\n  `pending_evidence=true` —— 展示层据此呈现\"证据未到位\"，并**阻止该段进入财务连接**（§C）。\n  故本类**拒绝**\"证据为空却不标注\"的半截行 ——\n  这正是本项目最忌的\"把没有证据包装成有证据\"。",
+      "properties": {
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "input": {
+          "default": "tbd",
+          "title": "Input",
+          "type": "string"
+        },
+        "output": {
+          "default": "tbd",
+          "title": "Output",
+          "type": "string"
+        },
+        "pending_evidence": {
+          "default": false,
+          "title": "Pending Evidence",
+          "type": "boolean"
+        },
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage"
+      ],
+      "title": "ConversionSegment",
+      "type": "object"
+    },
+    "CostOfGrowth": {
+      "additionalProperties": false,
+      "description": "五项\"增长的代价\"（`Ch4 §D.3` 表 + `§D.4` 环境层承载）。\n\n| 代价 | 财务科目 | 字段 |\n|---|---|---|\n| 降价 | 收入（单价↓）/ 毛利率 | `price_discount` |\n| 增加资本开支 | 现金流量表投资活动 / CapEx | `capex_requirement` |\n| 库存 | 资产负债表存货 | `inventory_buildup` |\n| 应收 | 资产负债表应收账款 | `receivables_buildup` |\n| 融资 | 筹资活动 / 净负债 | `financing_need` |\n\n★ 每项用开放 dict：§D.1 的 schema 块把每一项都写作 `{...}`（内部结构由各业务自定）；\n  **不伪造**一个设计未给的结构。\n★ `financing_need` 同时是 `Ch4 §D.4`（回改 R-09）环境层\"融资条件\"的**唯一承载**：\n  环境项**不得**独立成模块（`Ch3` 模块 denylist）。\n★ `growth_quality ∈ {high, medium, low}` **不在此**：`§D.3` 明写它由\n  `scripts/valuelayer/growth_quality.py` 的 \"四项分项判定\"（`ROIIC vs WACC` / 现金转化率 /\n  营运资金变动 / 融资依赖）算出，是**派生输出**（走 `derived/`），且 `§D.1` 的\n  driver schema 块**未**把它列为字段 ⇒ 不作为 `Driver` 的字段（`N4.1-14`\n  \"收入增速不得作投资回报代理\"的替代指标集同属派生层）。",
+      "properties": {
+        "capex_requirement": {
+          "additionalProperties": true,
+          "title": "Capex Requirement",
+          "type": "object"
+        },
+        "financing_need": {
+          "additionalProperties": true,
+          "title": "Financing Need",
+          "type": "object"
+        },
+        "inventory_buildup": {
+          "additionalProperties": true,
+          "title": "Inventory Buildup",
+          "type": "object"
+        },
+        "price_discount": {
+          "additionalProperties": true,
+          "title": "Price Discount",
+          "type": "object"
+        },
+        "receivables_buildup": {
+          "additionalProperties": true,
+          "title": "Receivables Buildup",
+          "type": "object"
+        }
+      },
+      "title": "CostOfGrowth",
+      "type": "object"
+    },
+    "DemandSignal": {
+      "additionalProperties": false,
+      "description": "需求信号（`Ch7 §B.3` 表：方向**需求方 → 供应方**；关键字段 `intensity`（定性/定量）、`basis`）。\n\n★ §B.3 反例③：需求信号↑ **≠** 收入↑（有库存/时滞/验收）—— 故它与产品流是两条边。\n★ `Ch7 §A.6`（回改 R-09）：环境层\"**AI 投入与需求周期**\"的承载方式就是\n  \"`demand_signal` 边（`relation_flows.flow_kind=demand_signal`）+ 终端需求归因\"。",
+      "properties": {
+        "basis": {
+          "default": "tbd",
+          "title": "Basis",
+          "type": "string"
+        },
+        "intensity": {
+          "default": "tbd",
+          "title": "Intensity",
+          "type": "string"
+        }
+      },
+      "title": "DemandSignal",
+      "type": "object"
+    },
     "DependencyEdge": {
       "additionalProperties": false,
       "properties": {
@@ -1240,9 +1698,176 @@
       "title": "DisclosureState",
       "type": "string"
     },
+    "Driver": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "business_id": {
+          "title": "Business Id",
+          "type": "string"
+        },
+        "confidence": {
+          "$ref": "#/$defs/ConfidenceLevel",
+          "default": "tbd"
+        },
+        "cost_of_growth": {
+          "$ref": "#/$defs/CostOfGrowth"
+        },
+        "dependencies": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dependencies",
+          "type": "array"
+        },
+        "driver_id": {
+          "title": "Driver Id",
+          "type": "string"
+        },
+        "duration": {
+          "$ref": "#/$defs/Duration"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "financial_link": {
+          "$ref": "#/$defs/FinancialLink"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "importance_class": {
+          "$ref": "#/$defs/ImportanceClass"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "realization_stage": {
+          "$ref": "#/$defs/DriverRealizationStage",
+          "default": "tbd"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "source_class": {
+          "enum": [
+            "demand_expansion",
+            "share",
+            "price",
+            "product_mix",
+            "unit_usage",
+            "penetration",
+            "new_business",
+            "mixed"
+          ],
+          "title": "Source Class",
+          "type": "string"
+        },
+        "timeline": {
+          "default": "tbd",
+          "title": "Timeline",
+          "type": "string"
+        }
+      },
+      "required": [
+        "driver_id",
+        "business_id",
+        "source_class",
+        "duration",
+        "financial_link",
+        "cost_of_growth",
+        "importance_class"
+      ],
+      "title": "Driver",
+      "type": "object"
+    },
     "DriverModel": {
       "additionalProperties": false,
-      "description": "驱动模型（`Ch9 §N9.1-17` / `Ch4 §D`）。驱动 → 科目 → 每股指标三层映射。",
+      "description": "**估值所需的假设投影**（`Ch9 §N9.1-17` / `Ch4 §A.1` / `Ch5 §A.1`；本批次**语义收窄**）。\n\n★ 为什么收窄（本批次解决的**双真源**风险）：\n  驱动对象的唯一真源是新的 `facts/drivers.jsonl`（`Driver`）；而 `Ch5 §A.2` 又说\n  \"估值经营假设 = `baseline.driver_refs[].financial_link`\"。若 `baseline.driver_model`\n  继续自带 `driver_name` / `realization_stage` / `is_primary` / `linked_accounts`，\n  它就会与 `Driver` 的对应字段**各自演进** ⇒ 同一概念两个真源。\n  ⇒ **保留但收窄为投影**：只承载 `{driver_id, assumptions[]}`，\n  即**身份 + 可从 driver 对象取到的假设文本**（见 `project_driver_model`）。\n★ `assumptions` 的出处与\"为什么 driver 上也要有该字段\"：见 `Driver.assumptions` 的 docstring\n  （`Ch5 §A.1` / `01_产品目标与核心闭环/01_需求拆解.md §2.4` / `Ch4 §G.1②`）。\n★ 被移除的四个字段**不是丢信息**：`driver_name` / `realization_stage` / `is_primary` /\n  `linked_accounts` 全部可从 `drivers.jsonl` 的对象取到（`realization_stage` → `Driver.realization_stage`；\n  `linked_accounts` → `Driver.financial_link.accounts`；`is_primary` → `Driver.importance_class == high` 的\n  分类结果，由 §D.2 的\"上限/分级\"逻辑产出）。真仓库该字段为 `[]` ⇒ 零影响。",
       "properties": {
         "assumptions": {
           "items": {
@@ -1254,45 +1879,51 @@
         "driver_id": {
           "title": "Driver Id",
           "type": "string"
-        },
-        "driver_name": {
-          "title": "Driver Name",
-          "type": "string"
-        },
-        "is_primary": {
-          "default": false,
-          "title": "Is Primary",
-          "type": "boolean"
-        },
-        "linked_accounts": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Linked Accounts",
-          "type": "array"
-        },
-        "realization_stage": {
-          "$ref": "#/$defs/DriverRealizationStage",
-          "default": "tbd"
         }
       },
       "required": [
-        "driver_id",
-        "driver_name"
+        "driver_id"
       ],
       "title": "DriverModel",
       "type": "object"
     },
     "DriverRealizationStage": {
-      "description": "驱动的兑现阶段（`Ch4 §D`）。与 `relation_progress_stage` **不得互用**（`Ch2 §C.2 R-15 ②`）。",
+      "description": "驱动**三态**（`Ch4 §D.1` / `§E.2` / `N4.2-01`）。与 `relation_progress_stage` **不得互用**（`Ch2 §C.2 R-15 ②`）。\n\n★ **取值域已按设计原文纠正**（本批次修正一处**自创枚举**，两个独立处一致）：\n  - `Ch4 §D.1` 逐字：`realization_stage: occurred|planned_guidance_forecast|conditional`；\n  - `Ch4 §E.2` 逐字：\"驱动三态（已发生/计划指引预测/依赖条件） | `driver.realization_stage`\"；\n  - `Ch4 §J.1`：`N4.2-01`「`drivers.realization_stage`（**三态**）+ `stage_derive.py`」。\n  初版写的是 `not_started / ramping / ramped / declining` —— **设计里不存在这四个值**，\n  且是**四态**而非三态（`stage_derive.py` 由 `claim_nature` 推导，不存在\"爬坡中\"这种阶段）。\n  该错误值经全仓检索**无任何产出方/消费方**，真仓库 `facts/baselines.jsonl` 的\n  `driver_model` 为空数组 ⇒ 纠正**零影响**（见 `tests/unit/test_schema_expand.py`）。\n  `tbd` 保留为\"尚未推导\"的待定 token（`纪律 7` / `Ch2 §C.2`，与 `MoatLevel` / `DirectionState` 同例）。",
       "enum": [
         "tbd",
-        "not_started",
-        "ramping",
-        "ramped",
-        "declining"
+        "occurred",
+        "planned_guidance_forecast",
+        "conditional"
       ],
       "title": "DriverRealizationStage",
+      "type": "string"
+    },
+    "Duration": {
+      "additionalProperties": false,
+      "description": "驱动可持续时长（`Ch4 §D.1` / `§D.2`：`duration: {mode: point|range, value: \"1-3Y\"}`）。\n\n§D.2 逐字：\"未披露用 `mode=range` + 定性标注（**不给伪精确点值**）\" ⇒\n`value` 是**自由字符串**（可写区间或定性描述），不强制数值 —— 强制数值会逼出伪精确。",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/DurationMode"
+        },
+        "value": {
+          "default": "tbd",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "Duration",
+      "type": "object"
+    },
+    "DurationMode": {
+      "description": "驱动可持续时长的表达（`Ch4 §D.1` / `§D.2`：`duration.mode ∈ {point, range}`）。\n\n§D.2 逐字：\"未披露用 `mode=range` + 定性标注（**不给伪精确点值**）\"。",
+      "enum": [
+        "point",
+        "range"
+      ],
+      "title": "DurationMode",
       "type": "string"
     },
     "ErrorAxis": {
@@ -1686,6 +2317,47 @@
       "title": "ExpectationSample",
       "type": "object"
     },
+    "FinancialLink": {
+      "additionalProperties": false,
+      "description": "**驱动 → 科目 → 每股指标**的三层映射（`Ch4 §C.4`，落 `facts/drivers.jsonl`）。\n\n§C.4 原文块：\n\n```\ndriver.financial_link = {\n  accounts: [revenue_segment, gross_margin, opex, capex, working_capital, ...],\n  per_share_metric: eps | fcf_per_share | value_per_share,\n  formula_ref: <DerivedValue ref>        # 走 scripts/compute/\n}\n```\n\n★ 为什么 `accounts` 是 `list[str]`：§C.4 的清单末位是 `...`（科目集合开放）。\n★ 为什么单独一个类而不是三个散字段：`Ch5 §A.2` 逐字把\n  \"`baseline.driver_refs[].financial_link`\" 当作**估值的经营假设来源** ——\n  它是一级契约面，不是可选装饰。",
+      "properties": {
+        "accounts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Accounts",
+          "type": "array"
+        },
+        "formula_ref": {
+          "default": "tbd",
+          "title": "Formula Ref",
+          "type": "string"
+        },
+        "per_share_metric": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PerShareMetric"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "FinancialLink",
+      "type": "object"
+    },
+    "FlowKind": {
+      "description": "关系流的三条并行边（`Ch7 §B.3`：`flow_kind ∈ {product, capital, demand_signal}`）。\n\n★ §B.3 的方案比选**否决**了\"同一 `relations` 表三行\"，理由：关系身份（证据/阶段/有效期）\n  被复制三份、去重与版本追踪困难。三条边的方向**互不相同**，无法压成一个。",
+      "enum": [
+        "product",
+        "capital",
+        "demand_signal"
+      ],
+      "title": "FlowKind",
+      "type": "string"
+    },
     "Impact": {
       "additionalProperties": false,
       "properties": {
@@ -1878,6 +2550,220 @@
       "title": "Impact",
       "type": "object"
     },
+    "ImpliedAssumptions": {
+      "additionalProperties": false,
+      "description": "反解时**固定不动**的四类假设（`Ch5 §B.2` 的 `assumptions{growth, margin, reinvestment, risk, duration}`）。\n\n键名逐字取 §B.2 的 JSON；每类的内部结构 §B.2 写作 `{...}`（由 §B.4 的\"取值方式\"决定：\n点或区间、收入 CAGR / 终值增长、capex/收入 与 ROIIC、WACC、高增长年数）⇒ 用开放 dict，\n**不伪造**一个设计未给的内层结构。\n被解出的那一类（`solved_variable`）在同一份 JSON 里也保留其区间解（`range`）。",
+      "properties": {
+        "duration": {
+          "additionalProperties": true,
+          "title": "Duration",
+          "type": "object"
+        },
+        "growth": {
+          "additionalProperties": true,
+          "title": "Growth",
+          "type": "object"
+        },
+        "margin": {
+          "additionalProperties": true,
+          "title": "Margin",
+          "type": "object"
+        },
+        "reinvestment": {
+          "additionalProperties": true,
+          "title": "Reinvestment",
+          "type": "object"
+        },
+        "risk": {
+          "additionalProperties": true,
+          "title": "Risk",
+          "type": "object"
+        }
+      },
+      "title": "ImpliedAssumptions",
+      "type": "object"
+    },
+    "ImpliedRange": {
+      "additionalProperties": false,
+      "description": "区间表达（`Ch5 §B.2`：`\"range\":{\"low\":\"...\",\"high\":\"...\"}`；`§D.6`：\"区间用 `range{low, high}`\"）。\n\n★ 用 `Decimal` + 字符串序列化（`Ch9 §3.4.5`）：区间值要参与算术与比较，\n  用字符串会在下游被迫二次解析；`Ch9 §3.4.5` 明令\"数值以字符串存储，避免浮点误差\" ⇒\n  存的是 `Decimal`，落盘时序列化为字符串。\n★ 允许 `None`：反解在**参数不可行**时（`feasible=false`）可以只给出一侧边界；\n  用 `None` 表达\"该侧无解\"，**不得**用 0 冒充。",
+      "properties": {
+        "high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "High"
+        },
+        "low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Low"
+        }
+      },
+      "title": "ImpliedRange",
+      "type": "object"
+    },
+    "ImpliedRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "alternative_explanations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Alternative Explanations",
+          "type": "array"
+        },
+        "assumptions": {
+          "$ref": "#/$defs/ImpliedAssumptions"
+        },
+        "computed_at": {
+          "format": "date-time",
+          "title": "Computed At",
+          "type": "string"
+        },
+        "current_price": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Current Price"
+        },
+        "feasible": {
+          "title": "Feasible",
+          "type": "boolean"
+        },
+        "implied_id": {
+          "title": "Implied Id",
+          "type": "string"
+        },
+        "method_version": {
+          "title": "Method Version",
+          "type": "string"
+        },
+        "price_snapshot_id": {
+          "title": "Price Snapshot Id",
+          "type": "string"
+        },
+        "range": {
+          "$ref": "#/$defs/ImpliedRange"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "solution_set_id": {
+          "title": "Solution Set Id",
+          "type": "string"
+        },
+        "solved_variable": {
+          "$ref": "#/$defs/SolvedVariable"
+        }
+      },
+      "required": [
+        "implied_id",
+        "solution_set_id",
+        "security_id",
+        "price_snapshot_id",
+        "current_price",
+        "assumptions",
+        "solved_variable",
+        "range",
+        "alternative_explanations",
+        "feasible",
+        "method_version",
+        "computed_at"
+      ],
+      "title": "ImpliedRequirement",
+      "type": "object"
+    },
+    "ImportanceClass": {
+      "description": "驱动重要度分档（`Ch4 §D.1`：`importance_class: high|medium|low`）。\n\n§D.2 用它做\"少量关键驱动\"超限时的分级（`primary_drivers(≤5)` + `secondary_watchlist`）。",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "ImportanceClass",
+      "type": "string"
+    },
+    "Increment": {
+      "additionalProperties": false,
+      "description": "增量更新**六要素**（`Ch4 §H.3` / `N4.5-01`；`N4.5-04` 另有 `reason`）。\n\n`Ch4 §H.3` 逐字的 increment 块：\n\n```json\n\"increment\":{\"old_judgment\":\"...\",\"new_info\":[\"CLM-x\"],\"new_judgment\":\"...\",\n             \"affected_period\":\"FY2027Q1\",\"supporting_evidence\":[\"CLM-x\"],\n             \"counter_evidence\":[]}\n```\n\n★ `new_info` **必须非空**（`min_length=1`）：`§H.2` 逐字 ——\n  \"状态变更函数**仅在 `new_info != ∅ AND affects_dimension` 时运行**；否则保持原值 + 记录核查\"，\n  `N4.5-05` 亦要求\"无新信息日不改变状态、不产新信号\"。\n  ⇒ 一条 `new_info` 为空的 `increment` 就是\"制造出来的变化\"，**在 schema 层拒绝**。\n★ `reason` 来自 `N4.5-04`（\"`increment.reason`（引用新信息）| 每次状态变更含原因\"）。",
+      "properties": {
+        "affected_period": {
+          "title": "Affected Period",
+          "type": "string"
+        },
+        "counter_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Counter Evidence",
+          "type": "array"
+        },
+        "new_info": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "New Info",
+          "type": "array"
+        },
+        "new_judgment": {
+          "title": "New Judgment",
+          "type": "string"
+        },
+        "old_judgment": {
+          "title": "Old Judgment",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "supporting_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Supporting Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "old_judgment",
+        "new_info",
+        "new_judgment",
+        "affected_period"
+      ],
+      "title": "Increment",
+      "type": "object"
+    },
     "IndustryNode": {
       "additionalProperties": false,
       "properties": {
@@ -2004,6 +2890,89 @@
       "title": "IndustryNode",
       "type": "object"
     },
+    "InputSource": {
+      "description": "估值输入的三类来源（`Ch5 §D.5`：`input_source ∈ {fact, model_estimate, manual}`）。\n\n- `fact`         = 来自 `claim` 的原始数据；\n- `model_estimate` = 模型产出的假设；\n- `manual`       = 人工设定（**须留痕**：`author` + `modified_at`）。\n\n§D.5 的冲突处理：**不用加权**（承第六章禁加权）——分别保留并**并列展示**。",
+      "enum": [
+        "fact",
+        "model_estimate",
+        "manual"
+      ],
+      "title": "InputSource",
+      "type": "string"
+    },
+    "Moat": {
+      "additionalProperties": false,
+      "description": "护城河条目（`Ch4 §F.1` yaml 块 + `§F.2` 反误判 + `§F.3` 硬隔离）。\n\n§F.1 原文块：\n\n```yaml\n- moat_id: MOAT-NVDA-01\n  mechanism: \"...\"                       # 优势机制说明（必填）\n  protected_objects:                     # ⊆ 六类，多选\n    - {object: share|pricing|..., strength: high|medium|low, evidence: [claim_id...]}\n  origin_class: durable_advantage|product_cycle|supply_demand_cycle|operational_efficiency\n  cross_generation_survival: true|false|unknown\n  evidence_claims: [claim_id...]\n```\n\n- `mechanism` **必填**（`N4.3-01` 验收：\"护城河条目含 mechanism\"；`§F.2` 的\n  `is_durable_moat()` 也要求 `moat.mechanism_explained`）。\n- `cross_generation_survival` 的 `unknown` 用 `None` 表达（三值：`True` / `False` / `None`）。\n- `cross_generation_competitiveness` 来自 `N4.3-05`（\"承 `N9.1-07` 代际\"，验收：\"有代际维度竞争评估\"）；\n  设计**未给**取值域 ⇒ 自由字符串 + `tbd`，不伪造枚举。\n- `writer` 是 `§F.3` 断言 A3 的落点：\"写路径断言 `moat.writer ∈ {research_skill, human}`，\n  不含 `price_ingest`\" —— **在 schema 层物理隔离**（对应 C45-5：\"股价上涨不自动证明护城河增强\"）。",
+      "properties": {
+        "cross_generation_competitiveness": {
+          "default": "tbd",
+          "title": "Cross Generation Competitiveness",
+          "type": "string"
+        },
+        "cross_generation_survival": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cross Generation Survival"
+        },
+        "evidence_claims": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Claims",
+          "type": "array"
+        },
+        "mechanism": {
+          "title": "Mechanism",
+          "type": "string"
+        },
+        "moat_id": {
+          "title": "Moat Id",
+          "type": "string"
+        },
+        "origin_class": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MoatOriginClass"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "protected_objects": {
+          "items": {
+            "$ref": "#/$defs/MoatProtectedObject"
+          },
+          "title": "Protected Objects",
+          "type": "array"
+        },
+        "real_substitutes": {
+          "items": {
+            "$ref": "#/$defs/RealSubstitute"
+          },
+          "title": "Real Substitutes",
+          "type": "array"
+        },
+        "writer": {
+          "$ref": "#/$defs/MoatWriter",
+          "default": "research_skill"
+        }
+      },
+      "required": [
+        "moat_id",
+        "mechanism"
+      ],
+      "title": "Moat",
+      "type": "object"
+    },
     "MoatLevel": {
       "description": "护城河**水平**（`Ch2 §C.2 A-02` / `N2.2-02`）。与 `moat_state` 独立、不得合并为 `moat`。",
       "enum": [
@@ -2013,6 +2982,74 @@
         "tbd"
       ],
       "title": "MoatLevel",
+      "type": "string"
+    },
+    "MoatOriginClass": {
+      "description": "护城河来源四类（`Ch4 §F.1` / `§F.2` 表：`origin_class`）。\n\n§F.2 的判据：`supply_demand_cycle` **不得**判为持久护城河（供给恢复即消失）。",
+      "enum": [
+        "durable_advantage",
+        "product_cycle",
+        "supply_demand_cycle",
+        "operational_efficiency"
+      ],
+      "title": "MoatOriginClass",
+      "type": "string"
+    },
+    "MoatProtectedObject": {
+      "additionalProperties": false,
+      "description": "单项保护对象（`Ch4 §F.1`：`protected_objects` 的元素 `{object, strength, evidence}`）。",
+      "properties": {
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "object": {
+          "$ref": "#/$defs/MoatProtectedObjectKind"
+        },
+        "strength": {
+          "$ref": "#/$defs/MoatStrength"
+        }
+      },
+      "required": [
+        "object",
+        "strength"
+      ],
+      "title": "MoatProtectedObject",
+      "type": "object"
+    },
+    "MoatProtectedObjectKind": {
+      "description": "**六种保护对象**（`Ch4 §F.1`：`object: share|pricing|cost|customer_retention|capital_return|innovation_efficiency`）。\n\n§F.1 逐字：\"多选\"。故 `protected_objects` 是**数组**，一条护城河可同时保护多项。",
+      "enum": [
+        "share",
+        "pricing",
+        "cost",
+        "customer_retention",
+        "capital_return",
+        "innovation_efficiency"
+      ],
+      "title": "MoatProtectedObjectKind",
+      "type": "string"
+    },
+    "MoatStrength": {
+      "description": "单项保护对象的强度（`Ch4 §F.1`：`strength: high|medium|low`）。",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "MoatStrength",
+      "type": "string"
+    },
+    "MoatWriter": {
+      "description": "`moat.writer` —— 写路径白名单（`Ch4 §F.3` 断言 A3，**可直接写单测**）。\n\n§F.3 逐字：`moat.writer ∈ {research_skill, human}`，**不含** `price_ingest` ——\n\"股价上涨不自动证明护城河增强\"在 **schema 层物理隔离**，而非靠自觉。",
+      "enum": [
+        "research_skill",
+        "human"
+      ],
+      "title": "MoatWriter",
       "type": "string"
     },
     "OfficialClaimKind": {
@@ -2056,6 +3093,43 @@
         "B"
       ],
       "title": "OpportunityType",
+      "type": "string"
+    },
+    "Payer": {
+      "additionalProperties": false,
+      "description": "付费方（`Ch4 §B.1` yaml 块：`mechanism.payer: {party, segment, geographies}`）。\n\n§B.1 把\"谁付费\"列为赚钱机制的第一要素（`N4.1-01` 验收：\"可读'谁付费+链路各段+每段证据'\"）。",
+      "properties": {
+        "geographies": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Geographies",
+          "type": "array"
+        },
+        "party": {
+          "title": "Party",
+          "type": "string"
+        },
+        "segment": {
+          "default": "tbd",
+          "title": "Segment",
+          "type": "string"
+        }
+      },
+      "required": [
+        "party"
+      ],
+      "title": "Payer",
+      "type": "object"
+    },
+    "PerShareMetric": {
+      "description": "每股指标（`Ch4 §C.4`：`per_share_metric: eps | fcf_per_share | value_per_share`）。",
+      "enum": [
+        "eps",
+        "fcf_per_share",
+        "value_per_share"
+      ],
+      "title": "PerShareMetric",
       "type": "string"
     },
     "PriceSnapshot": {
@@ -2329,14 +3403,62 @@
       "title": "Product",
       "type": "object"
     },
+    "ProductFlow": {
+      "additionalProperties": false,
+      "description": "产品流（`Ch7 §B.3` 表：方向**供应商 → 客户**；关键字段 `product_id`、`volume/value`、`stage`）。\n\n★ `volume` 的命名取舍：§B.3 的关键字段列写作 \"`volume/value`\"（量**或**以值表达，二择一），\n  **未给**两个独立字段名。依 `Ch2 §C.2 R-15 ③`（一个概念只允许一个字段名）取 **`volume`**\n  一个字段承载该边的规模（单位与口径写在值里）；**对价支付**那一侧由 `CapitalFlow.amount`\n  承载 —— 它是**另一个域**（对价支付 ≠ 产品交付量），故分名（`R-15 ②`）。\n★ `stage` 是**自由字符串**：`Ch7 §B.3` 未给取值域；相邻的 `§B.4` 给的是 `relations` 侧\n  `relation_progress_stage` 的五者语义层级，而**该名字在本仓库已被既有枚举占用**（见\n  `RelationProgressStage` 的 docstring 与报告中的命名冲突登记）⇒ 本实现**不另造第二套枚举**\n  （`G-06` 唯一真源），保持字符串。",
+      "properties": {
+        "product_id": {
+          "default": "tbd",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "stage": {
+          "default": "tbd",
+          "title": "Stage",
+          "type": "string"
+        },
+        "volume": {
+          "default": "tbd",
+          "title": "Volume",
+          "type": "string"
+        }
+      },
+      "title": "ProductFlow",
+      "type": "object"
+    },
     "PropagationKind": {
-      "description": "`claim_propagation.kind` —— 传播记录的**语义类别**（`Ch6 §C.2` 步骤④ / `§C.3`）。\n\n★ 为什么需要它（T-11 契约变更，需求方 2026-09-16 裁定）：\n  `Ch6 §C.3`（误判的纠正入口 / 人工 override）原设计把结果写独立的\n  `facts/claim_alias.jsonl`（`{claim_id, is_independent, reason, operator, at}`）；\n  但 `Ch9 §3.3.3` 把 `facts/` 锁死在 **18 个 JSONL（不得增删改名）** ⇒ `claim_alias.jsonl`\n  **无落点**。裁定：**并入既有 `claim_propagation`**，以其 `kind` 取值\n  `manual_alias_override` 承载\"人工确认这两条其实是同一事件\" —— **绝不新增第 19 个 JSONL**。\n\n- `restatement`（**默认**）：自动去重判定的**转述**（`Ch6 §C.2` 步骤④）；\n  ⚠️ **默认值必须使\"旧行\"合法**：既有 `claim_propagation` 行无 `kind` 字段\n  （`Ch9 §3.4.2` 追加式不可变，不得让既有行失效），取默认即合法。\n- `manual_alias_override`：**人工别名覆盖**（`Ch6 §C.3`：`dedup_override` 任务结果，\n  `is_independent` 由操作人强制设定，**追加不覆盖原判定**）。",
+      "description": "`claim_propagation.kind` —— 传播记录的**语义类别**（`Ch6 §C.2` 步骤④ / `§C.3`）。\n\n★ 为什么需要它（T-11 契约变更，需求方 2026-09-16 裁定）：\n  `Ch6 §C.3`（误判的纠正入口 / 人工 override）原设计把结果写独立的\n  `facts/claim_alias.jsonl`（`{claim_id, is_independent, reason, operator, at}`）；\n  但 `Ch9 §3.3.3` 把 `facts/` 的表集合锁死（**不得增删改名**）⇒ 「再开一张表」\n  同样不是实现方能随手做的动作（扩表是**需求方裁定**项：2026-09-16 已由 18 扩至 22，\n  见 `schema/stems.py` 脚注）⇒ `claim_alias.jsonl`\n  **无落点**。裁定：**并入既有 `claim_propagation`**，以其 `kind` 取值\n  `manual_alias_override` 承载\"人工确认这两条其实是同一事件\"。\n\n- `restatement`（**默认**）：自动去重判定的**转述**（`Ch6 §C.2` 步骤④）；\n  ⚠️ **默认值必须使\"旧行\"合法**：既有 `claim_propagation` 行无 `kind` 字段\n  （`Ch9 §3.4.2` 追加式不可变，不得让既有行失效），取默认即合法。\n- `manual_alias_override`：**人工别名覆盖**（`Ch6 §C.3`：`dedup_override` 任务结果，\n  `is_independent` 由操作人强制设定，**追加不覆盖原判定**）。",
       "enum": [
         "restatement",
         "manual_alias_override"
       ],
       "title": "PropagationKind",
       "type": "string"
+    },
+    "RealSubstitute": {
+      "additionalProperties": false,
+      "description": "**真实替代方案**（`Ch4 §J.1` 的 `N4.3-03` 实现载体逐字：\n`moat.real_substitutes[{switch_trigger, switching_cost, actual_switch_evidence}]`）。\n\n★ `N4.3-03` 验收：\"替代方案含切换触发/成本/**真实实例**\" —— 故\n  `actual_switch_evidence` 是\"真实发生过切换\"的证据引用，不是推测。",
+      "properties": {
+        "actual_switch_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Actual Switch Evidence",
+          "type": "array"
+        },
+        "switch_trigger": {
+          "default": "tbd",
+          "title": "Switch Trigger",
+          "type": "string"
+        },
+        "switching_cost": {
+          "default": "tbd",
+          "title": "Switching Cost",
+          "type": "string"
+        }
+      },
+      "title": "RealSubstitute",
+      "type": "object"
     },
     "Recommendation": {
       "additionalProperties": false,
@@ -2876,6 +3998,169 @@
       "title": "Relation",
       "type": "object"
     },
+    "RelationFlow": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "capital_flow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CapitalFlow"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "demand_signal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DemandSignal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "evidence_claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Claim Ids",
+          "type": "array"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "flow_id": {
+          "title": "Flow Id",
+          "type": "string"
+        },
+        "flow_kind": {
+          "$ref": "#/$defs/FlowKind"
+        },
+        "from_ref": {
+          "title": "From Ref",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "product_flow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProductFlow"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "relation_id": {
+          "title": "Relation Id",
+          "type": "string"
+        },
+        "to_ref": {
+          "title": "To Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "flow_id",
+        "relation_id",
+        "flow_kind",
+        "from_ref",
+        "to_ref"
+      ],
+      "title": "RelationFlow",
+      "type": "object"
+    },
     "RelationProgressStage": {
       "description": "合作阶段（`Ch9 §N9.1-07`）。**不得自动跨级推进**（T03）。\n\n⚠️ 与 `driver.realization_stage` **分别命名、不得互用**（`Ch2 §C.2 R-15 ②`）。",
       "enum": [
@@ -2899,6 +4184,18 @@
         "tracking"
       ],
       "title": "ResearchDepth",
+      "type": "string"
+    },
+    "RevenueModel": {
+      "description": "收入的实现方式（`Ch4 §B.1` yaml 块：`revenue_model: one_time|subscription|usage|license|hybrid`）。",
+      "enum": [
+        "one_time",
+        "subscription",
+        "usage",
+        "license",
+        "hybrid"
+      ],
+      "title": "RevenueModel",
       "type": "string"
     },
     "Security": {
@@ -3034,6 +4331,18 @@
       ],
       "title": "Security",
       "type": "object"
+    },
+    "SolvedVariable": {
+      "description": "反解时被解出的那一类变量（`Ch5 §B.2`：`\"solved_variable\":\"reinvestment\"` + `§B.4` 五因素表）。\n\n§B.4 逐字：\"反解时固定 4 类、解第 5 类\"，五类为\n增长 / 利润 / 再投资 / 风险 / 持续时间。故取值域 = 这五类（与 `ImpliedAssumptions` 的键一一对应）。",
+      "enum": [
+        "growth",
+        "margin",
+        "reinvestment",
+        "risk",
+        "duration"
+      ],
+      "title": "SolvedVariable",
+      "type": "string"
     },
     "Source": {
       "additionalProperties": false,
@@ -3471,6 +4780,160 @@
       ],
       "title": "TaskType",
       "type": "string"
+    },
+    "Valuation": {
+      "additionalProperties": false,
+      "description": "估值对象（`Ch4 §A.1/§A.3/§G.1⑤` + `Ch5 §D.1/§D.2/§D.6`）。\n\n`Ch4 §A.1` 逐字：`baseline.valuation` 用于\"与反向估值对照，形成独立判断\"，\n并在建议里承载\"收益比较\"；`§G.1⑤` 把它与 `valuation_inputs` / `historicals` /\n`DerivedValue` 引用并列为\"⑤ 财务与估值\"。\n\n★ **不重复 DerivedValue 的字段**（避免双真源）：`§D.2` 要求\"每个 price range →\n  `formula` + `operands` + `method_version` + `share_count` + `compute_date`（N5.3-02 / N9.2-02）\"，\n  而这些正是 `DerivedValue` 自身的字段 ⇒ 本对象只持 `formula_ref` 指向 `derived/` 的那条记录\n  （沿用 `Ch4 §C.4` 对\"DerivedValue 引用\"的既有命名 `formula_ref: <DerivedValue ref>`），\n  **不再落一份副本**。\n★ `probability` 默认 `None`（`§D.6` + `N5.3-07` + `C45-2`）：**不默认 50/50**，\n  \"仅当有依据才填\"；且 `§J` 的 `J9` 明写依据\"须为 `DerivedValue` 且标注来源\"。",
+      "properties": {
+        "forecast_assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Forecast Assumptions",
+          "type": "array"
+        },
+        "formula_ref": {
+          "default": "tbd",
+          "title": "Formula Ref",
+          "type": "string"
+        },
+        "method_class": {
+          "default": "tbd",
+          "title": "Method Class",
+          "type": "string"
+        },
+        "probability": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Probability"
+        },
+        "range": {
+          "$ref": "#/$defs/ValuationRange"
+        },
+        "valuation_params": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Valuation Params",
+          "type": "array"
+        }
+      },
+      "title": "Valuation",
+      "type": "object"
+    },
+    "ValuationInputs": {
+      "additionalProperties": false,
+      "description": "估值假设的五因素（`Ch4 §A.3`：\"`valuation_inputs` | 三类输入（fact/model_estimate/manual）\n| `N5.3-04`（第五章写，第四章承载）\"；`Ch4 §G.1⑤`：\"`valuation_inputs`（五因素→每股价值）\"）。\n\n字段名逐字取 `Ch5 §B.4` 的假设组合表：\n`growth_assumption` / `margin_assumption` / `reinvestment_assumption` /\n`risk_assumption` / `duration_assumption`。\n★ `risk_assumption`（WACC / 折现率）另有一处逐字来源：`Ch5 §D.5` 的 **R-09**——\n  环境层\"利率与折现要求\"作为估值假设输入注入，且 `input_source ∈ {model_estimate, manual}`。",
+      "properties": {
+        "duration_assumption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AssumptionInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "growth_assumption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AssumptionInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "margin_assumption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AssumptionInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reinvestment_assumption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AssumptionInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "risk_assumption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AssumptionInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ValuationInputs",
+      "type": "object"
+    },
+    "ValuationRange": {
+      "additionalProperties": false,
+      "description": "区间表达（`Ch5 §D.6`：\"区间用 `range{low, high}` 表达宽度\"）。",
+      "properties": {
+        "high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "High"
+        },
+        "low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Low"
+        }
+      },
+      "title": "ValuationRange",
+      "type": "object"
     },
     "ValueStateRefs": {
       "additionalProperties": false,
@@ -3541,6 +5004,48 @@
       "title": "AliasOverride",
       "type": "object"
     },
+    "AssumptionInput": {
+      "additionalProperties": false,
+      "description": "五因素之一的估值输入（`Ch5 §D.5`：**事实输入 / 模型估计 / 人工设定三类分开存**）。\n\n- `input_source` **必填**：不声明来源的假设不得入库（\"三类分开存\"是 `N5.3-04` 的验收面）；\n- `author` + `modified_at`：`§D.5` 逐字\"谁有权写 `manual`：授权用户……须留痕（`author` + `modified_at`）\"\n  ⇒ 当 `input_source=manual` 时二者**必须非空**（下面的校验器强制）；\n  同时这也是 `§D.4` \"无历史假设\"倒填检测的输入（`assumption_source=manual` 且无变更记录 → 标可疑）。\n- `conflict_status`：`§D.5` 逐字\"冲突时标 `conflict_status=\"unresolved\"`\"（**不用加权**，并列展示）。",
+      "properties": {
+        "author": {
+          "default": "",
+          "title": "Author",
+          "type": "string"
+        },
+        "conflict_status": {
+          "default": "",
+          "title": "Conflict Status",
+          "type": "string"
+        },
+        "input_source": {
+          "$ref": "#/$defs/InputSource"
+        },
+        "modified_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modified At"
+        },
+        "value": {
+          "default": "tbd",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "input_source"
+      ],
+      "title": "AssumptionInput",
+      "type": "object"
+    },
     "Baseline": {
       "additionalProperties": false,
       "properties": {
@@ -3578,6 +5083,28 @@
           "title": "Business Mechanism",
           "type": "string"
         },
+        "business_model_note": {
+          "default": "tbd",
+          "title": "Business Model Note",
+          "type": "string"
+        },
+        "business_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Business Refs",
+          "type": "array"
+        },
+        "cash_runway": {
+          "default": "tbd",
+          "title": "Cash Runway",
+          "type": "string"
+        },
+        "changed_by": {
+          "default": "",
+          "title": "Changed By",
+          "type": "string"
+        },
         "company_id": {
           "title": "Company Id",
           "type": "string"
@@ -3592,6 +5119,13 @@
             "$ref": "#/$defs/DriverModel"
           },
           "title": "Driver Model",
+          "type": "array"
+        },
+        "driver_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Driver Refs",
           "type": "array"
         },
         "effective_from": {
@@ -3646,6 +5180,11 @@
           "title": "Falsifiers",
           "type": "array"
         },
+        "fcf_persistence": {
+          "default": "tbd",
+          "title": "Fcf Persistence",
+          "type": "string"
+        },
         "first_seen_at": {
           "anyOf": [
             {
@@ -3659,11 +5198,51 @@
           "default": null,
           "title": "First Seen At"
         },
+        "funding_need": {
+          "default": "tbd",
+          "title": "Funding Need",
+          "type": "string"
+        },
         "historical_numeric_claims": {
           "items": {
             "type": "string"
           },
           "title": "Historical Numeric Claims",
+          "type": "array"
+        },
+        "increment": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Increment"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "is_profitable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Is Profitable"
+        },
+        "margin_persistence": {
+          "default": "tbd",
+          "title": "Margin Persistence",
+          "type": "string"
+        },
+        "moat": {
+          "items": {
+            "$ref": "#/$defs/Moat"
+          },
+          "title": "Moat",
           "type": "array"
         },
         "occurred_at": {
@@ -3678,6 +5257,25 @@
           ],
           "default": null,
           "title": "Occurred At"
+        },
+        "path_to_profitability": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Path To Profitability",
+          "type": "array"
+        },
+        "prev_version_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prev Version Id"
         },
         "published_at": {
           "anyOf": [
@@ -3704,12 +5302,33 @@
           "default": null,
           "title": "Recorded Seq"
         },
+        "reinvestment_return": {
+          "default": "tbd",
+          "title": "Reinvestment Return",
+          "type": "string"
+        },
+        "share_dilution_impact": {
+          "default": "tbd",
+          "title": "Share Dilution Impact",
+          "type": "string"
+        },
+        "unit_economics": {
+          "default": "tbd",
+          "title": "Unit Economics",
+          "type": "string"
+        },
         "unmet_conditions": {
           "items": {
             "type": "string"
           },
           "title": "Unmet Conditions",
           "type": "array"
+        },
+        "valuation": {
+          "$ref": "#/$defs/Valuation"
+        },
+        "valuation_inputs": {
+          "$ref": "#/$defs/ValuationInputs"
         },
         "value_state_refs": {
           "$ref": "#/$defs/ValueStateRefs"
@@ -3962,6 +5581,186 @@
       "title": "BenchmarkRole",
       "type": "string"
     },
+    "Business": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "business_id": {
+          "title": "Business Id",
+          "type": "string"
+        },
+        "business_type": {
+          "title": "Business Type",
+          "type": "string"
+        },
+        "change_log": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Change Log",
+          "type": "array"
+        },
+        "company_id": {
+          "title": "Company Id",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "mechanism": {
+          "$ref": "#/$defs/BusinessMechanism"
+        },
+        "metric_set_id": {
+          "title": "Metric Set Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "unregistered_model_class": {
+          "default": false,
+          "title": "Unregistered Model Class",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "business_id",
+        "company_id",
+        "business_type",
+        "metric_set_id",
+        "mechanism"
+      ],
+      "title": "Business",
+      "type": "object"
+    },
+    "BusinessMechanism": {
+      "additionalProperties": false,
+      "description": "赚钱机制（`Ch4 §B.1` yaml 块的 `mechanism:` 子树）。\n\n★ `cost_structure` / `capital_requirements` 用 `dict[str, Any]`：\n  §B.1 原文写作 `cost_structure: {main_cogs[], fixed[], ...}` —— 那个 `...` 表示\n  **科目集合开放**（随业务不同）。`extra=\"forbid\"` 下无法表达\"开放键\"，故按本项目既有约定\n  （`Task.cost` / `Benchmark.coverage_profile`）用开放 dict，并把设计的键名写进字段说明 ——\n  **不伪造成封闭结构**。\n★ 二者**不在阶段①骨架内**：`04_公司价值研究与深度标准/01_需求拆解.md §4` 的\n  阶段①必填是\"赚钱机制骨架（`payer`/`offering`/`conversion_chain`）\"，\n  而 `N4.1-02`（`cost_structure` + `capital_requirements`）标的是**阶段②**。",
+      "properties": {
+        "capital_requirements": {
+          "additionalProperties": true,
+          "title": "Capital Requirements",
+          "type": "object"
+        },
+        "conversion_chain": {
+          "items": {
+            "$ref": "#/$defs/ConversionSegment"
+          },
+          "title": "Conversion Chain",
+          "type": "array"
+        },
+        "cost_structure": {
+          "additionalProperties": true,
+          "title": "Cost Structure",
+          "type": "object"
+        },
+        "offering": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Offering",
+          "type": "array"
+        },
+        "payer": {
+          "$ref": "#/$defs/Payer"
+        },
+        "revenue_model": {
+          "$ref": "#/$defs/RevenueModel"
+        }
+      },
+      "required": [
+        "payer",
+        "offering",
+        "revenue_model",
+        "conversion_chain"
+      ],
+      "title": "BusinessMechanism",
+      "type": "object"
+    },
     "BusinessPosition": {
       "additionalProperties": false,
       "properties": {
@@ -4098,6 +5897,29 @@
         "node_id"
       ],
       "title": "BusinessPosition",
+      "type": "object"
+    },
+    "CapitalFlow": {
+      "additionalProperties": false,
+      "description": "资金流（`Ch7 §B.3` 表：方向**付款方 → 收款方**，与产品流**相反**；关键字段 `amount`、`currency`、`period`）。",
+      "properties": {
+        "amount": {
+          "default": "tbd",
+          "title": "Amount",
+          "type": "string"
+        },
+        "currency": {
+          "default": "tbd",
+          "title": "Currency",
+          "type": "string"
+        },
+        "period": {
+          "default": "tbd",
+          "title": "Period",
+          "type": "string"
+        }
+      },
+      "title": "CapitalFlow",
       "type": "object"
     },
     "CheckRecord": {
@@ -4701,6 +6523,105 @@
       "title": "Company",
       "type": "object"
     },
+    "ConfidenceLevel": {
+      "description": "判断置信度（`Ch4 §E.1`：`{high, medium, low}`，**不默认给数值概率**）。\n\n`tbd` = 尚未判定（一律显式存，**不得**用 0.5 / 50% 之类的伪概率顶上，`Ch5 §D.6` / `C45-2`）。",
+      "enum": [
+        "tbd",
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "ConfidenceLevel",
+      "type": "string"
+    },
+    "ConversionSegment": {
+      "additionalProperties": false,
+      "description": "转化链路的**一段**（`Ch4 §B.1`：`{stage, input, output, evidence: [claim_id...]}`）。\n\n§B.1 的通用四段模型：**获取 → 交付 → 使用 → 变现**（按商业模式实例化：\n硬件 = 订单→排产/出货→验收→收入/回款；云 = 签约→通电/上线→利用率→收费；\n软件 = 使用→付费→续约/留存→增购）。\n\n★ `stage` **刻意是自由字符串**（不是封闭枚举）：段名由**注册表驱动**\n  （`Ch4 §C.1` `rules/metric-sets.yaml` 的 `stages:`；`§C.3` 明写\"新增第 4 类**只改 yaml**、\n  **不改代码**\"）。把它写成枚举会让 §C.3 的扩展机制失效。\n\n★ `pending_evidence` 与 `evidence` **必须一致**（§B.1 / §B.2 逐字）：\n  每段必有 `evidence`（`claim_id[]`，接第六章），否则该段**必须**显式标\n  `pending_evidence=true` —— 展示层据此呈现\"证据未到位\"，并**阻止该段进入财务连接**（§C）。\n  故本类**拒绝**\"证据为空却不标注\"的半截行 ——\n  这正是本项目最忌的\"把没有证据包装成有证据\"。",
+      "properties": {
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "input": {
+          "default": "tbd",
+          "title": "Input",
+          "type": "string"
+        },
+        "output": {
+          "default": "tbd",
+          "title": "Output",
+          "type": "string"
+        },
+        "pending_evidence": {
+          "default": false,
+          "title": "Pending Evidence",
+          "type": "boolean"
+        },
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage"
+      ],
+      "title": "ConversionSegment",
+      "type": "object"
+    },
+    "CostOfGrowth": {
+      "additionalProperties": false,
+      "description": "五项\"增长的代价\"（`Ch4 §D.3` 表 + `§D.4` 环境层承载）。\n\n| 代价 | 财务科目 | 字段 |\n|---|---|---|\n| 降价 | 收入（单价↓）/ 毛利率 | `price_discount` |\n| 增加资本开支 | 现金流量表投资活动 / CapEx | `capex_requirement` |\n| 库存 | 资产负债表存货 | `inventory_buildup` |\n| 应收 | 资产负债表应收账款 | `receivables_buildup` |\n| 融资 | 筹资活动 / 净负债 | `financing_need` |\n\n★ 每项用开放 dict：§D.1 的 schema 块把每一项都写作 `{...}`（内部结构由各业务自定）；\n  **不伪造**一个设计未给的结构。\n★ `financing_need` 同时是 `Ch4 §D.4`（回改 R-09）环境层\"融资条件\"的**唯一承载**：\n  环境项**不得**独立成模块（`Ch3` 模块 denylist）。\n★ `growth_quality ∈ {high, medium, low}` **不在此**：`§D.3` 明写它由\n  `scripts/valuelayer/growth_quality.py` 的 \"四项分项判定\"（`ROIIC vs WACC` / 现金转化率 /\n  营运资金变动 / 融资依赖）算出，是**派生输出**（走 `derived/`），且 `§D.1` 的\n  driver schema 块**未**把它列为字段 ⇒ 不作为 `Driver` 的字段（`N4.1-14`\n  \"收入增速不得作投资回报代理\"的替代指标集同属派生层）。",
+      "properties": {
+        "capex_requirement": {
+          "additionalProperties": true,
+          "title": "Capex Requirement",
+          "type": "object"
+        },
+        "financing_need": {
+          "additionalProperties": true,
+          "title": "Financing Need",
+          "type": "object"
+        },
+        "inventory_buildup": {
+          "additionalProperties": true,
+          "title": "Inventory Buildup",
+          "type": "object"
+        },
+        "price_discount": {
+          "additionalProperties": true,
+          "title": "Price Discount",
+          "type": "object"
+        },
+        "receivables_buildup": {
+          "additionalProperties": true,
+          "title": "Receivables Buildup",
+          "type": "object"
+        }
+      },
+      "title": "CostOfGrowth",
+      "type": "object"
+    },
+    "DemandSignal": {
+      "additionalProperties": false,
+      "description": "需求信号（`Ch7 §B.3` 表：方向**需求方 → 供应方**；关键字段 `intensity`（定性/定量）、`basis`）。\n\n★ §B.3 反例③：需求信号↑ **≠** 收入↑（有库存/时滞/验收）—— 故它与产品流是两条边。\n★ `Ch7 §A.6`（回改 R-09）：环境层\"**AI 投入与需求周期**\"的承载方式就是\n  \"`demand_signal` 边（`relation_flows.flow_kind=demand_signal`）+ 终端需求归因\"。",
+      "properties": {
+        "basis": {
+          "default": "tbd",
+          "title": "Basis",
+          "type": "string"
+        },
+        "intensity": {
+          "default": "tbd",
+          "title": "Intensity",
+          "type": "string"
+        }
+      },
+      "title": "DemandSignal",
+      "type": "object"
+    },
     "DependencyEdge": {
       "additionalProperties": false,
       "properties": {
@@ -4750,9 +6671,176 @@
       "title": "DisclosureState",
       "type": "string"
     },
+    "Driver": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "business_id": {
+          "title": "Business Id",
+          "type": "string"
+        },
+        "confidence": {
+          "$ref": "#/$defs/ConfidenceLevel",
+          "default": "tbd"
+        },
+        "cost_of_growth": {
+          "$ref": "#/$defs/CostOfGrowth"
+        },
+        "dependencies": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Dependencies",
+          "type": "array"
+        },
+        "driver_id": {
+          "title": "Driver Id",
+          "type": "string"
+        },
+        "duration": {
+          "$ref": "#/$defs/Duration"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "financial_link": {
+          "$ref": "#/$defs/FinancialLink"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "importance_class": {
+          "$ref": "#/$defs/ImportanceClass"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "realization_stage": {
+          "$ref": "#/$defs/DriverRealizationStage",
+          "default": "tbd"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "source_class": {
+          "enum": [
+            "demand_expansion",
+            "share",
+            "price",
+            "product_mix",
+            "unit_usage",
+            "penetration",
+            "new_business",
+            "mixed"
+          ],
+          "title": "Source Class",
+          "type": "string"
+        },
+        "timeline": {
+          "default": "tbd",
+          "title": "Timeline",
+          "type": "string"
+        }
+      },
+      "required": [
+        "driver_id",
+        "business_id",
+        "source_class",
+        "duration",
+        "financial_link",
+        "cost_of_growth",
+        "importance_class"
+      ],
+      "title": "Driver",
+      "type": "object"
+    },
     "DriverModel": {
       "additionalProperties": false,
-      "description": "驱动模型（`Ch9 §N9.1-17` / `Ch4 §D`）。驱动 → 科目 → 每股指标三层映射。",
+      "description": "**估值所需的假设投影**（`Ch9 §N9.1-17` / `Ch4 §A.1` / `Ch5 §A.1`；本批次**语义收窄**）。\n\n★ 为什么收窄（本批次解决的**双真源**风险）：\n  驱动对象的唯一真源是新的 `facts/drivers.jsonl`（`Driver`）；而 `Ch5 §A.2` 又说\n  \"估值经营假设 = `baseline.driver_refs[].financial_link`\"。若 `baseline.driver_model`\n  继续自带 `driver_name` / `realization_stage` / `is_primary` / `linked_accounts`，\n  它就会与 `Driver` 的对应字段**各自演进** ⇒ 同一概念两个真源。\n  ⇒ **保留但收窄为投影**：只承载 `{driver_id, assumptions[]}`，\n  即**身份 + 可从 driver 对象取到的假设文本**（见 `project_driver_model`）。\n★ `assumptions` 的出处与\"为什么 driver 上也要有该字段\"：见 `Driver.assumptions` 的 docstring\n  （`Ch5 §A.1` / `01_产品目标与核心闭环/01_需求拆解.md §2.4` / `Ch4 §G.1②`）。\n★ 被移除的四个字段**不是丢信息**：`driver_name` / `realization_stage` / `is_primary` /\n  `linked_accounts` 全部可从 `drivers.jsonl` 的对象取到（`realization_stage` → `Driver.realization_stage`；\n  `linked_accounts` → `Driver.financial_link.accounts`；`is_primary` → `Driver.importance_class == high` 的\n  分类结果，由 §D.2 的\"上限/分级\"逻辑产出）。真仓库该字段为 `[]` ⇒ 零影响。",
       "properties": {
         "assumptions": {
           "items": {
@@ -4764,45 +6852,51 @@
         "driver_id": {
           "title": "Driver Id",
           "type": "string"
-        },
-        "driver_name": {
-          "title": "Driver Name",
-          "type": "string"
-        },
-        "is_primary": {
-          "default": false,
-          "title": "Is Primary",
-          "type": "boolean"
-        },
-        "linked_accounts": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Linked Accounts",
-          "type": "array"
-        },
-        "realization_stage": {
-          "$ref": "#/$defs/DriverRealizationStage",
-          "default": "tbd"
         }
       },
       "required": [
-        "driver_id",
-        "driver_name"
+        "driver_id"
       ],
       "title": "DriverModel",
       "type": "object"
     },
     "DriverRealizationStage": {
-      "description": "驱动的兑现阶段（`Ch4 §D`）。与 `relation_progress_stage` **不得互用**（`Ch2 §C.2 R-15 ②`）。",
+      "description": "驱动**三态**（`Ch4 §D.1` / `§E.2` / `N4.2-01`）。与 `relation_progress_stage` **不得互用**（`Ch2 §C.2 R-15 ②`）。\n\n★ **取值域已按设计原文纠正**（本批次修正一处**自创枚举**，两个独立处一致）：\n  - `Ch4 §D.1` 逐字：`realization_stage: occurred|planned_guidance_forecast|conditional`；\n  - `Ch4 §E.2` 逐字：\"驱动三态（已发生/计划指引预测/依赖条件） | `driver.realization_stage`\"；\n  - `Ch4 §J.1`：`N4.2-01`「`drivers.realization_stage`（**三态**）+ `stage_derive.py`」。\n  初版写的是 `not_started / ramping / ramped / declining` —— **设计里不存在这四个值**，\n  且是**四态**而非三态（`stage_derive.py` 由 `claim_nature` 推导，不存在\"爬坡中\"这种阶段）。\n  该错误值经全仓检索**无任何产出方/消费方**，真仓库 `facts/baselines.jsonl` 的\n  `driver_model` 为空数组 ⇒ 纠正**零影响**（见 `tests/unit/test_schema_expand.py`）。\n  `tbd` 保留为\"尚未推导\"的待定 token（`纪律 7` / `Ch2 §C.2`，与 `MoatLevel` / `DirectionState` 同例）。",
       "enum": [
         "tbd",
-        "not_started",
-        "ramping",
-        "ramped",
-        "declining"
+        "occurred",
+        "planned_guidance_forecast",
+        "conditional"
       ],
       "title": "DriverRealizationStage",
+      "type": "string"
+    },
+    "Duration": {
+      "additionalProperties": false,
+      "description": "驱动可持续时长（`Ch4 §D.1` / `§D.2`：`duration: {mode: point|range, value: \"1-3Y\"}`）。\n\n§D.2 逐字：\"未披露用 `mode=range` + 定性标注（**不给伪精确点值**）\" ⇒\n`value` 是**自由字符串**（可写区间或定性描述），不强制数值 —— 强制数值会逼出伪精确。",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/DurationMode"
+        },
+        "value": {
+          "default": "tbd",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "title": "Duration",
+      "type": "object"
+    },
+    "DurationMode": {
+      "description": "驱动可持续时长的表达（`Ch4 §D.1` / `§D.2`：`duration.mode ∈ {point, range}`）。\n\n§D.2 逐字：\"未披露用 `mode=range` + 定性标注（**不给伪精确点值**）\"。",
+      "enum": [
+        "point",
+        "range"
+      ],
+      "title": "DurationMode",
       "type": "string"
     },
     "ErrorAxis": {
@@ -5196,6 +7290,47 @@
       "title": "ExpectationSample",
       "type": "object"
     },
+    "FinancialLink": {
+      "additionalProperties": false,
+      "description": "**驱动 → 科目 → 每股指标**的三层映射（`Ch4 §C.4`，落 `facts/drivers.jsonl`）。\n\n§C.4 原文块：\n\n```\ndriver.financial_link = {\n  accounts: [revenue_segment, gross_margin, opex, capex, working_capital, ...],\n  per_share_metric: eps | fcf_per_share | value_per_share,\n  formula_ref: <DerivedValue ref>        # 走 scripts/compute/\n}\n```\n\n★ 为什么 `accounts` 是 `list[str]`：§C.4 的清单末位是 `...`（科目集合开放）。\n★ 为什么单独一个类而不是三个散字段：`Ch5 §A.2` 逐字把\n  \"`baseline.driver_refs[].financial_link`\" 当作**估值的经营假设来源** ——\n  它是一级契约面，不是可选装饰。",
+      "properties": {
+        "accounts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Accounts",
+          "type": "array"
+        },
+        "formula_ref": {
+          "default": "tbd",
+          "title": "Formula Ref",
+          "type": "string"
+        },
+        "per_share_metric": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PerShareMetric"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "FinancialLink",
+      "type": "object"
+    },
+    "FlowKind": {
+      "description": "关系流的三条并行边（`Ch7 §B.3`：`flow_kind ∈ {product, capital, demand_signal}`）。\n\n★ §B.3 的方案比选**否决**了\"同一 `relations` 表三行\"，理由：关系身份（证据/阶段/有效期）\n  被复制三份、去重与版本追踪困难。三条边的方向**互不相同**，无法压成一个。",
+      "enum": [
+        "product",
+        "capital",
+        "demand_signal"
+      ],
+      "title": "FlowKind",
+      "type": "string"
+    },
     "Impact": {
       "additionalProperties": false,
       "properties": {
@@ -5388,6 +7523,220 @@
       "title": "Impact",
       "type": "object"
     },
+    "ImpliedAssumptions": {
+      "additionalProperties": false,
+      "description": "反解时**固定不动**的四类假设（`Ch5 §B.2` 的 `assumptions{growth, margin, reinvestment, risk, duration}`）。\n\n键名逐字取 §B.2 的 JSON；每类的内部结构 §B.2 写作 `{...}`（由 §B.4 的\"取值方式\"决定：\n点或区间、收入 CAGR / 终值增长、capex/收入 与 ROIIC、WACC、高增长年数）⇒ 用开放 dict，\n**不伪造**一个设计未给的内层结构。\n被解出的那一类（`solved_variable`）在同一份 JSON 里也保留其区间解（`range`）。",
+      "properties": {
+        "duration": {
+          "additionalProperties": true,
+          "title": "Duration",
+          "type": "object"
+        },
+        "growth": {
+          "additionalProperties": true,
+          "title": "Growth",
+          "type": "object"
+        },
+        "margin": {
+          "additionalProperties": true,
+          "title": "Margin",
+          "type": "object"
+        },
+        "reinvestment": {
+          "additionalProperties": true,
+          "title": "Reinvestment",
+          "type": "object"
+        },
+        "risk": {
+          "additionalProperties": true,
+          "title": "Risk",
+          "type": "object"
+        }
+      },
+      "title": "ImpliedAssumptions",
+      "type": "object"
+    },
+    "ImpliedRange": {
+      "additionalProperties": false,
+      "description": "区间表达（`Ch5 §B.2`：`\"range\":{\"low\":\"...\",\"high\":\"...\"}`；`§D.6`：\"区间用 `range{low, high}`\"）。\n\n★ 用 `Decimal` + 字符串序列化（`Ch9 §3.4.5`）：区间值要参与算术与比较，\n  用字符串会在下游被迫二次解析；`Ch9 §3.4.5` 明令\"数值以字符串存储，避免浮点误差\" ⇒\n  存的是 `Decimal`，落盘时序列化为字符串。\n★ 允许 `None`：反解在**参数不可行**时（`feasible=false`）可以只给出一侧边界；\n  用 `None` 表达\"该侧无解\"，**不得**用 0 冒充。",
+      "properties": {
+        "high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "High"
+        },
+        "low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Low"
+        }
+      },
+      "title": "ImpliedRange",
+      "type": "object"
+    },
+    "ImpliedRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "alternative_explanations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Alternative Explanations",
+          "type": "array"
+        },
+        "assumptions": {
+          "$ref": "#/$defs/ImpliedAssumptions"
+        },
+        "computed_at": {
+          "format": "date-time",
+          "title": "Computed At",
+          "type": "string"
+        },
+        "current_price": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Current Price"
+        },
+        "feasible": {
+          "title": "Feasible",
+          "type": "boolean"
+        },
+        "implied_id": {
+          "title": "Implied Id",
+          "type": "string"
+        },
+        "method_version": {
+          "title": "Method Version",
+          "type": "string"
+        },
+        "price_snapshot_id": {
+          "title": "Price Snapshot Id",
+          "type": "string"
+        },
+        "range": {
+          "$ref": "#/$defs/ImpliedRange"
+        },
+        "security_id": {
+          "title": "Security Id",
+          "type": "string"
+        },
+        "solution_set_id": {
+          "title": "Solution Set Id",
+          "type": "string"
+        },
+        "solved_variable": {
+          "$ref": "#/$defs/SolvedVariable"
+        }
+      },
+      "required": [
+        "implied_id",
+        "solution_set_id",
+        "security_id",
+        "price_snapshot_id",
+        "current_price",
+        "assumptions",
+        "solved_variable",
+        "range",
+        "alternative_explanations",
+        "feasible",
+        "method_version",
+        "computed_at"
+      ],
+      "title": "ImpliedRequirement",
+      "type": "object"
+    },
+    "ImportanceClass": {
+      "description": "驱动重要度分档（`Ch4 §D.1`：`importance_class: high|medium|low`）。\n\n§D.2 用它做\"少量关键驱动\"超限时的分级（`primary_drivers(≤5)` + `secondary_watchlist`）。",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "ImportanceClass",
+      "type": "string"
+    },
+    "Increment": {
+      "additionalProperties": false,
+      "description": "增量更新**六要素**（`Ch4 §H.3` / `N4.5-01`；`N4.5-04` 另有 `reason`）。\n\n`Ch4 §H.3` 逐字的 increment 块：\n\n```json\n\"increment\":{\"old_judgment\":\"...\",\"new_info\":[\"CLM-x\"],\"new_judgment\":\"...\",\n             \"affected_period\":\"FY2027Q1\",\"supporting_evidence\":[\"CLM-x\"],\n             \"counter_evidence\":[]}\n```\n\n★ `new_info` **必须非空**（`min_length=1`）：`§H.2` 逐字 ——\n  \"状态变更函数**仅在 `new_info != ∅ AND affects_dimension` 时运行**；否则保持原值 + 记录核查\"，\n  `N4.5-05` 亦要求\"无新信息日不改变状态、不产新信号\"。\n  ⇒ 一条 `new_info` 为空的 `increment` 就是\"制造出来的变化\"，**在 schema 层拒绝**。\n★ `reason` 来自 `N4.5-04`（\"`increment.reason`（引用新信息）| 每次状态变更含原因\"）。",
+      "properties": {
+        "affected_period": {
+          "title": "Affected Period",
+          "type": "string"
+        },
+        "counter_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Counter Evidence",
+          "type": "array"
+        },
+        "new_info": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "New Info",
+          "type": "array"
+        },
+        "new_judgment": {
+          "title": "New Judgment",
+          "type": "string"
+        },
+        "old_judgment": {
+          "title": "Old Judgment",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        },
+        "supporting_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Supporting Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "old_judgment",
+        "new_info",
+        "new_judgment",
+        "affected_period"
+      ],
+      "title": "Increment",
+      "type": "object"
+    },
     "IndustryNode": {
       "additionalProperties": false,
       "properties": {
@@ -5514,6 +7863,89 @@
       "title": "IndustryNode",
       "type": "object"
     },
+    "InputSource": {
+      "description": "估值输入的三类来源（`Ch5 §D.5`：`input_source ∈ {fact, model_estimate, manual}`）。\n\n- `fact`         = 来自 `claim` 的原始数据；\n- `model_estimate` = 模型产出的假设；\n- `manual`       = 人工设定（**须留痕**：`author` + `modified_at`）。\n\n§D.5 的冲突处理：**不用加权**（承第六章禁加权）——分别保留并**并列展示**。",
+      "enum": [
+        "fact",
+        "model_estimate",
+        "manual"
+      ],
+      "title": "InputSource",
+      "type": "string"
+    },
+    "Moat": {
+      "additionalProperties": false,
+      "description": "护城河条目（`Ch4 §F.1` yaml 块 + `§F.2` 反误判 + `§F.3` 硬隔离）。\n\n§F.1 原文块：\n\n```yaml\n- moat_id: MOAT-NVDA-01\n  mechanism: \"...\"                       # 优势机制说明（必填）\n  protected_objects:                     # ⊆ 六类，多选\n    - {object: share|pricing|..., strength: high|medium|low, evidence: [claim_id...]}\n  origin_class: durable_advantage|product_cycle|supply_demand_cycle|operational_efficiency\n  cross_generation_survival: true|false|unknown\n  evidence_claims: [claim_id...]\n```\n\n- `mechanism` **必填**（`N4.3-01` 验收：\"护城河条目含 mechanism\"；`§F.2` 的\n  `is_durable_moat()` 也要求 `moat.mechanism_explained`）。\n- `cross_generation_survival` 的 `unknown` 用 `None` 表达（三值：`True` / `False` / `None`）。\n- `cross_generation_competitiveness` 来自 `N4.3-05`（\"承 `N9.1-07` 代际\"，验收：\"有代际维度竞争评估\"）；\n  设计**未给**取值域 ⇒ 自由字符串 + `tbd`，不伪造枚举。\n- `writer` 是 `§F.3` 断言 A3 的落点：\"写路径断言 `moat.writer ∈ {research_skill, human}`，\n  不含 `price_ingest`\" —— **在 schema 层物理隔离**（对应 C45-5：\"股价上涨不自动证明护城河增强\"）。",
+      "properties": {
+        "cross_generation_competitiveness": {
+          "default": "tbd",
+          "title": "Cross Generation Competitiveness",
+          "type": "string"
+        },
+        "cross_generation_survival": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cross Generation Survival"
+        },
+        "evidence_claims": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Claims",
+          "type": "array"
+        },
+        "mechanism": {
+          "title": "Mechanism",
+          "type": "string"
+        },
+        "moat_id": {
+          "title": "Moat Id",
+          "type": "string"
+        },
+        "origin_class": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MoatOriginClass"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "protected_objects": {
+          "items": {
+            "$ref": "#/$defs/MoatProtectedObject"
+          },
+          "title": "Protected Objects",
+          "type": "array"
+        },
+        "real_substitutes": {
+          "items": {
+            "$ref": "#/$defs/RealSubstitute"
+          },
+          "title": "Real Substitutes",
+          "type": "array"
+        },
+        "writer": {
+          "$ref": "#/$defs/MoatWriter",
+          "default": "research_skill"
+        }
+      },
+      "required": [
+        "moat_id",
+        "mechanism"
+      ],
+      "title": "Moat",
+      "type": "object"
+    },
     "MoatLevel": {
       "description": "护城河**水平**（`Ch2 §C.2 A-02` / `N2.2-02`）。与 `moat_state` 独立、不得合并为 `moat`。",
       "enum": [
@@ -5523,6 +7955,74 @@
         "tbd"
       ],
       "title": "MoatLevel",
+      "type": "string"
+    },
+    "MoatOriginClass": {
+      "description": "护城河来源四类（`Ch4 §F.1` / `§F.2` 表：`origin_class`）。\n\n§F.2 的判据：`supply_demand_cycle` **不得**判为持久护城河（供给恢复即消失）。",
+      "enum": [
+        "durable_advantage",
+        "product_cycle",
+        "supply_demand_cycle",
+        "operational_efficiency"
+      ],
+      "title": "MoatOriginClass",
+      "type": "string"
+    },
+    "MoatProtectedObject": {
+      "additionalProperties": false,
+      "description": "单项保护对象（`Ch4 §F.1`：`protected_objects` 的元素 `{object, strength, evidence}`）。",
+      "properties": {
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "object": {
+          "$ref": "#/$defs/MoatProtectedObjectKind"
+        },
+        "strength": {
+          "$ref": "#/$defs/MoatStrength"
+        }
+      },
+      "required": [
+        "object",
+        "strength"
+      ],
+      "title": "MoatProtectedObject",
+      "type": "object"
+    },
+    "MoatProtectedObjectKind": {
+      "description": "**六种保护对象**（`Ch4 §F.1`：`object: share|pricing|cost|customer_retention|capital_return|innovation_efficiency`）。\n\n§F.1 逐字：\"多选\"。故 `protected_objects` 是**数组**，一条护城河可同时保护多项。",
+      "enum": [
+        "share",
+        "pricing",
+        "cost",
+        "customer_retention",
+        "capital_return",
+        "innovation_efficiency"
+      ],
+      "title": "MoatProtectedObjectKind",
+      "type": "string"
+    },
+    "MoatStrength": {
+      "description": "单项保护对象的强度（`Ch4 §F.1`：`strength: high|medium|low`）。",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "MoatStrength",
+      "type": "string"
+    },
+    "MoatWriter": {
+      "description": "`moat.writer` —— 写路径白名单（`Ch4 §F.3` 断言 A3，**可直接写单测**）。\n\n§F.3 逐字：`moat.writer ∈ {research_skill, human}`，**不含** `price_ingest` ——\n\"股价上涨不自动证明护城河增强\"在 **schema 层物理隔离**，而非靠自觉。",
+      "enum": [
+        "research_skill",
+        "human"
+      ],
+      "title": "MoatWriter",
       "type": "string"
     },
     "OfficialClaimKind": {
@@ -5566,6 +8066,43 @@
         "B"
       ],
       "title": "OpportunityType",
+      "type": "string"
+    },
+    "Payer": {
+      "additionalProperties": false,
+      "description": "付费方（`Ch4 §B.1` yaml 块：`mechanism.payer: {party, segment, geographies}`）。\n\n§B.1 把\"谁付费\"列为赚钱机制的第一要素（`N4.1-01` 验收：\"可读'谁付费+链路各段+每段证据'\"）。",
+      "properties": {
+        "geographies": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Geographies",
+          "type": "array"
+        },
+        "party": {
+          "title": "Party",
+          "type": "string"
+        },
+        "segment": {
+          "default": "tbd",
+          "title": "Segment",
+          "type": "string"
+        }
+      },
+      "required": [
+        "party"
+      ],
+      "title": "Payer",
+      "type": "object"
+    },
+    "PerShareMetric": {
+      "description": "每股指标（`Ch4 §C.4`：`per_share_metric: eps | fcf_per_share | value_per_share`）。",
+      "enum": [
+        "eps",
+        "fcf_per_share",
+        "value_per_share"
+      ],
+      "title": "PerShareMetric",
       "type": "string"
     },
     "PriceSnapshot": {
@@ -5839,14 +8376,62 @@
       "title": "Product",
       "type": "object"
     },
+    "ProductFlow": {
+      "additionalProperties": false,
+      "description": "产品流（`Ch7 §B.3` 表：方向**供应商 → 客户**；关键字段 `product_id`、`volume/value`、`stage`）。\n\n★ `volume` 的命名取舍：§B.3 的关键字段列写作 \"`volume/value`\"（量**或**以值表达，二择一），\n  **未给**两个独立字段名。依 `Ch2 §C.2 R-15 ③`（一个概念只允许一个字段名）取 **`volume`**\n  一个字段承载该边的规模（单位与口径写在值里）；**对价支付**那一侧由 `CapitalFlow.amount`\n  承载 —— 它是**另一个域**（对价支付 ≠ 产品交付量），故分名（`R-15 ②`）。\n★ `stage` 是**自由字符串**：`Ch7 §B.3` 未给取值域；相邻的 `§B.4` 给的是 `relations` 侧\n  `relation_progress_stage` 的五者语义层级，而**该名字在本仓库已被既有枚举占用**（见\n  `RelationProgressStage` 的 docstring 与报告中的命名冲突登记）⇒ 本实现**不另造第二套枚举**\n  （`G-06` 唯一真源），保持字符串。",
+      "properties": {
+        "product_id": {
+          "default": "tbd",
+          "title": "Product Id",
+          "type": "string"
+        },
+        "stage": {
+          "default": "tbd",
+          "title": "Stage",
+          "type": "string"
+        },
+        "volume": {
+          "default": "tbd",
+          "title": "Volume",
+          "type": "string"
+        }
+      },
+      "title": "ProductFlow",
+      "type": "object"
+    },
     "PropagationKind": {
-      "description": "`claim_propagation.kind` —— 传播记录的**语义类别**（`Ch6 §C.2` 步骤④ / `§C.3`）。\n\n★ 为什么需要它（T-11 契约变更，需求方 2026-09-16 裁定）：\n  `Ch6 §C.3`（误判的纠正入口 / 人工 override）原设计把结果写独立的\n  `facts/claim_alias.jsonl`（`{claim_id, is_independent, reason, operator, at}`）；\n  但 `Ch9 §3.3.3` 把 `facts/` 锁死在 **18 个 JSONL（不得增删改名）** ⇒ `claim_alias.jsonl`\n  **无落点**。裁定：**并入既有 `claim_propagation`**，以其 `kind` 取值\n  `manual_alias_override` 承载\"人工确认这两条其实是同一事件\" —— **绝不新增第 19 个 JSONL**。\n\n- `restatement`（**默认**）：自动去重判定的**转述**（`Ch6 §C.2` 步骤④）；\n  ⚠️ **默认值必须使\"旧行\"合法**：既有 `claim_propagation` 行无 `kind` 字段\n  （`Ch9 §3.4.2` 追加式不可变，不得让既有行失效），取默认即合法。\n- `manual_alias_override`：**人工别名覆盖**（`Ch6 §C.3`：`dedup_override` 任务结果，\n  `is_independent` 由操作人强制设定，**追加不覆盖原判定**）。",
+      "description": "`claim_propagation.kind` —— 传播记录的**语义类别**（`Ch6 §C.2` 步骤④ / `§C.3`）。\n\n★ 为什么需要它（T-11 契约变更，需求方 2026-09-16 裁定）：\n  `Ch6 §C.3`（误判的纠正入口 / 人工 override）原设计把结果写独立的\n  `facts/claim_alias.jsonl`（`{claim_id, is_independent, reason, operator, at}`）；\n  但 `Ch9 §3.3.3` 把 `facts/` 的表集合锁死（**不得增删改名**）⇒ 「再开一张表」\n  同样不是实现方能随手做的动作（扩表是**需求方裁定**项：2026-09-16 已由 18 扩至 22，\n  见 `schema/stems.py` 脚注）⇒ `claim_alias.jsonl`\n  **无落点**。裁定：**并入既有 `claim_propagation`**，以其 `kind` 取值\n  `manual_alias_override` 承载\"人工确认这两条其实是同一事件\"。\n\n- `restatement`（**默认**）：自动去重判定的**转述**（`Ch6 §C.2` 步骤④）；\n  ⚠️ **默认值必须使\"旧行\"合法**：既有 `claim_propagation` 行无 `kind` 字段\n  （`Ch9 §3.4.2` 追加式不可变，不得让既有行失效），取默认即合法。\n- `manual_alias_override`：**人工别名覆盖**（`Ch6 §C.3`：`dedup_override` 任务结果，\n  `is_independent` 由操作人强制设定，**追加不覆盖原判定**）。",
       "enum": [
         "restatement",
         "manual_alias_override"
       ],
       "title": "PropagationKind",
       "type": "string"
+    },
+    "RealSubstitute": {
+      "additionalProperties": false,
+      "description": "**真实替代方案**（`Ch4 §J.1` 的 `N4.3-03` 实现载体逐字：\n`moat.real_substitutes[{switch_trigger, switching_cost, actual_switch_evidence}]`）。\n\n★ `N4.3-03` 验收：\"替代方案含切换触发/成本/**真实实例**\" —— 故\n  `actual_switch_evidence` 是\"真实发生过切换\"的证据引用，不是推测。",
+      "properties": {
+        "actual_switch_evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Actual Switch Evidence",
+          "type": "array"
+        },
+        "switch_trigger": {
+          "default": "tbd",
+          "title": "Switch Trigger",
+          "type": "string"
+        },
+        "switching_cost": {
+          "default": "tbd",
+          "title": "Switching Cost",
+          "type": "string"
+        }
+      },
+      "title": "RealSubstitute",
+      "type": "object"
     },
     "Recommendation": {
       "additionalProperties": false,
@@ -6386,6 +8971,169 @@
       "title": "Relation",
       "type": "object"
     },
+    "RelationFlow": {
+      "additionalProperties": false,
+      "properties": {
+        "analyzed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Analyzed At"
+        },
+        "backfilled_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Backfilled At"
+        },
+        "capital_flow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CapitalFlow"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "demand_signal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DemandSignal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "evidence_claim_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence Claim Ids",
+          "type": "array"
+        },
+        "first_seen_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen At"
+        },
+        "flow_id": {
+          "title": "Flow Id",
+          "type": "string"
+        },
+        "flow_kind": {
+          "$ref": "#/$defs/FlowKind"
+        },
+        "from_ref": {
+          "title": "From Ref",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Occurred At"
+        },
+        "product_flow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProductFlow"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Published At"
+        },
+        "recorded_seq": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded Seq"
+        },
+        "relation_id": {
+          "title": "Relation Id",
+          "type": "string"
+        },
+        "to_ref": {
+          "title": "To Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "flow_id",
+        "relation_id",
+        "flow_kind",
+        "from_ref",
+        "to_ref"
+      ],
+      "title": "RelationFlow",
+      "type": "object"
+    },
     "RelationProgressStage": {
       "description": "合作阶段（`Ch9 §N9.1-07`）。**不得自动跨级推进**（T03）。\n\n⚠️ 与 `driver.realization_stage` **分别命名、不得互用**（`Ch2 §C.2 R-15 ②`）。",
       "enum": [
@@ -6409,6 +9157,18 @@
         "tracking"
       ],
       "title": "ResearchDepth",
+      "type": "string"
+    },
+    "RevenueModel": {
+      "description": "收入的实现方式（`Ch4 §B.1` yaml 块：`revenue_model: one_time|subscription|usage|license|hybrid`）。",
+      "enum": [
+        "one_time",
+        "subscription",
+        "usage",
+        "license",
+        "hybrid"
+      ],
+      "title": "RevenueModel",
       "type": "string"
     },
     "Security": {
@@ -6544,6 +9304,18 @@
       ],
       "title": "Security",
       "type": "object"
+    },
+    "SolvedVariable": {
+      "description": "反解时被解出的那一类变量（`Ch5 §B.2`：`\"solved_variable\":\"reinvestment\"` + `§B.4` 五因素表）。\n\n§B.4 逐字：\"反解时固定 4 类、解第 5 类\"，五类为\n增长 / 利润 / 再投资 / 风险 / 持续时间。故取值域 = 这五类（与 `ImpliedAssumptions` 的键一一对应）。",
+      "enum": [
+        "growth",
+        "margin",
+        "reinvestment",
+        "risk",
+        "duration"
+      ],
+      "title": "SolvedVariable",
+      "type": "string"
     },
     "Source": {
       "additionalProperties": false,
@@ -6982,6 +9754,160 @@
       "title": "TaskType",
       "type": "string"
     },
+    "Valuation": {
+      "additionalProperties": false,
+      "description": "估值对象（`Ch4 §A.1/§A.3/§G.1⑤` + `Ch5 §D.1/§D.2/§D.6`）。\n\n`Ch4 §A.1` 逐字：`baseline.valuation` 用于\"与反向估值对照，形成独立判断\"，\n并在建议里承载\"收益比较\"；`§G.1⑤` 把它与 `valuation_inputs` / `historicals` /\n`DerivedValue` 引用并列为\"⑤ 财务与估值\"。\n\n★ **不重复 DerivedValue 的字段**（避免双真源）：`§D.2` 要求\"每个 price range →\n  `formula` + `operands` + `method_version` + `share_count` + `compute_date`（N5.3-02 / N9.2-02）\"，\n  而这些正是 `DerivedValue` 自身的字段 ⇒ 本对象只持 `formula_ref` 指向 `derived/` 的那条记录\n  （沿用 `Ch4 §C.4` 对\"DerivedValue 引用\"的既有命名 `formula_ref: <DerivedValue ref>`），\n  **不再落一份副本**。\n★ `probability` 默认 `None`（`§D.6` + `N5.3-07` + `C45-2`）：**不默认 50/50**，\n  \"仅当有依据才填\"；且 `§J` 的 `J9` 明写依据\"须为 `DerivedValue` 且标注来源\"。",
+      "properties": {
+        "forecast_assumptions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Forecast Assumptions",
+          "type": "array"
+        },
+        "formula_ref": {
+          "default": "tbd",
+          "title": "Formula Ref",
+          "type": "string"
+        },
+        "method_class": {
+          "default": "tbd",
+          "title": "Method Class",
+          "type": "string"
+        },
+        "probability": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Probability"
+        },
+        "range": {
+          "$ref": "#/$defs/ValuationRange"
+        },
+        "valuation_params": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Valuation Params",
+          "type": "array"
+        }
+      },
+      "title": "Valuation",
+      "type": "object"
+    },
+    "ValuationInputs": {
+      "additionalProperties": false,
+      "description": "估值假设的五因素（`Ch4 §A.3`：\"`valuation_inputs` | 三类输入（fact/model_estimate/manual）\n| `N5.3-04`（第五章写，第四章承载）\"；`Ch4 §G.1⑤`：\"`valuation_inputs`（五因素→每股价值）\"）。\n\n字段名逐字取 `Ch5 §B.4` 的假设组合表：\n`growth_assumption` / `margin_assumption` / `reinvestment_assumption` /\n`risk_assumption` / `duration_assumption`。\n★ `risk_assumption`（WACC / 折现率）另有一处逐字来源：`Ch5 §D.5` 的 **R-09**——\n  环境层\"利率与折现要求\"作为估值假设输入注入，且 `input_source ∈ {model_estimate, manual}`。",
+      "properties": {
+        "duration_assumption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AssumptionInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "growth_assumption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AssumptionInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "margin_assumption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AssumptionInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reinvestment_assumption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AssumptionInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "risk_assumption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AssumptionInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "ValuationInputs",
+      "type": "object"
+    },
+    "ValuationRange": {
+      "additionalProperties": false,
+      "description": "区间表达（`Ch5 §D.6`：\"区间用 `range{low, high}` 表达宽度\"）。",
+      "properties": {
+        "high": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "High"
+        },
+        "low": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Low"
+        }
+      },
+      "title": "ValuationRange",
+      "type": "object"
+    },
     "ValueStateRefs": {
       "additionalProperties": false,
       "description": "价值状态（`Ch9 §N9.1-18`）。三组状态**可同时并存且不同向**（`Ch2 §C.2` N2.2-04）。",
@@ -7022,21 +9948,25 @@
     "baselines": "Baseline",
     "benchmarks": "Benchmark",
     "business_positions": "BusinessPosition",
+    "businesses": "Business",
     "claim_propagation": "ClaimPropagation",
     "claims": "Claim",
     "companies": "Company",
     "dependency_edges": "DependencyEdge",
+    "drivers": "Driver",
     "events": "Event",
     "expectations": "ExpectationSample",
     "impacts": "Impact",
+    "implied_requirements": "ImpliedRequirement",
     "industry_nodes": "IndustryNode",
     "prices": "PriceSnapshot",
     "products": "Product",
     "recommendations": "Recommendation",
+    "relation_flows": "RelationFlow",
     "relations": "Relation",
     "securities": "Security",
     "sources": "Source",
     "tasks": "Task"
   },
-  "title": "AI 产业链研究 Agent · facts 8 类对象 schema（Ch9 §3.3.3）"
+  "title": "AI 产业链研究 Agent · facts 对象 schema（Ch9 §3.3.3；表数经需求方裁定由 18 扩至 22）"
 }

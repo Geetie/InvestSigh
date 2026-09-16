@@ -33,8 +33,8 @@
 ## 人工 override 的承载（`Ch6 §C.3`；T-11 契约变更）
 
 `Ch6 §C.3` 的人工去重覆盖（原设计写独立 `facts/claim_alias.jsonl`）**并入**既有
-`claim_propagation`，以其 `kind=manual_alias_override` 承载（`Ch9 §3.3.3`：18 个 JSONL 不得增删改名，
-**不新增第 19 个**）。本模块的自动判定仍只产出 `kind=restatement` 的转述行；人工覆盖由
+`claim_propagation`，以其 `kind=manual_alias_override` 承载（`Ch9 §3.3.3`：`facts/` 的表集合
+不得增删改名，**不为人工别名覆盖新开表**）。本模块的自动判定仍只产出 `kind=restatement` 的转述行；人工覆盖由
 `dedup_override` 任务写 `manual_alias_override` 行（`schema.models.ClaimPropagation`）。
 
 ## `origin_claim_id` 的产出方（`Ch6 §C.2` 步骤③；T01 系统层缺口）

@@ -1,7 +1,8 @@
-"""`system/schema` —— facts 8 类对象模型的唯一定义与读写层。
+"""`system/schema` —— facts 对象模型的唯一定义与读写层。
 
 对外导出：
-- `models`      8 类对象 / 五类时间 mixin / NumericClaim / DerivedValue / 全部枚举
+- `models`      对象模型 / 五类时间 mixin / NumericClaim / DerivedValue / 全部枚举
+- `stems`       `facts/` 事实表的 stem 注册表（**不依赖 pydantic**，供夹具等轻量消费方使用）
 - `assertions`  `assert_present` / `assert_absent` / `assert_gate_has_no_numeric_confidence`
 - `store`       追加式真源的追加 / 读取 / as-of / 索引重建
 

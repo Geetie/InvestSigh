@@ -7,7 +7,7 @@ python system/scripts/checks/append_only_guard.py [code_root]
 
 **纪律 4：追加式不可变 —— pre-commit 拒改既有行（新增放行）。**
 
-`facts/*.jsonl` 是 8 类对象的**唯一真源**，且是追加式（append-only）：
+`facts/*.jsonl` 是**事实表的唯一真源**，且是追加式（append-only）：
 每一次修正都必须**追加新版本行**（`recorded_seq` 递增 + `version_kind` 标记），
 而不是就地改写历史。理由（`Ch9 §3.4.2`）：就地改写会让"当时看到的是什么"
 永远无法复原 —— 而本项目**整份交付的价值就在可审计**。
@@ -125,6 +125,12 @@ def check(root: Path) -> CheckReport:
     report.scanned["staged_facts_files"] = len(files)
     report.scanned["diff_bytes"] = len(diff_text)
     report.notes.append(f"pathspec = {pathspec}（相对仓库根 {toplevel}）")
+    # ★ **列出被检文件名**（不只是计数）：pathspec 是 glob，扩表后新表自动落进被检集合 ——
+    #   而"扫到了几张、分别是谁"是**可审计**的证据。只报计数时，"新表没被扫到"
+    #   与"新表被扫到但恰好无违例"在输出上分辨不出来（`tests/injection/test_append_only.py`
+    #   ::test_new_stem_append_passes 断言的正是这条）。
+    if files:
+        report.notes.append("staged facts files = " + ", ".join(sorted(files)))
 
     if not diff_text.strip():
         report.notes.append(

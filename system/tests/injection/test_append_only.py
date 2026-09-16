@@ -53,6 +53,14 @@ def git_repo() -> Path:
         encoding="utf-8",
     )
     (facts / "tasks.jsonl").write_text('{"task_id":"t1"}\n', encoding="utf-8")
+    # ★ **扩表（18 → 22）的回归**：`relation_flows` 是本批次新增的表。
+    #   守卫的 pathspec 是 `system/facts/*.jsonl`（**glob**），故新文件必须**自动覆盖** ——
+    #   下面的 `test_new_stem_*` 两个用例就是这条的实测证据（不靠"看代码觉得应该是"）。
+    (facts / "relation_flows.jsonl").write_text(
+        '{"flow_id":"F1","relation_id":"R1","flow_kind":"product"}\n'
+        '{"flow_id":"F2","relation_id":"R1","flow_kind":"capital"}\n',
+        encoding="utf-8",
+    )
     _git(repo, "init", "-q")
     _git(repo, "add", "system/facts")
     _git(repo, "commit", "-q", "-m", "seed facts")
@@ -120,6 +128,37 @@ def test_no_staged_facts_change_passes_with_explicit_note(git_repo: Path) -> Non
     proc = _run_guard(git_repo)
     assert proc.returncode == 0
     assert "NO_STAGED_FACTS_CHANGES" in proc.stdout, "无被检对象时必须显式记 note，不得静默通过"
+
+
+# ─────────── 扩表（18 → 22）回归：新表**自动**在守卫覆盖范围内（pathspec 是 glob） ───────────
+
+
+def test_new_stem_append_passes(git_repo: Path) -> None:
+    """★ 新增表（`relation_flows`）**追加一行** → 必须放行。
+
+    证的是"扩表不需要改守卫"：pathspec = `system/facts/*.jsonl` 是 glob，
+    新文件自动落进被检集合（若哪天有人把它改成逐文件白名单，这条会红）。
+    """
+    target = git_repo / "system" / "facts" / "relation_flows.jsonl"
+    with open(target, "a", encoding="utf-8") as fh:
+        fh.write('{"flow_id":"F3","relation_id":"R1","flow_kind":"demand_signal"}\n')
+    _git(git_repo, "add", "system/facts/relation_flows.jsonl")
+
+    proc = _run_guard(git_repo)
+    assert proc.returncode == 0, f"新表的纯追加被误拦\n{proc.stdout}\n{proc.stderr}"
+    assert "staged_facts_files: 1" in proc.stdout
+    assert "relation_flows" in proc.stdout, "新表必须出现在被检文件清单里（不是'没被扫到'）"
+
+
+def test_new_stem_rewrite_is_rejected(git_repo: Path) -> None:
+    """★ 新增表里**改写既有行** → 必须 exit 1（新表同样受"追加式不可变"约束）。"""
+    target = git_repo / "system" / "facts" / "relation_flows.jsonl"
+    lines = target.read_text(encoding="utf-8").splitlines(keepends=True)
+    lines[0] = '{"flow_id":"F1","relation_id":"R1","flow_kind":"product","tampered":true}\n'
+    target.write_text("".join(lines), encoding="utf-8")
+    _git(git_repo, "add", "system/facts/relation_flows.jsonl")
+
+    assert_rejected(_run_guard(git_repo), rule_hint="纪律 4")
 
 
 def test_non_git_directory_fails_loudly() -> None:

@@ -146,7 +146,7 @@ def check(root: Path) -> CheckReport:
     report = CheckReport(checker="no_signal_day")
     recs = _load_jsonl(root / "facts" / "recommendations.jsonl")
     # check_record 是控制面**子记录**，落 `facts/tasks.jsonl`（`Ch1 §C.2`；
-    # 18 个 JSONL 不得增删改名，故不新开文件）
+    # 表集合不得增删改名，故不新开文件）
     tasks = _load_jsonl(root / "facts" / "tasks.jsonl")
     check_records = [
         t["check_record"] for t in tasks if isinstance(t.get("check_record"), Mapping)

@@ -173,10 +173,17 @@ def test_schema_drift_is_detected(code_root: Path) -> None:
 
 
 def test_in_sync_schema_passes(code_root: Path) -> None:
-    """**反向对照**：生成物与模型一致 → 放行。"""
+    """**反向对照**：生成物与模型一致 → 放行。
+
+    ★ 断言里的对象数**由注册表现取**（不写字面量 18/22）：表数是需求方裁定项
+      （2026-09-16 由 18 扩至 22，见 `schema/stems.py`），把它抄进测试就是又一份手工台账；
+      而这里要证的命题与具体数字无关 —— "报告里的对象数 == 注册表里的 stem 数"。
+    """
+    from schema.models import JSONL_MODELS  # 本用例已需 pydantic；与守卫口径同一真源
+
     proc = run_gate(SCHEMA_GUARD, code_root)
     assert proc.returncode == 0, f"同步的 schema 被误报\n{proc.stdout}\n{proc.stderr}"
-    assert "objects: 18" in proc.stdout
+    assert f"objects: {len(JSONL_MODELS)}" in proc.stdout
 
 
 def test_schema_guard_loaded_from_checked_code_root(code_root: Path) -> None:

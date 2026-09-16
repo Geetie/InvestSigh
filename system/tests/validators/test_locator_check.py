@@ -90,7 +90,7 @@ def test_missing_claims_file_is_input_error(code_root: Path) -> None:
     """**反向对照（`G-05`）**：真源 `facts/claims.jsonl` **缺失** → 非零退出，且输出可辨"缺失"。
 
     ★ 与上一条（存在但 0 行 → `NO_CLAIMS` + `exit 0`）**成对**：文件缺失 = 结构性违例
-      （`Ch9 §3.3.3`：18 个 JSONL 不得增删改名），必须**响亮失败**，不得静默当"无被检对象"
+      （`Ch9 §3.3.3`：`facts/` 的表集合不得增删改名），必须**响亮失败**，不得静默当"无被检对象"
       （`G-03`）。判据为**退出码**（`2` = 输入异常，与"命中违例"的 `1` 区分）。
     """
     missing = code_root / "facts" / "claims.jsonl"
