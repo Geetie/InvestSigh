@@ -101,3 +101,36 @@
 | 双方（节号 + 原文） | 本实现的取舍 | 状态 |
 |---|---|---|
 | ① `rules/pipeline.yaml::steps` 实测（主理人逐条列出）：<br>　step **1–6**：`blocking: True` **+** `implemented_in_first_version: True`<br>　step **7** `publish_recommendations`：`blocking: True` **+** `implemented_in_first_version: **False**`<br>　step **8** `continuous_verification_and_history`：同上 `True` / `False`<br>② `T-08` 已裁：**注册 1–6**，模型侧缺口显式标 `degraded` + 记 gap | **实测后果**（`ws-degrade-contract` 本单钉出，主理人复核）：7/8 永不注册 ⇒ `run_daily()` 记 gap 并令 `blocked=True` ⇒ **`status` 恒 `failed`** ⇒ 阶段④ 在首版**没有任何"成功运行"**。<br>⇒ 直接后果：`degrade_keeps_last_valid` 的**「此前已有行持有有效结果、后失败却丢引用」这一半，在真仓库上永远不可自然发生**（只能在受控输入上验证）。<br>⇒ 更根本的：**`implemented_in_first_version` 这一列在首版没有任何作用**（写 `True` 还是 `False`，都照样 blocking）—— 与 **D1 同族：声明与现实矛盾**。<br>本单**只如实登记**，**不自行改 `rules/pipeline.yaml`**（0444 + 属设计裁定）。 | **待裁定（需求方）**。**主理人推荐**：首版**不把** `implemented_in_first_version: False` 的步计入 blocking 判定，**但必须**记 `gaps` 并显式标 `deferred_by_design`。<br>**理由**：① 否则 `implemented_in_first_version` 是**死列**；② `blocked` 恒真 ⇒ **失去判别力**，且让整条降级/幂等链**恒处于告警态**，正是本项目铁律「**卡死的信号 = 被关掉的信号**」最危险的形态（对比 `T-08` 的处置：那次是"注册 1–6 + 缺显式标 `degraded`"，同样以"恢复判别力"为目标）。<br>**备选**：维持现状 ⇒ 阶段④ 在 7/8 实现前**永久不可判 PASS**，且降级契约另一半**只能受控验证**（如实但代价大）。
+
+#### ★ `T-18` 的**决定性证据**：`implemented_in_first_version` 的**代码消费者数 = 0**（主理人独立复核）
+
+`ws-degrade-contract` 在异常性复核（④-1）中提出这条，**我逐条查证属实**，且它比上表的"blocking 表"更硬 ——
+因为它把问题从"**语义上不该这样**"提升为"**机器上确实谁也没读它**"：
+
+| 检索式 | 实测结果 |
+|---|---|
+| 全仓检索 `implemented_in_first_version` | **8 处**都在 `rules/pipeline.yaml`（**声明本身**）；其余全在 **注释 / docstring / 报告 / SKILL.md**（`scripts/orchestrate/ingest_step.py:4` · `pipeline.py:152` · `chain_steps.py:6` · `PROGRESS.md:258` · `tests/injection/test_chain_steps_wiring.py:5` · `skills/aichain-daily/SKILL.md:35`）；**没有任何 `cfg.get(...)` 读取点** |
+| 对照检索同表的另一列 `blocking` | `scripts/orchestrate/pipeline.py` 里 `cfg.get("blocking")` **6 处**（:215 / :225 / :249 / :302 / :324 + :548）—— **有真实消费者** |
+
+⇒ **同一张表的两列，一列有人读、一列零人读。** 后果必然是「`blocking` 说了算、`implemented_in_first_version` 说了不算」⇒ 7/8 恒 blocked。
+
+★ **这是本项目第三次出现同一形态**，三条并列看：
+
+| # | 形态 | 具体 |
+|---|---|---|
+| `G-50` | **有实现、有生产调用方，但判据没绑** | `evidence_locatable` —— 接线接在了**错的层** |
+| `G-RC-12` | **机制存在，但在真源上不生效** | `append_only_guard` 的 pathspec 恒空 |
+| `T-18` | **声明在 `rules/` 里，但代码零消费者** | `implemented_in_first_version` —— 死列 |
+
+⇒ 共同形态一句话：**「写在声明里」≠「在机器上有效力」。** 三者的检查方向也是同一个：
+**「声明」与「实现」必须有**可机的**消费者/绑定关系**（本项目铁律 5）。
+
+★ **由此得出一条新的、可判定的机器检查（已派给 `ws-schema-expand` 的 13-pre，方向 2）**：
+现有的"键对齐守卫"只顾**单向**（代码读的键 **必须存在** 于 `rules/`，否则静默 fallback）；
+**必须再加反向**：**`rules/` 里声明了语义、但代码区从不读的键 ⇒ 报警**。
+反向这一侧正是 `T-18`（`implemented_in_first_version`）、`scenario_method_status_domain` / `scenario_method_status_blocking`（`ws-ch5-pricelayer` 实测：真文件有这两个键，代码却把"`pending` ⇒ 阻塞"**硬编码**）的暴露面 —— **不查这一侧，就永远发现不了"死列"。**
+
+★ **第三条并行发现（同族）**：`ws-ch5-pricelayer` 实测 `load_scenario_policy('.')` 在**真 `rules/scenario.yaml`** 上返回
+`status='pending'` / `value_source='rules'` / **`method_version=''`** —— 因为真文件**没有 `method_version` 这个键**，
+而它的**测试夹具**给了。⇒ **夹具造了一个真文件里不存在的形状**，与 `G-43`/`G-45`（夹具与真写路径不同源）**完全同族**。
+⇒ 已派该流修（要么找到真实载体，要么改**响亮失败**，**不许静默取空串**）。
