@@ -131,7 +131,7 @@ python system/scripts/ops/verify.py --batch <名>       # 已内置同一环境�
 | **G-01** | **命中即 fail，禁 warn-only**；退出码 `0` 放行 / `1` 阻断 / `2` 输入异常 | 各守卫统一走 `_common.run_checker`；`tests/guards/test_exit_code_contract.py` 逐守卫断言 |
 | **G-02** | **"X 调用了 Y"必须函数体级 AST 绑定**，禁止全文件字符串匹配（否则一行数据即可绕过） | `tests/injection/test_audit_regressions.py` + 各守卫自查；例：`injection_guard._body_calls()` |
 | **G-03** | **不得把"无被检对象"当"已验证"**：空样本必须显式记 `note` | 各守卫 `note` + `tests/injection/test_wiring_guards.py` |
-| **G-04** | **注释/字符串在扫描前抹白**，否则"描述规则的文字"会被规则自己判成违例 | `no_placeholder_guard.strip_comments_and_strings()` + 反向对照测试 |
+| **G-04** | **注释与 docstring 在扫描前抹白**，否则"描述规则的文字"会被规则自己判成违例。<br>★ **但普通字符串字面量必须保留** —— 有些规则的检测对象**就是字符串**（`FAKE_DATA` / `DEMO_TALK` / `HARDCODED_FALLBACK`）。**抹白过头 = 把探测器一起抹掉**（实测 `D-4`：三条规则曾永不命中，正是 `§一 底线 1` 的第一类假交付） | `no_placeholder_guard.strip_comments_and_docstrings()`（逐行规则）+ `strip_comments_and_strings()`（跨行规则）+ 双向对照测试 |
 | **G-05** | **降噪就是有效性 —— 宁可漏报不可吵**：每条拦截判据必须配**反向对照** | 注入测试一律成对（正向 + 反向） |
 | **G-06** | **唯一真源**：不得出现第二条同类校验路径（如第二套 `rules/` hash 校验） | `tests/injection/test_audit_regressions.py` |
 | **G-07** | 每新增守卫必须**同时**注册进 `run_all_gates.py` 与 `pre-commit.sh`（防孤儿） | 守卫注册在跑测器里可核对 |

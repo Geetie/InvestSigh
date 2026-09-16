@@ -100,7 +100,15 @@ LINE_RULES: tuple[tuple[str, str, re.Pattern[str]], ...] = (
     ("NOT_IMPLEMENTED", "NotImplementedError", re.compile(r"NotImplementedError")),
     ("FAKE_DATA", "假数据返回（mock/fake/dummy）", re.compile(r"\b(mock|fake|dummy)\b", re.IGNORECASE)),
     ("DEMO_TALK", "演示话术（coming soon / 演示用 / 先写死）", re.compile(r"coming soon|演示用|先写死|暂写死", re.IGNORECASE)),
-    ("HARDCODED_FALLBACK", "硬编码兜底返回", re.compile(r"return\s+\{[^{}]*\}?\s*[:]\s*(['\"])status\1\s*[:]\s*(['\"])ok\2")),
+    (
+        "HARDCODED_FALLBACK",
+        "硬编码兜底返回（`return {…\"status\": \"ok\"}` 式假成功）",
+        # ★ 修正 6：初版写成 `return\s+\{[^{}]*\}?\s*[:]\s*(['"])status\1…`
+        #   —— 要求 dict 字面量**之后**再跟 `: "status": "ok"`，那不是合法 Python，
+        #   **永远不可能命中**（独立于"字符串抹白"问题，是纯正则写坏）。
+        #   由独立审计 `D-4` 一并暴露：`return {"status": "ok"}` 从未被抓到。
+        re.compile(r"return\s*\{[^{}]*['\"]status['\"]\s*:\s*['\"]ok['\"][^{}]*\}"),
+    ),
 )
 
 # ── 跨行规则之一：**安全正则**（无嵌套量词）→ 全文匹配 + 回填行号 ────────────────
@@ -170,12 +178,12 @@ def _comment_only(text: str) -> str:
 
 
 def strip_comments_and_strings(text: str) -> str:
-    """把注释与字符串字面量**抹成空白**，**逐行保留换行 → 行号 1:1 不变**。
+    """把注释与**所有**字符串字面量抹成空白（保留换行 → 行号 1:1 不变）。
 
-    为什么必须做：docstring 里为解释规则会引用 `TODO` / `占位` / `mock`
-    这些词，朴素扫描会把**文档**当违例，报告被噪声淹没 → 门禁被关掉。
+    用于**跨行规则**（`except: pass` / log 后重抛 / 空函数体）：这些规则只看代码结构，
+    字符串内容与其无关，全抹白最安全。
 
-    语法不合法时退回 `_comment_only`：扫描器**不得**因源文件语法错而停摆。
+    ★ 注意：**不要**用它跑逐行规则 —— 见 `修正 5`（会把三条规则变成永不命中）。
     """
     try:
         toks = list(tokenize.generate_tokens(io.StringIO(text).readline))
@@ -186,18 +194,86 @@ def strip_comments_and_strings(text: str) -> str:
     for tok in toks:
         if tok.type not in _STRING_TOKENS and tok.type != tokenize.COMMENT:
             continue
-        (srow, scol), (erow, ecol) = tok.start, tok.end
-        for row in range(srow, erow + 1):
-            idx = row - 1
-            if idx < 0 or idx >= len(lines):
-                continue
-            line = lines[idx]
-            body_len = len(line.rstrip("\r\n"))          # 绝不跨行吃掉换行符
-            start = scol if row == srow else 0
-            end = ecol if row == erow else body_len
-            start = min(max(start, 0), body_len)
-            end = min(max(end, start), body_len)
-            lines[idx] = line[:start] + " " * (end - start) + line[end:]
+        _blank_span(lines, tok.start, tok.end)
+    return "".join(lines)
+
+
+def _docstring_spans(text: str) -> list[tuple[tuple[int, int], tuple[int, int]]]:
+    """模块/类/函数**首个 docstring** 字面量的位置（1-based 行、0-based 列）。
+
+    用 `ast` 精确定位"哪一段字符串是 docstring"，从而把它与**普通字符串字面量**区分开。
+    """
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return []
+    spans: list[tuple[tuple[int, int], tuple[int, int]]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        body = getattr(node, "body", None) or []
+        if not body:
+            continue
+        first = body[0]
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
+            value = first.value
+            spans.append(
+                (
+                    (value.lineno, value.col_offset),
+                    (value.end_lineno or value.lineno, value.end_col_offset or value.col_offset),
+                )
+            )
+    return spans
+
+
+def _blank_span(
+    lines: list[str], start: tuple[int, int], end: tuple[int, int]
+) -> None:
+    """把 `lines`（就地）中 `[start, end)` 区间抹成空格，**绝不跨行吃掉换行符**。"""
+    (srow, scol), (erow, ecol) = start, end
+    for row in range(srow, erow + 1):
+        idx = row - 1
+        if idx < 0 or idx >= len(lines):
+            continue
+        line = lines[idx]
+        body_len = len(line.rstrip("\r\n"))
+        a = scol if row == srow else 0
+        b = ecol if row == erow else body_len
+        a = min(max(a, 0), body_len)
+        b = min(max(b, a), body_len)
+        lines[idx] = line[:a] + " " * (b - a) + line[b:]
+
+
+def strip_comments_and_docstrings(text: str) -> str:
+    """抹白**注释 + docstring**，**保留普通字符串字面量**（用于逐行规则）。
+
+    ★ 修正 5（由独立审计 `D-4` 抓出的**真实回归**）：
+      前一版为了让 docstring 里"讨论占位符概念"的文字不误报，把**所有**字符串都抹白了。
+      后果是三条逐行规则**永不命中**：
+        - `HARDCODED_FALLBACK`（`return {"status": "ok"}` 式假成功）
+        - `DEMO_TALK`（`"coming soon"` / `"演示用"` / `"先写死"`）
+        - `FAKE_DATA`（`"mock"` / `"fake"` / `"dummy"`）
+      它们检测的对象**本来就是字符串字面量** —— 抹白字符串等于把探测器一起抹掉。
+      这正是 `§一 底线 1`「真实现」要抓的第一类假交付，属**降噪降过了头**。
+
+      现改为"精确区分"：**docstring 与注释**（解释性文字）抹白；
+      **普通字符串字面量**（可能是真数据/真话术）**保留**。
+    """
+    try:
+        toks = list(tokenize.generate_tokens(io.StringIO(text).readline))
+    except (tokenize.TokenError, IndentationError, SyntaxError, ValueError):
+        return _comment_only(text)
+
+    lines = text.splitlines(keepends=True)
+    for tok in toks:
+        if tok.type == tokenize.COMMENT:
+            _blank_span(lines, tok.start, tok.end)
+    for span in _docstring_spans(text):
+        _blank_span(lines, span[0], span[1])
     return "".join(lines)
 
 
@@ -321,21 +397,25 @@ def scan_file(path: Path, root: Path) -> tuple[list[Finding], list[str]]:
     notes: list[str] = []
 
     if path.suffix == ".py":
-        # 注释/字符串抹白 → 逐行规则与两行跨行规则都跑在"代码本身"上
-        code = strip_comments_and_strings(text)
+        # ★ 两类抹白口径（`修正 5`）：
+        #   - 逐行规则跑在"注释+docstring 抹白、**普通字符串保留**"的文本上
+        #     （否则 FAKE_DATA / DEMO_TALK / HARDCODED_FALLBACK 永不命中）
+        #   - 跨行规则只关心代码结构，用"全字符串抹白"的文本更安全
+        line_scope = strip_comments_and_docstrings(text)
+        structure_scope = strip_comments_and_strings(text)
 
-        for lineno, line in enumerate(code.splitlines(), start=1):
+        for lineno, line in enumerate(line_scope.splitlines(), start=1):
             for rule, reason, pattern in LINE_RULES:
                 if pattern.search(line):
                     findings.append(Finding(rule, reason, lineno))
 
         # ── 跨行（两行）规则：**全文匹配 + 回填行号** ──
         for rule, reason, pattern in CROSSLINE_REGEX_RULES:
-            for m in pattern.finditer(code):
-                findings.append(Finding(rule, reason, _line_of_offset(code, m.start())))
+            for m in pattern.finditer(structure_scope):
+                findings.append(Finding(rule, reason, _line_of_offset(structure_scope, m.start())))
 
         # ── 跨行（结构）规则 ──
-        findings.extend(scan_log_and_reraise(code))
+        findings.extend(scan_log_and_reraise(structure_scope))
 
         # ★ EMPTY_BODY 走**原文**（保留 docstring）：docstring 本身是语句，
         #   异常类"只有 docstring"不是空体（修正 3）。

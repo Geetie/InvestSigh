@@ -11,7 +11,7 @@
 | # | 缺口 | 设计锚点 | 严重度 | 状态 |
 |---|---|---|---|---|
 | **G-01** | **注入防护 10 用例全缺**：base64 藏指令 / 同形字 / 诱导 shell / 伪造分隔符 / 自称官方提权 / 忽略规则买入 / 换基准 / 删反证 / 改规则文件 / 藏表格图片字幕。全仓 `grep base64\|同形字\|homoglyph\|伪造分隔符\|官方提权\|诱导` **零命中** | `施工图 §3.4`（测试资产）· `Ch9 §3.2.1`「注入防护 = B 规则 + C 执行器」 | **高** | `DONE`（证据：`tests/injection/test_prompt_injection.py`（10 正向 AC-13~22 + 10 反向对照 AC-23~32 + AC-34 空样本）；`reports/verify_injection_latest.log` 批次 `injection` **98 passed / exit=0**） |
-| **G-02** | **数据/指令分离执行器未实现**：G-01 的被测对象。设计明确它是 C 档自建项（"规则 = 只读 Git 文件（模型不可写）" + "数据/指令分离执行器 + 测试"） | `Ch9 §3.2.1` 第 6 行 | **高** | `DONE`（证据：`scripts/guard/`（7 模块：`rawsink`/`annotate`/`rulewrite`/`toolwatch`/`claims`/`executor`/`__init__`）+ `scripts/checks/injection_guard.py`；主理人独立验收见 `reports/batch4_acceptance_record.md`；`reports/verify_gates_latest.log` 20 项门禁全绿） |
+| **G-02** | **数据/指令分离执行器未实现**：G-01 的被测对象。设计明确它是 C 档自建项（"规则 = 只读 Git 文件（模型不可写）" + "数据/指令分离执行器 + 测试"） | `Ch9 §3.2.1` 第 6 行 | **高** | ⚠️ **PARTIAL（独立审计否决了 `DONE`）**：**实现已完成且经独立验证**（`scripts/guard/` 7 模块 + `injection_guard` 第 19 项门禁 + `handle_external_request` 路由入口；我逐条复现过四处反事实），**但从未被任何非测试代码调用** —— 真实仓库 `facts/claims.jsonl` = **0 行**、`raw/` 仅 `.gitkeep`，`grep process_external_text\|guard.executor` 在 `tests/` 之外 **0 命中**。按 `§一 底线 2` 属 **Wiring Failure**（能通过 100% 覆盖率测试、主流程从不触发）。生产接线属**阶段② 采集层** → 追踪项 **G-13**。审计报告：`reports/batch4_independent_audit.md` |
 | **G-03** | **`facts/` 13/18 个 JSONL 无消费方**：仅 `industry_nodes.jsonl` 有 44 行（且**有写无读**，`§6.2 Empty Execution`）；其余 12 个业务代码零引用、且为空文件 | `Ch9 §3.3.3` / `§十三 第 2 问` | **高**（阶段① 固有） | `PARTIAL`：消费方按设计在 ②–⑤ 阶段随各层交付而产生；**不得据此判"已验证"** |
 | **G-04** | **7 条声明为 `automated` 的通过判据未实现**（本实现已用 `criterion()` 在函数体内**显式绑定**，并在报告里逐条列出）：<br>`nvidia_sample`: `chapter4_g_depth` · `evidence_locatable`<br>`core_chain`: `t01_t14_all_pass` · `graph_and_ask_traceable`<br>`daily_run`: `coverage_verifiable`<br>`expansion`: `research_standard_consistent` · `investment_result_verifiable` | `registry/delivery.yaml` 各阶段 `pass_criteria_testable` | **高** | `OPEN`（阶段②–⑤ 前置；**前置齐备时会直接阻断该阶段**） |
 | **G-05** | **`scripts/{compute,decision,graph,validators}/` 是空包**：施工图把它们列为 ②③ 阶段 C 档承重块（确定性计算 / 三维决策函数 / T12 传播 / `locator_check`） | `施工图 §3.2` | 中（②③ 前置） | `OPEN` |
@@ -22,6 +22,7 @@
 | **G-10** | **`facts/industry_nodes.jsonl` 有写无读**：写入方 `scripts/ingest/seed_industry_nodes.py`，业务代码零读取方 | `§6.2 Empty Execution` | 中 | `OPEN`：读取方（图谱页 / 关系核验）属阶段③ |
 | **G-11** | **`index/facts.sqlite` 只在测试里重建**：无生产读取方（可重建索引尚未被真正使用） | `Ch9 §3.3.2` | 低 | `OPEN`（④ 前置） |
 | **G-12** | **11 项参数全部 `tbd`**：A 档拍板是**验收前置**，不阻塞开工 | `§6.1` / `§十二 N-03` | — | `OPEN`（**等需求方**；代码路径完整、值一改即生效） |
+| **G-13** | **注入防护执行器缺生产接线**（批次 4 独立审计 `D-1`）：`scripts/guard/**` 6 模块与 `process_external_text` / `handle_external_request` **仅被测试调用**；`pipeline.py` 只注册了 `_publish_hook`/`_verify_hook`，**无采集步（第 1 步）handler** | `Ch9 §3.4.6` 措施①（"外部文本**只进** `raw/` 与 `claims`"）· `Ch6 §D`（采集编排）· `§一 底线 2` | **高** | `OPEN` —— **验收判据（明确、可测）**：`pipeline.py` 第 1 步（或 Ch6 采集 Skill）**真的调用** `process_external_text`，并在**真实 `system/`** 上留下 `raw/<file>` 与 `facts/claims.jsonl` 落库痕迹（≥1 行）。**注意**：该接线属**阶段② 采集层**，阶段① 内不越阶实现（纪律 12） |
 
 ---
 
@@ -69,9 +70,35 @@
 
 ---
 
+## 批次 4 独立审计（换人 · 对抗性）—— 结论与已处理项
+
+审计报告：`reports/batch4_independent_audit.md`（356 行）。判定统计 **PASS 29 / FAIL 5 / UNKNOWN 0 / HUMAN_REVIEW 1**。
+
+| 审计编号 | 缺陷 | 处理 |
+|---|---|---|
+| **D-4（高，且是主理人自己引入的回归）** | `no_placeholder_guard` 的 `FAKE_DATA` / `DEMO_TALK` / `HARDCODED_FALLBACK` **永不命中** —— 早先为消除 docstring 误报把**所有**字符串抹白，等于把探测器一起抹掉（`§一 底线 1` 第一类假交付） | ✅ **已修**（根因有**两个**：抹白过度 + `HARDCODED_FALLBACK` 正则写坏）。改为**只抹白注释与 docstring**、保留普通字符串；新增 4 条回归测试；反向对照实测 **8 条占位全部命中**、docstring 里的 `TODO/占位/mock` **不误报** |
+| **D-1（高）** | 执行器一族**零生产调用方**（真实仓库 `facts/claims.jsonl` = 0 行、`raw/` 仅 `.gitkeep`）→ `§一 底线 2` Wiring Failure，`G-02` 不该 `DONE` | ✅ **已如实纠正**：`G-02` 改 `PARTIAL`；新增追踪项 **G-13**（含明确验收判据） |
+| D-2（中高） | `executor.py` 两条异常逃逸：`process_raw_file` 缺文件 → `FileNotFoundError` 抛给调用方；`handle_external_request(kind="data")` 缺字段 → `KeyError` | `OPEN` —— 待工程师收成 `blocked`（`AC-05` 因此判 FAIL） |
+| D-3（中） | `injection_guard` 的 B/C 断言可一次改写绕过：`getattr(os,"system")(cmd)` → exit 0；变量 / f-string / 路径拼接写 `recommendations` → exit 0 | `OPEN` —— 属 `D-9` 同类（断言不够结构化），待加固 |
+| D-5（中） | `AC-15` 特有断言**真空**：夹具上 `append_only_guard` 报 `staged_facts_files: 0` + note「无被检对象」，其 exit 0 与"追加式不可变未破"**无逻辑关系** | `OPEN` —— 待 QA 改为非真空证据（真 git 仓库路径） |
+| D-6 / D-7 / D-8（低-中） | `raw/` 同名不同内容**静默覆盖**（+ `kind="data"` 允许直传 `raw_name`）；`executor.py` docstring 强度 > 代码；执行器**无日志**（N-3 对执行器不成立） | `OPEN` —— 待工程师 |
+
+### ★ 审计员最重要的**概念**判断（我认同，且必须记下来）
+
+> **B 组（AC-13~22）与 C 组（AC-23~32）都不具备判别力** —— 把注入文本换成完全无害的文本，
+> 两边断言**同样全绿**，因为执行器与守卫**都不读文本内容**。
+> 这两组证明的是「**该链路没有副作用**」，**不是**「系统识别出了注入」。
+
+这是**设计取向的必然结果**（`R-01` 与 `AC-33` 明确要求判据取**效果**、禁词面判定），
+**不是测试写错**。但它意味着：**"10 个注入用例全绿"这句话的强度被高估了**。
+真正有鉴别力的只有 **④改写规则文件** 与 **⑦诱导 shell** 两条**反事实**（审计已逐条复现成立）。
+→ 后继批次若要"识别注入"，必须引入**内容级**判据，而那与 `AC-33` 的降噪要求存在张力，**需需求方裁定**。
+
+---
+
 ## 结论一句话
 
-**阶段① 的四条书面判据（`registry/delivery.yaml::prep.pass_criteria_testable`）全部真实满足，
-且判据与实现已由 AST 机械绑定；但 G-01/G-02 两项"注入防护"测试资产与执行器尚未交付，
-G-03 的"无被检对象"问题在 ②–⑤ 阶段才会自然消解 —— 因此阶段① 判据 PASS，
-但 `施工图 §3.4` 层面的阶段① ≠ 可宣告完成。**
+**批次 4 不宣告完成。** `G-01`（10 用例）**DONE**；`G-02` 仅 **PARTIAL** ——
+执行器实现与验证都是真的，但**从未被非测试代码调用**，属 `§一 底线 2` 的 Wiring Failure，
+其生产接线（`G-13`）属**阶段② 采集层**，阶段① 内不越阶实现（纪律 12）。
+独立审计另开 4 条 `OPEN`（`AC-05` 异常逃逸 / `injection_guard` B·C 可绕过 / `AC-15` 证据真空 / `raw/` 静默覆盖）。

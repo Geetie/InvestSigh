@@ -365,6 +365,60 @@ def test_placeholder_mention_in_docstring_passes(code_root: Path) -> None:
     assert proc.returncode == 0, f"docstring 说明被误报\n{proc.stdout}\n{proc.stderr}"
 
 
+# ═══════════════ 反向对照 · 字符串型占位（独立审计 D-4 抓出的真实回归） ═══════════════
+#
+# 背景：早先为消除 docstring 误报，把**所有**字符串字面量都抹白了 ——
+# 于是三条"检测对象本来就是字符串"的规则**永不命中**（抹白等于把探测器一起抹掉）：
+#   HARDCODED_FALLBACK / DEMO_TALK / FAKE_DATA
+# 而它们正是 `§一 底线 1`「真实现」要抓的第一类假交付。
+# 修法：**只抹白注释与 docstring**，保留普通字符串字面量（`修正 5/6`）。
+# 下列用例把这条修复钉死 —— 缺了它们，下一次"降噪"很容易再抹过头。
+
+def test_placeholder_hardcoded_status_ok_is_rejected(code_root: Path) -> None:
+    """`return {"status": "ok"}` 式**假成功** → 必须 exit 1（曾因正则写坏而永不命中）。"""
+    _inject_py(
+        code_root,
+        "scripts/fake_ok.py",
+        'def publish(row) -> dict:\n    return {"status": "ok"}\n',
+    )
+    assert_rejected(
+        run_gate(PLACEHOLDER, code_root, "--fail-on", "warn"), rule_hint="HARDCODED_FALLBACK"
+    )
+
+
+def test_placeholder_demo_talk_string_is_rejected(code_root: Path) -> None:
+    """字符串里的演示话术（`coming soon` / `演示用`）→ 必须 exit 1（曾被抹白而漏报）。"""
+    _inject_py(
+        code_root,
+        "scripts/demo.py",
+        'def label() -> str:\n    return "coming soon"\n\n\n'
+        'def label_cn() -> str:\n    return "演示用数据"\n',
+    )
+    assert_rejected(run_gate(PLACEHOLDER, code_root, "--fail-on", "warn"), rule_hint="DEMO_TALK")
+
+
+def test_placeholder_fake_data_string_is_rejected(code_root: Path) -> None:
+    """字符串里的假数据标记（`mock`）→ 必须 exit 1（曾被抹白而漏报）。"""
+    _inject_py(
+        code_root,
+        "scripts/stub.py",
+        'def payload() -> str:\n    return "mock"\n',
+    )
+    assert_rejected(run_gate(PLACEHOLDER, code_root, "--fail-on", "warn"), rule_hint="FAKE_DATA")
+
+
+def test_placeholder_words_in_ordinary_string_are_still_caught(code_root: Path) -> None:
+    """★ 关键区分力：**普通字符串**里的 `TODO` 必须被抓（只有 docstring 才免罪）。"""
+    _inject_py(
+        code_root,
+        "scripts/todo_string.py",
+        'def marker() -> str:\n    return "TODO: finish this"\n',
+    )
+    assert_rejected(
+        run_gate(PLACEHOLDER, code_root, "--fail-on", "warn"), rule_hint="PLACEHOLDER-TODO"
+    )
+
+
 def test_placeholder_in_config_value_is_rejected(code_root: Path) -> None:
     """配置里的**数据值**出现占位话术 → 必须 exit 1。"""
     doc = _read_yaml(code_root, "rules/scope.yaml")
