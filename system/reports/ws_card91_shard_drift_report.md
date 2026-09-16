@@ -9,7 +9,7 @@
 | 我的提交 | `1706916`（`verify.py`）· `41fbe7e`（`test_shard_coverage.py`）· `6f71a3c`（`CONVENTIONS.md`） |
 | 取数解释器 | `$HOME/.workbuddy/binaries/python/envs/default/bin/python` = **Python 3.13.12 / pytest 9.1.1** |
 | 计数口径 | 与 `tests/injection/test_shard_coverage.py::_collect_count` **同源**（`--collect-only -q -p no:cacheprovider --noconftest`，`PYTHONPATH=<system>/tests`） |
-| 收尾状态 | `pre-commit`（**真钩子**）三次全绿、未用 `--no-verify`；`git status --short` 空 |
+| 收尾状态 | `pre-commit`（**真钩子**）**6 次全绿**（6 个提交各一次）、未用 `--no-verify`；`git status --short` 空 |
 
 ★ **全文行号约定**：一律是**改前**行号（= `main@d766a32`，我用 `git show d766a32:<file>` 逐条取，不靠回忆）。
 改后行号会整体偏移（`verify.py` +4 / `test_shard_coverage.py` +2 / `CONVENTIONS.md` +7，且**不是均匀平移** —— 改动是分散的）
@@ -211,10 +211,8 @@ $ python scripts/trace/traceback.py .
 $ git stash pop        # 恢复，status 复现为 3 个 M
 ⇒ 唯一变量 = 我的改动被移除，**红灯不变** ⇒ **pre-existing，与本次文案改动无关**（它是运行态数据门禁）
 
-(3) pre-commit **真钩子**（三次提交各一次，全程未用 --no-verify）
-  1706916 → pre-commit ✓ 全部门禁放行
-  41fbe7e → pre-commit ✓ 全部门禁放行
-  6f71a3c → pre-commit ✓ 全部门禁放行
+(3) pre-commit **真钩子**（**6 个提交各一次，全部 ✓ 全部门禁放行**，全程未用 --no-verify）
+  1706916 / 41fbe7e / 6f71a3c / 89c6e96 / 420800e / 7bab705  → 逐次 pre-commit ✓
 
 (4) 我改过/受影响的两个测试文件
 $ sh scripts/ops/run_pytest.sh tests/injection/test_shard_coverage.py
@@ -272,6 +270,28 @@ tests/guards     ->                        ← ★★ 假零 ★★（连一行�
 > ⇒ 判据（可直接抄）：**任何 `| grep` 取的"数量类"读数，必须同时打印 `rc`**；`rc ∉ {0,5}` 时**该读数作废**（不是"打折扣"）。
 
 ★ 我把它算作**我自己的第 7 次仪器错**（前 6 次已在 `#82` 报告 §7.3 留痕）。**这一次是我自己抓到的，不是别人报的** —— 但抓到的原因仍然是同一条老规矩：**取证后补一个"已知非零"的控制组**（`tests/pricelayer` 那格与 CONVENTIONS 的 `168` 不一致，才逼我去看那一行到底成不成立）。**若我这次的控制组恰好全对，我就带着 47 走了。**
+
+### §5.3 ★ 副作用披露（**我主动报的，不是被问出来的**）
+
+`ws-real-collect-2` 在后台起「轮 1」批次实测时问过我 `/tmp` 判据会不会撞车。核过 `conftest.py` 后答复如下（结论 + 证据都在这儿，便于复核）：
+
+```
+system/tests/conftest.py:23    SYSTEM_ROOT = Path(__file__).resolve().parents[1]   # 按**树**推导
+system/tests/conftest.py:258   _SESSION_LOCK = SYSTEM_ROOT / "tests" / ".pytest-session.lock"
+$ ls system/tests/.pytest-session.lock   →  No such file or directory     （无会话）
+$ ls -la system/tests/.work/             →  空（只有 . 与 ..）             （无残留夹具）
+```
+
+⇒ **会话锁与夹具目录都是"按工作树"的** ⇒ 两条流**互不排斥、也互不触碰**（他的判断成立，不必让路）；我的 `/tmp` 两个脚本是**一次性只读**（`--collect-only` + `--noconftest` ⇒ 不建夹具、不删、不碰 `.work/`、不取锁），**跑完即退**，不是常驻判据。
+
+★ **但我要主动报两件我做过、且可能有代价的事**：
+
+| # | 事实 | 潜在代价 | 我的处置 |
+|---|---|---|---|
+| 1 | 我在 **23:47~23:50** 走 `run_pytest.sh` 跑过**两次真 pytest**（§4(4) 的那两条证据），它们**碰了我树的 `tests/.work/`**（现已清空） | 若"`.work/` 未被触碰"是**扫整个 repo**（含各工作树）的判据，我这两次**违规** | **如实报给 `ws-real-collect-2`**，请他按他的判据处置；**不自我豁免** |
+| 2 | 同一窗口内我占用了宿主 CPU/IO | ★ 本仓有明证：宿主并发可把单片拖慢 **11.8×**（`verify.py` L344-349：`injection-a` 工作树 **80.92s** vs 隔离 **6.85s**）；他的轮 1 正好含 `valuelayer`/`pricelayer` 这类慢批次 ⇒ **落在该窗口的墙钟读数可能被抬高** | 已请他把**落在 23:47~23:50 的格子重跑**；并声明**此后我零负载**（本卡已交付，在等裁定） |
+
+★ 为什么写进报告而不是只发消息：这是**本次会话的副作用记录**。§4(4) 那两条证据正是我跑出来的，**读证据的人有权知道取证动作本身动了什么**（`V-11` 仪器轴的同一逻辑：仪器的动作也在被测范围内）。
 
 ### §5.2 残余风险（如实登记）
 
@@ -377,8 +397,8 @@ cd $W/system && sh scripts/ops/run_pytest.sh tests/guards/test_verification_poli
 1. **没改片数** —— 7 片 / 上限 32 一律保留（那是主理人决策）；
 2. **没改 `pipeline.py` / `chain_steps.py`**（派单明令）；
 3. **没碰 `rules/**`**（0444；本次 `git status` 全程无 `rules/` 变更）；
-4. **没用 `git add -A`**（三次提交均为显式单文件路径）；
-5. **没用 `--no-verify`**（三次 `pre-commit` 输出均在 §4(3)）；
+4. **没用 `git add -A`**（6 个提交均为显式单文件路径）；
+5. **没用 `--no-verify`**（6 次 `pre-commit` 输出均在 §4(3)）；
 6. **没把 `traceback.py` 的红算在我头上、也没掩盖它**（§4(2) 给了干净树对照）；
 7. **没跑整批 `tests/guards` 与各 injection 整片**（删除配额约束）—— §4.1 已写明这是**边界**而非"已验证"；
 8. **没动 §6 的四项**（`pricelayer` 例数 / 项数族 / 计数-例两值 / `12 vs 32`）—— 登记 + 推荐，**不自裁**。
