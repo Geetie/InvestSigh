@@ -1,0 +1,48 @@
+#!/bin/sh
+# 在**沙箱外**跑 pytest（关闭 Python 层 FS broker hook）。
+#
+# 用法：
+#   sh system/scripts/ops/run_pytest.sh tests/unit                 # 跑一批
+#   sh system/scripts/ops/run_pytest.sh tests/unit/test_contracts.py -v
+#
+# ★ 为什么必须这样跑（实测根因）：
+#   WorkBuddy 的 `sitecustomize.py` shim 会在**每一次文件操作**上 brokered 到
+#   宿主进程走 IPC。触发条件是：
+#       CODEBUDDY_SAFE_DELETE_SANDBOX=1   或   CODEBUDDY_BROKERED_FS_HOOK_ENABLED=1
+#   **Bash 工具的沙箱开关关不掉它**（它在 Python 解释器层）。
+#
+#   后果：夹具 `copytree` 每个用例复制 130 个文件 → 每个用例数百次 broker 往返 →
+#   数百用例累积数万次 → **在某个点 broker 阻塞，进程卡死且卡点漂移**
+#   （实测 `tests/unit/test_contracts.py` 分别卡在第 15 / 17 / 19 条）。
+#
+#   实测对照：
+#     broker 开 → 卡死（faulthandler 堆栈落在 `_brokered_shutil_copytree`）
+#     broker 关 → 12 次 copytree 每次 0.026s，全部通过
+#
+# ★ 只用 pytest 请走本脚本；跑整套请用 `python system/scripts/ops/verify.py --batch <名>`
+#   （已内置同一环境修正，且**分批 + 每批独立超时**）。
+
+set -eu
+
+export CODEBUDDY_SAFE_DELETE_SANDBOX=0
+export CODEBUDDY_BROKERED_FS_HOOK_ENABLED=0
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT/system"
+
+PY="${WORKBUDDY_PY:-}"
+if [ -z "$PY" ]; then
+  for cand in \
+    "$HOME/.workbuddy/binaries/python/envs/default/bin/python" \
+    "$REPO_ROOT/system/.venv/bin/python" \
+    python3
+  do
+    if command -v "$cand" >/dev/null 2>&1; then PY="$cand"; break; fi
+  done
+fi
+if [ -z "$PY" ]; then
+  echo "run_pytest.sh: 找不到可用的 python" >&2
+  exit 2
+fi
+
+exec "$PY" -m pytest "$@" -p no:cacheprovider

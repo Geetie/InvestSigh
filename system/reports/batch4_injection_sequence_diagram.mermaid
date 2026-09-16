@@ -1,0 +1,50 @@
+%% 批次 4 · 注入防护 —— 调用时序图
+%% 源：system/reports/batch4_injection_design.md §4.2 / §4.3
+
+%% ── ① AC-01 真实入口（ingest → 主张化 → prompt 组装）──
+sequenceDiagram
+    autonumber
+    actor Test
+    participant Exec as guard.executor
+    participant Raw as guard.rawsink
+    participant Ann as guard.annotate
+    participant Clm as guard.claims
+    participant Store as schema.store
+    participant Led as guard.toolwatch
+
+    Test->>Exec: process_external_text(root, text, claim_nature=fact, ...)
+    Exec->>Led: tool_call_ledger()（局部账本）
+    Exec->>Raw: store_raw(root, name, text)
+    Raw-->>Exec: raw/<name>（外部文本仅落 raw/，不在 rules/）
+    Exec->>Ann: annotate_as_data(text, source_ref=raw_ref, locator)
+    Ann-->>Exec: AnnotatedData(role="untrusted_analysis_data")
+    Exec->>Clm: build_claim(claim_nature=..., claim_form=..., tier=..., ...)
+    Clm-->>Exec: Claim（claim_nature 必填已满足）
+    Exec->>Store: append_records(root, "claims", [claim])
+    Store-->>Exec: 1（pydantic 校验通过 → 落库）
+    Note over Exec,Led: 全程未调用 request_tool → 账本 tool_calls == 0
+    Exec-->>Test: IngestResult(status="ok", tool_calls=0, prompt_context=已角色标注)
+
+%% ── ② ④/⑦ 收口点与守卫出口 ──
+sequenceDiagram
+    autonumber
+    actor Test
+    participant W as guard.rulewrite.write_rule
+    participant R as config.rules.refuse_write
+    participant T as guard.toolwatch.request_tool
+    participant G as checks.injection_guard
+    participant L as checks.rules_lock_guard
+
+    Test->>W: write_rule("rules/scope.yaml", "…")
+    W->>R: refuse_write(path)
+    R-->>W: raise ReadOnlyRuleViolation
+    W-->>Test: ReadOnlyRuleViolation（无静默写成功路径）
+
+    Test->>T: request_tool("shell", origin="external_text", ledger)
+    T-->>Test: ToolInvocationBlocked（外部来源必拒）
+
+    Test->>G: run_gate("scripts/checks/injection_guard.py", fixture)
+    G->>L: check(root)（唯一 hash 出口）
+    L-->>G: CheckReport（未改 → 0 violations）
+    G->>G: 单遍 AST 扫 scripts/guard/**（工具原语 / 写 recommendations / 收口点）
+    G-->>Test: exit 0 放行 / 1 命中 / 2 输入异常

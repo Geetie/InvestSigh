@@ -84,10 +84,44 @@ def code_root(request: pytest.FixtureRequest) -> Path:
 #   故在 session 起止各整目录清一次 —— **临时目录绝不允许进入仓库**。
 def pytest_sessionstart(session: pytest.Session) -> None:
     shutil.rmtree(WORK_DIR, ignore_errors=True)
+    _warn_if_fs_brokered()
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     shutil.rmtree(WORK_DIR, ignore_errors=True)
+
+
+def _warn_if_fs_brokered() -> None:
+    """**响亮提示**：Python 层 FS broker 开着时，夹具复制会累积到卡死。
+
+    实测：`CODEBUDDY_SAFE_DELETE_SANDBOX=1` 或 `CODEBUDDY_BROKERED_FS_HOOK_ENABLED=1`
+    时，每次文件操作都走 IPC 到宿主进程。夹具 `copytree` 每用例复制 130 个文件，
+    数百用例累积数万次往返 → **进程在某个点卡死，且卡点漂移**
+    （实测 `tests/unit/test_contracts.py` 分别卡在第 15 / 17 / 19 条）。
+
+    这里**只警告不退出**：万一宿主环境变了、broker 其实很快，也不该阻断测试。
+    正确跑法见警告内容。
+    """
+    import os
+
+    on = (
+        os.environ.get("CODEBUDDY_SAFE_DELETE_SANDBOX") == "1"
+        or os.environ.get("CODEBUDDY_BROKERED_FS_HOOK_ENABLED") == "1"
+    )
+    if not on:
+        return
+    print(
+        "\n"
+        "=" * 78 + "\n"
+        "[WARNING] Python 层 FS broker 处于**启用**状态。\n"
+        "  夹具 copytree 每用例复制 130 个文件 → 每个文件一次 broker IPC →\n"
+        "  累积数万次往返后**进程会卡死**（卡点在用例之间漂移，无任何输出）。\n"
+        "  正确跑法（沙箱外）：\n"
+        "    sh system/scripts/ops/run_pytest.sh tests/<子目录>\n"
+        "    或  python system/scripts/ops/verify.py --batch <unit|conflict|guards|injection|root>\n"
+        "  （verify.py 已自动为子进程关闭 broker hook）\n"
+        + "=" * 78 + "\n"
+    )
 
 
 class GateResult:

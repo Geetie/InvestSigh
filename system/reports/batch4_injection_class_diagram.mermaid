@@ -1,0 +1,89 @@
+%% 批次 4 · 注入防护 —— 类图
+%% 源：system/reports/batch4_injection_design.md §4.1
+classDiagram
+    class AnnotatedData {
+        +str role
+        +str source_ref
+        +str locator
+        +str body
+        +render() str
+    }
+    class annotate {
+        <<module scripts/guard/annotate.py>>
+        +str DATA_ROLE
+        +annotate_as_data(text, source_ref, locator) AnnotatedData
+        +assemble_prompt_context(items) str
+        -_escape_boundary(text) str
+    }
+    class rawsink {
+        <<module scripts/guard/rawsink.py>>
+        +decode_external_bytes(data) str
+        +read_external_text(path) str
+        +store_raw(root, name, text, dedup) Path
+    }
+    class rulewrite {
+        <<module scripts/guard/rulewrite.py>>
+        +write_rule(path, content) NoReturn
+    }
+    class toolwatch {
+        <<module scripts/guard/toolwatch.py>>
+        +str ORIGIN_EXTERNAL
+        +str ORIGIN_SYSTEM
+        +tool_call_ledger() ctx
+        +request_tool(name, origin, ledger) NoReturn
+    }
+    class ToolCallLedger {
+        +list calls
+        +int tool_calls
+        +record(name, origin)
+    }
+    class claims {
+        <<module scripts/guard/claims.py>>
+        +build_claim(claim_nature, claim_form, tier, ...) Claim
+    }
+    class executor {
+        <<module scripts/guard/executor.py>>
+        +process_external_text(root, text, ...) IngestResult
+        +process_raw_file(root, relpath, ...) IngestResult
+    }
+    class IngestResult {
+        +str raw_ref
+        +str claim_id
+        +AnnotatedData annotated
+        +str prompt_context
+        +int tool_calls
+        +str status
+        +str note
+    }
+    class injection_guard {
+        <<module scripts/checks/injection_guard.py>>
+        +check(root) CheckReport
+    }
+    class rules_lock_guard {
+        <<module scripts/checks/rules_lock_guard.py>>
+        +check(root) CheckReport
+    }
+    class RuleWriteRefuse {
+        <<config.rules>>
+        +refuse_write(path)
+    }
+    class Claim {
+        +str claim_id
+        +ClaimNature claim_nature
+        +ClaimForm claim_form
+        +OfficialClaimKind official_claim_kind
+        +SourceTier tier
+    }
+
+    executor --> rawsink : store_raw
+    executor --> annotate : annotate_as_data
+    executor --> claims : build_claim
+    executor --> toolwatch : tool_call_ledger
+    executor ..> IngestResult : 返回
+    annotate ..> AnnotatedData : 产出
+    claims ..> Claim : 产出
+    toolwatch ..> ToolCallLedger : 持有
+    rulewrite --> RuleWriteRefuse : 调用(必抛)
+    injection_guard --> rules_lock_guard : 复用同一 hash 出口
+    injection_guard ..> rulewrite : 断言收口点调用 refuse_write
+    injection_guard ..> executor : 扫描数据路径(scripts/guard/**)

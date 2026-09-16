@@ -65,6 +65,9 @@ run_gate "conflict_scan(L1-L5)" "$CODE_ROOT/scripts/checks/conflict_scan.py" "$C
 # ⑥ N-2 反占位符（命中即 fail）
 run_gate "no_placeholder_guard" "$CODE_ROOT/scripts/checks/no_placeholder_guard.py" "$CODE_ROOT" --fail-on warn
 
+# ⑦ 注入防护：数据/指令分离执行器 + 效果断言守卫（`Ch9 §3.4.6`；命中即 fail）
+run_gate "injection_guard" "$CODE_ROOT/scripts/checks/injection_guard.py" "$CODE_ROOT"
+
 if [ "$FAILED" -ne 0 ]; then
   echo "pre-commit: 有门禁阻断，提交被拒。" >&2
   exit 1
