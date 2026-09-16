@@ -287,7 +287,14 @@ BATCHES: Mapping[str, Batch] = {
         #   ⇒ **若将来在满负载下复测**（确认最慢一次），按 `V-02` 重算：`最慢一次 × 4~8`（≤300s）。
         #     参考值：15.79 × 8 ≈ **126s**（即 120s 是"确认后可取"的值，不是现在就该取的值）。
         "unit", "tests/unit/（契约 + 作用域匹配器）",
-        _pytest("tests/unit"), 120.0, _exit_zero,  # ★ 主理人：13-F 修后实测 15.79s/11.42s ⇒ 120s ≈ 7.6×（`V-02` 4~8× 内）
+        _pytest("tests/unit"), 300.0, _exit_zero,
+        # ★ 超时 120s → **300s**（主理人裁定）：**我们目前没有"修复后的门禁口径"读数**。
+        #   旧的两个数不能混用（实测可差 16×）：
+        #     · **门禁口径**（`verify.py` 自己的墙钟）修复前 = **49.35s**（⇒ 4× = 197s，仍在 300s 内）
+        #     · **裸 pytest 墙钟**修复后 = 15.79s/11.42s（**不是**门禁口径，不能据此定值）
+        #   ⇒ 按"不确定时取上限"（与 `guards`/`injection-*`/`pricelayer`/`valuelayer` 齐平），
+        #     待一次 **门禁口径的受控复测** 后再按 `V-02` 收紧。
+
     ),
     "conflict": Batch(
         "conflict", "tests/conflict/（P-03/P-05/P-07 schema）",
@@ -418,7 +425,10 @@ BATCHES: Mapping[str, Batch] = {
         _pytest(
             "tests/injection/test_quote_provenance.py",
         ),
-        90.0, _exit_zero,
+        # ★ 超时 90s → **300s**（主理人裁定）：与 `injection-a..f` **齐平**（同族一致性优先），
+        #   并吸收一个**已复现**的宿主状态 —— 子进程若落回沙箱内，本片单次实测可达 **247s ≫ 90s**
+        #   会被判 `[TIMEOUT]`，而同期 `a..f`（300s）不会。⇒ 只是让本片**不比邻片更早红**。
+        300.0, _exit_zero,
     ),
     "injection-f": Batch(
         "injection-f", "tests/injection/ 分片 F（阶段闸门 + 接线守卫 + 分片绑定）",
