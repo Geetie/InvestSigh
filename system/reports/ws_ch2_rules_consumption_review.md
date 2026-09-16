@@ -2045,7 +2045,93 @@ ls: rules/: No such file or directory
 ★ 另外注意 `stash@{1}: On ws/ch4-valuelayer: wip-ch4` **不是我的** —— 共享 stash 栈里还有别人的条目，**不许 `stash clear`**（同 `G-59`/共享资源的性质）。
 
 **⑤ 未做 / 未验证**
-1. 本节**不含提交 hash**（报告无法自含自身 commit 的 hash）—— 13-J 主提交的 hash 由我发给 team-lead 的交付消息携带；
-   落盘后若要复核，命令是 `git log --oneline -1 ws/ch2-rules` 与 `git rev-parse <hash>:<path>` 对上面两个 blob SHA。
+1. 本节**不含本提交自身的 hash**（报告无法自含自身 commit 的 hash）—— 13-J 主提交是 **`cf57ca4`**
+   （`test(criterion-effectiveness): 卡 13-J —— 写死计数改「判据真源派生」+ 可执行反例（逐个看清原数字在挡什么）`，
+   「2 files changed, 515 insertions(+), 12 deletions(-)」，`HEAD~1` = 合并 `da8254e`；提交时**全部门禁 PASS**）；
+   复核命令：`git log --oneline ws/ch2-rules` / `git rev-parse cf57ca4:system/tests/injection/test_criterion_effectiveness.py`
+   ⇒ `d7977a94f7c9d5d8a8564b8fe1539be4c181ba45`（与上图逐字一致）。
+   ★ 本 §17.9/§17.10 自身是在 `cf57ca4` **之后**追加的 ⇒ 本文件在 `cf57ca4` 里的 blob 是 `5742915147c8…`，
+   `cf57ca4` 之后的那次提交会给出新的 blob SHA。**这不是"文件变了"，是"报告在持续记账"** —— 读者对不上时请按上句逐级取。
 2. `G-60` 的**整文件 29 条全绿**仍然**没拿到**（§17.4/§17.7 不变：本回合删除配额仍受限）。
-3. 13-B 面仍未闭合（§17.7 第 3 条不变）。
+3. 13-B 面仍未闭合（§17.7 第 3 条不变）——
+
+### §17.10 `#69` 四项结账（对象 = 本树 `cf57ca4` / `main` = `53de9a3`）—— ★ **四项全过，13-A 面与 13-B 面同时闭合**
+
+**先钉对象（口径 10）**
+
+| 项 | 值 |
+|---|---|
+| 工作树 | `/Users/gaza/Developer/InvestSigh/.worktrees/ws-ch2-rules`（分支 `ws/ch2-rules`） |
+| 内容对象 | **`cf57ca4`** = `main`（`53de9a3`）+ 本单两个文件；其 `stage_gate.py` blob = `52698012a694` |
+| 该 blob 是否被 `a8f763f..main` 动过 | **没有**（`git log a8f763f..main -- system/scripts/delivery/stage_gate.py` 空、`git diff --stat` 空；`main` / `a8f763f` / 我的树 / 工作区**四者同 blob**） |
+| 门禁读数来源 | `python system/scripts/checks/criterion_effectiveness_guard.py system --no-report` ⇒ **`exit=0` / `RESULT: PASS（0 violations）`**；另有一次**同树**读数来自 `pre-commit`（同一门禁，输出一致）；两次跑完 `git status` **仍干净**（`--no-report` 不落报告文件） |
+
+**① `未绑定判据[nvidia_sample]` `2 → 1`** ✅
+
+```
+note: 未绑定判据[nvidia_sample]：1 条（['evidence_locatable']）
+```
+对照侧（`2 条`）在 §16.7 的那张控制表里，**两侧各自的树都写在表上** ——
+13-A 绑定前是 `['chapter4_g_depth', 'evidence_locatable']`，绑定后 `chapter4_g_depth` 转入 `bound` ⇒ 只剩 1 条。
+★ 这正是本项能"按 hash 结账"的原因：**同一条门禁、同一份登记表、只差 13-A 那一个改动**（`口径 12`：单变量）。
+
+**② `chapter4_g_depth` 在 `registry_entry_tests_resolved` 里查得到** ✅ —— **逐条枚举，不是靠总数推断**
+
+只读探针 `/tmp/probe13_q_resolved.py`（用**门禁自己的谓词** `_check_entry_tests` 对**单条** row 判定）：
+```
+entries 条数 = 16 ；_test_index 覆盖测试文件数 = 76
+逐条 resolved = 16 / 16 ；未 resolved 的条目 = []
+其中 chapter4_g_depth 是否在 resolved 名单里：✅ 在
+逐条求和 = 16   （与门禁打印 scanned registry_entry_tests_resolved: 16 一致）
+```
+外加**四组对照**（证明这个谓词是"活的"，不是我念了一遍注释）：
+| 对照 | 改法 | 结果 |
+|---|---|---|
+| ③ 原样 | —— | `violations=0 resolved=1` |
+| ① | 函数名去掉 `_chapter4_g_depth` 段 | `violations=1 resolved=0` ⇒ 命中「函数不存在」那条（★**不是**"名字不含判据 id"那条，如实标注） |
+| ② | 指向不存在的测试文件 | `violations=1 resolved=0` ⇒ 「反例测试文件不存在或不可收集」 |
+| ④ | 指向**真实存在但不含判据 id** 的函数 `test_removing_any_registry_entry_makes_guard_fail` | `violations=1 resolved=0`，理由 =「测试函数名 `'test_removing_…'` 未含判据 id `'chapter4_g_depth'` —— 无法阻止把登记改指向一个与本案无关的用例（`G-02` 函数级绑定）」⇒ **把 G-02 那条单独隔离出来了** |
+
+★ **一处卡面措辞的歧义（不是错，但会误导复现者）**：登记表里**没有 `tests_resolved` 字段**
+（`git grep -c 'tests_resolved'` 对 `registry/criterion_counterexamples.yaml` **零命中**）；
+它是一个**门禁运行时算出来的计数**：`report.scanned["registry_entry_tests_resolved"] = resolved`
+（`system/scripts/checks/criterion_effectiveness_guard.py:359`，计数规则 `:238–288`：
+「`test` 非空」→「是 `tests/...py::test_xxx` 形态」→「文件可收集」→「函数存在」→「**函数名含判据 id**」五关全过才 +1）。
+⇒ "查得到"的正确含义是**该条目逐关通过、被计入那 16**，我按这个含义核的。
+
+**③ 13-B 面 `git grep 'solution_set_display'` 非空** ✅ ⇒ **13-B 面闭合**
+```
+$ git grep -n 'solution_set_display' main -- 'system/**'        → 命中 16 行，RC=0
+$ git branch --contains 8aa7862                                  → 含 ws/ch5-pricelayer ⇒ 13-B 已并入 main
+```
+（实现仍在 `system/scripts/pricelayer/solver.py`：`RULE_KEY_SOLUTION_SET_DISPLAY = "solution_set_display"`、`load_solution_set_display`、`min_count` 派生。）
+
+**④ `chapter4_g_depth` 绑定位置仍在 `six_step_chain_complete` 之前** ✅ —— 但**偏移数值须更正我 §16.1 的记法**
+
+哈希钉住的读取（`blob 52698012a694`，文件 **47314** 字节）：
+```
+字节偏移 21895  行 467  criterion("nvidia_sample", "chapter4_g_depth", v)
+字节偏移 21949  行 468  criterion("nvidia_sample", "six_step_chain_complete", v)
+字节偏移 22010  行 469  criterion("nvidia_sample", "derivation_reviewable", v)
+间距 = 54 字节 ； 关系式 21895 < 21949 ⇒ 成立
+```
+★ **自我更正 §16.1**：我在 §16.1 记的是 `17376 < 17430`，与本次实测**恰好同差 4515**
+⇒ 当时用的是**另一个偏移基准**（不是文件字节 0，很可能是从某个切片/函数体起算），
+**结论（谁在前 + 间距 54）完全一致**，但**数值必须以本次为准**。
+★ 这条正好演示 `口径 10` 的用处：**一个不带基准说明的偏移量，换个人在原文件上复现就对不上**；
+而我当时没写"基准是什么"，所以这次只能靠"同差 4515 + 间距 54 相同"来**反推**它是同两行 —— 能做，但本不该需要。
+
+**★★ 本轮我又犯了两个「自己刚写进纪律」的错（如实登记，不藏）**
+
+1. **BSD `grep` BRE 的 `\|` 假阴性（队内第 5 次 / 我自己第 2 次）**：
+   `grep -n 'registry_entry_tests_resolved\|def _check_entry_tests\|tests_resolved' <guard>` **回空** ⇒
+   我一度据此以为"脚本里根本没有这个字符串"（差点写成一条**假发现**）。改用 Grep（ripgrep）即有命中。
+   ⇒ **卡 13-L 的 `grep_usage_guard` 有据可依，且应把 `\|` 在 BRE 里立成硬禁**（提示语直接给 `grep -E` 的写法）。
+2. **`&&` 串了"我要读结果"的命令（第 3 次）**：
+   `git grep -c 'tests_resolved' … && git show main:… | grep -b …` —— 前者**无匹配 ⇒ `exit 1` ⇒ 短路**，
+   **④ 根本没跑**；而屏幕上只剩"一个没有输出的段"，看起来像"没命中"而不是"没执行"。
+   我在 §17.9 第 ④ 条刚写下"状态变更命令不许和校验命令串 `&&`"，**几分钟后就又犯了**（这次受害的是**校验**命令）。
+   ⇒ **纪律升级**：**凡"我要读它的结果"的命令，一律单独一条执行**；`&&` 只用于"前一条失败则后一条无意义"的场景。**这条比我原来那条宽** —— 原来只禁了状态变更，现在把校验也纳入。
+
+**小结（可核）**：`#69` 的四项在 `cf57ca4` 上**全过**，且 ③ 使 13-B 面闭合 ⇒
+`#69` 的 13-A 面（§16/§17.1 继承）与 13-B 面（本 §17.10③）**都已能按 hash 结账**。
