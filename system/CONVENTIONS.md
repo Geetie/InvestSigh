@@ -486,7 +486,6 @@ SHA256 抓到，故仍是"检测得到"，非"静默"）。
 | G-01~G-07 / P-01~P-05 | `tests/guards/` 与 `tests/injection/` 的既有断言 + 各守卫自查 |
 | **五 / `G-62`「静默等价态」** | ★ **无机器强制**（主理人裁定**不新增门禁**）—— 强制手段 = ① `§九 换人审计` 逐条问 `Q1–Q8`；② 报告里须**逐条回答 Q1/Q6**（正面构造 + 反面构造）；**未回答者按 `G-03` 不计为已验证** |
 | R-01 / R-02 | `tests/injection/test_guards_reject_{a,b}.py`（原 `test_guards_reject.py`，41 例按节边界纯移动拆二；见 `V-02`）+ 各守卫 docstring 自检 |
-| R-01 / R-02 | `tests/injection/test_guards_reject.py` + 各守卫 docstring 自检 |
 
 ### V-09 **删除预算是「宿主回合级 + 全流共享」资源 —— 跑批前必须披露本轮用量**
 
