@@ -647,6 +647,12 @@ def _child_env() -> dict[str, str]:
         "CODEBUDDY_SAFE_DELETE_SANDBOX": "0",
         "CODEBUDDY_BROKERED_FS_HOOK_ENABLED": "0",
         "CODEBUDDY_SAFE_DELETE_ENABLED": "0",
+        # ★★ 适用范围（`V-08`，`ws-ch5-pricelayer` 提出，**必须显式写下**）：
+        #   **删除配额不属于门禁口径** —— `E=0` 把 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`
+        #   这一整类失败在**本路径上结构性变成不可达**。**不可达 ≠ 不存在**：
+        #   绕过本包装器时它是活的（本机 Bash env 实测 `CODEBUDDY_SAFE_DELETE_ENABLED=1`）。
+        #   ★ 不写下这一句，后来的读者会把"门禁里从没见它红过"读成"这个约束不成立"
+        #     —— 那是 `G-62`（不可区分）加在**安全机制自身**上：**"没报"与"没被检"读数同形**。
     }
 
 
