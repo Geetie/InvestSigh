@@ -4,11 +4,14 @@
 |---|---|
 | 工作树 | `/Users/gaza/Developer/InvestSigh/.worktrees/ws-step56-skipped` |
 | 分支 | `ws/step56-skipped` |
-| 复跑读数时的树 | **`28e1eff`**（= 当时 `main` 的 HEAD；`HEAD..main == 0`） |
+| 复跑读数时的树 | **`refs/heads/main = 28e1eff`**（当时 `HEAD..main == 0`） |
 | 复跑时点 | 2026-09-16 22:47~22:48 +0800 |
-| 原审计时点 | `main@fe14d93`，2026-09-16 22:30:41（见卡 `#82` 描述） |
-| 本次动作 | **只读 git** + **一处零删除 pytest**（`--noconftest`，不建夹具、不删任何东西） |
-| 未做的事 | 未改 `main`、未合并任何分支、未动 `conftest.py`、未跑任何需夹具的批次 |
+| **复验时点（§3.3 / §3.4 用）** | **`refs/heads/main = a368c4e`**，2026-09-16 22:5x +0800 |
+| 原审计时点 | `refs/heads/main = fe14d93`，2026-09-16 22:30:41（见卡 `#82` 描述） |
+| 本次动作 | **只读 git** + **零删除 pytest**（`--noconftest`，不建夹具、不删任何东西） |
+| 未做的事 | 未改 `main`、未合并任何分支、未改 `conftest.py`/`verify.py`、未跑任何需夹具的批次 |
+
+★ **两条红灯的状态随时点变化**：§3.3 的红灯已被 `1f58b16`（22:48:26，`ws-verify-shard` 自己修的）消除 —— **我在 22:5x 用 `refs/heads/main = a368c4e` 复验为 `PASSED`**（见 §3.5）；§3.2 的红灯（`injection-f` 33 例）**在 `a368c4e` 上仍在**。
 
 ---
 
@@ -80,7 +83,11 @@ c5a0a22e2f0e  refs/heads/main            ← 真正的 main
 
 ## §3 ★★ 本次复跑的两条新发现（都只在 `injection-f` 批里暴露）
 
-### 3.1 机器证据（一次跑完，`main@28e1eff`，零删除）
+> **状态（`refs/heads/main = a368c4e`，2026-09-16 22:5x 复验）**
+> - 红灯 A（`injection-f` 33 例 > 32）：**仍在**。
+> - 红灯 B（`PYTEST_MISSING_MARKER` 未进 `main`）：**已被 `1f58b16` 修复**（见 §3.5）。**本条是我在 `28e1eff` 上的真实读数，但描述的是当时状态**；`ws-verify-shard` 独立发现并修好了同一件事。
+
+### 3.1 机器证据（一次跑完，`refs/heads/main = 28e1eff`，零删除）
 
 命令（`--noconftest` 是为了**不触发 `conftest.py::pytest_sessionstart → _clear_work_dir()`**，即不占宿主删除配额）：
 
@@ -163,9 +170,48 @@ $ grep -n "injection\|verify.py" system/scripts/ops/run_all_gates.py      → �
 $ grep -n "injection\|verify.py" system/scripts/ops/pre-commit.sh         → 无匹配
 ```
 
-⇒ `run_all_gates.py` 与 `pre-commit.sh` **都不跑 verify 的分片批**。`injection-f` 的红只有**显式**跑 `verify.py --batch injection-f` 的人才能看到。
+★ **本节的取证方法已更正（结论不变，但原取证过程不可信）**：
+我最初是用 **shell `grep -n "injection\|verify.py"`** 得到"无匹配"的。事后（`ws-verify-shard` 广播的环境告警）查明：**Bash 工具里的 `grep` 解析到的是宿主 broker 包装器，不是真 `grep`，它会静默返回空且 `exit=0`** —— 见 §7.3。我**用 Python 复算**（不经任何 grep）后才敢下结论：
+
+```
+run_all_gates.py   "verify.py" 出现 0 次   "verify" 出现 0 次   "injection" 出现 2 次
+pre-commit.sh      "verify.py" 出现 0 次   "verify" 出现 0 次   "injection" 出现 2 次
+                   那 2 处 "injection" 的真身是 ↓（与分片无关，是另一道门禁）
+   run_all_gates.py:47   ("injection_guard.py", "scripts/checks/injection_guard.py", ()),
+   pre-commit.sh:95      run_gate "injection_guard" "$CODE_ROOT/scripts/checks/injection_guard.py" "$CODE_ROOT"
+```
+
+⇒ **结论不变**：`run_all_gates.py` 与 `pre-commit.sh` **都不引用 `verify.py`** ⇒ 都不跑 verify 的分片批。`injection-f` 的红只有**显式**跑 `verify.py --batch injection-f` 的人才能看到。
+⇒ ★ 但**过程要被记住**：这次是"**错的工具给出对的结论**" —— **方法不可信时，结论对也是运气**（这正是本项目 `G-03`/`R-04` 要挡的形态）。
 ⇒ 与 §3.2 那句"门禁被静默关掉"是**同一件事的两种形态**：一个是"该片跑不完"，一个是"该片压根不在门禁链上"。
 ★ 这是**观察，不是建议** —— 要不要把 verify 分片接进门禁链属主理人裁决（接了会显著拉长提交耗时）。
+
+### 3.5 红灯 B 的**复验**（`refs/heads/main = a368c4e`）：已被修复
+
+`ws-verify-shard` **独立发现并修好了同一件事**：
+
+```
+1f58b16  2026-09-16 22:48:26 +0800
+fix(verify): ★ 复原我在 ea0ceae 的补合并里因「整文件取一侧」而丢失的内容
+（PYTEST_MISSING_MARKER 常量 + 注释块 + _exit_zero 的环境错误归因分支）
+—— 当时 main 上 test_shard_coverage.py 断言其存在 ⇒ injection-f 必红
+```
+
+★ 他的 commit message **比我 §3.3 的表述更精确地指出了根因**：不是"合并随机丢了"，而是**他在 `ea0ceae` 那次补合并里"整文件取一侧"** ⇒ 我 §3.3 的形态判定（口径 11 第 4 种失效模式：merge commit）**方向对，但归因粒度不够** —— 真正的机制是"**冲突解决时整文件取一侧**"，**不是** merge 机制本身。⇒ 我据此在 §7.1 把这一条写得更准。
+
+复验读数（我在 `a368c4e` 上重跑同一命令）：
+
+```
+PASSED ::test_shard_targets_are_explicit_test_file_paths
+PASSED ::test_every_injection_test_file_is_covered_by_shards
+PASSED ::test_shard_targets_are_pairwise_disjoint
+PASSED ::test_quota_attribution_never_passes
+PASSED ::test_missing_pytest_attribution_never_passes     ← ★ 由 FAILED 转 PASSED
+FAILED ::test_shard_case_counts_within_quota              ← 红灯 A 仍在
+1 failed, 5 passed in 1.74s
+```
+
+⇒ **红灯 B 关闭，红灯 A 仍开。** 本节两条读数（`28e1eff` 的 `2 failed, 4 passed` 与 `a368c4e` 的 `1 failed, 5 passed`）**都是真实读数**，差别只在时点。
 
 ---
 
@@ -177,6 +223,7 @@ $ grep -n "injection\|verify.py" system/scripts/ops/pre-commit.sh         → �
 
 **该判读只看了"机制在不在"，没看"实现全不全"**，属原审计自己登记的方法学自纠第 2 条（**存在性判别漏报"只改既有文件"型缺口**）的**又一次复发** —— 而且这次漏掉的不是"新增文件"，是**同一文件里的一段实现**。
 ⇒ 更正为：**"陈旧 + 有内容缺口，且在 `main` 上现红"**（§3.3）。
+⇒ **结果（`a368c4e`）**：该缺口已由 `1f58b16` 补齐，`test_missing_pytest_attribution_never_passes` 转绿（§3.5）。
 
 ### 4.2 `ws/fixture-cost`：`main..b = 3` —— ★ **判读已更正**（原判"合并会回退 `main`"**是错的**）
 
@@ -255,7 +302,10 @@ verify.py                          |  21 +
 4. **两条红灯没有 `G-` 编号**：编号由主理人分配（`R-04` 不自裁）。我在报告里只给可复现事实与定位。
 5. **`ws/ch13r-rule-candidates` 的"两个提交"我没有逐提交判"是否含别的应当保留的内容"** —— 只核了 5 个新增文件的存在性与 `main` 的成文裁决。若主理人要"确认无遗漏的正向价值"，需另开一次逐 diff 复核。
 6. **★ 本报告 §4.2 / §4.4 的原始判读是错的**（见 §7.2）。§2.1 表中"两点内容差分"一列**数值本身没错**（它是 tip-to-tip 的真实差值），错的是我据它下的"合并会回退 `main`"结论。两项**已在 §4.2 / §4.4 就地更正**。
-7. **本报告 §3 的两条红灯（§3.2 / §3.3）与两种判读方法无关**：它们建立在"**blob 逐字节比较**"（`main:verify.py` 无 `PYTEST_MISSING`）+ "**真实 pytest 执行**"之上，不依赖任何 diff 方向判读 ⇒ **不受 §7.2 的更正影响**。
+7. **本报告 §3 的两条红灯（§3.2 / §3.3）与两种判读方法无关**：它们建立在"**blob 逐字节比较**"（`28e1eff` 时 `main:verify.py` 的 `PYTEST_MISSING` 计数为 0）+ "**真实 pytest 执行**"之上，不依赖任何 diff 方向判读 ⇒ **不受 §7.2 的更正影响**。
+   ★ 但**时点会变结论**：**§3.3 的红灯已由 `1f58b16` 修复**（复验 `a368c4e` = `PASSED`，见 §3.5）；**§3.2 的红灯仍在**。
+8. **★ 取证工具本身有坑**（§7.3）：Bash 工具里的 `grep` 是 broker 包装器，**静默返回空**。我在本次审计里中过两次（其中一次"结论对、证据假"）。此后一律用 Grep 工具 / `/usr/bin/grep` / Python。**§3.2/§3.3 的数字不来自 greps**（一个来自断言消息、一个来自 pytest 执行），故不受影响。
+9. **本报告 §3.4 的"都不跑 verify 分片"这条**：我最初用坏 grep 取证（结论碰巧为真），**已用 Python 复算重取**（`verify.py` 0 次 / `injection` 各 2 次、均为 `injection_guard`，与分片无关）⇒ 结论保持。
 
 ---
 
@@ -268,7 +318,7 @@ R=/Users/gaza/Developer/InvestSigh
 git -C "$R" rev-parse refs/heads/main        # ★ 不要只写 "main"
 
 # 1) 步骤①：哪些分支 main..b != 0
-for b in $(git -C "$R" for-each-ref --format='%(refname:short)' refs/heads | grep -v '^main$'); do
+for b in $(git -C "$R" for-each-ref --format='%(refname:short)' refs/heads | /usr/bin/grep -v '^main$'); do
   n=$(git -C "$R" rev-list --count refs/heads/main.."$b"); [ "$n" != 0 ] && echo "$n  $b"
 done
 
@@ -303,7 +353,7 @@ PYTHONPATH=$PWD/tests /Users/gaza/.workbuddy/binaries/python/envs/default/bin/py
 
 ---
 
-## §7 自我更正留痕（`refs/heads/main = c5a0a22` 时点）
+## §7 自我更正留痕（`refs/heads/main = c5a0a22` → 复验 `a368c4e` 时点）
 
 ### 7.1 口径 11 的**第三个**失效模式：**两点号 `main..b` 也不能判"会不会回退 `main`"**
 
@@ -325,6 +375,17 @@ git diff A..B   ≡   git diff A B       # ★ tip-to-tip：两个末端快照�
 | `git diff $(git merge-base A B) B` | 我方改动面 | ⚠（同左） | ✅ |
 | `git merge-tree --write-tree B A` | **真干跑** | — | ✅✅（最直接） |
 
+### 7.1′ 对 team-lead「失效模式 4（merge commit）」的一处**精确化**
+
+§3.3 我原写"这是 merge commit 这种失效模式的活体样本"。`ws-verify-shard` 的修复提交 `1f58b16` 逐字给出了**真正的机制**：
+
+> 复原我在 `ea0ceae` 的补合并里**因「整文件取一侧」而丢失**的内容
+
+⇒ 精确化：**失效的不是"merge 这件事"，而是"冲突/补合并时对整文件取一侧"这个动作**。
+⇒ **可操作条文化**：补合并/解冲突时，**不要对整个文件取一侧**；要么逐 hunk 判，要么在合并后用 `git diff` 逐文件复核"我方改动面"（§7.1 表第 3 行）是否仍在结果里。
+⇒ 这比"merge commit 危险"更能指导下一次操作 —— 归因粒度决定处置是否可执行。
+（本次发现权：`ws-verify-shard` 报出机制；我报出"测试进了、实现没进"这个可观测形态。两者互补。）
+
 ### 7.2 我犯的错与反证（原判 → 更正）
 
 我把 §2.1 的 tip-to-tip 差分读成"**分支要删掉 `main` 已有内容 ⇒ 以分支为准并入会回退 `main`**"，并对 `ws/fixture-cost`、`ws/ch2-rules` 各下一句判词。**两句都错。**
@@ -335,3 +396,24 @@ git diff A..B   ≡   git diff A B       # ★ tip-to-tip：两个末端快照�
 **根因**：我拿一个**不表达该语义的读数**（tip-to-tip 差分）去下**语义结论**（合并方向）。这与我在同一天给 `verify.py` 抓的错**同类**（"归因与对象不同源"），所以按同一标准处理：**就地更正 + 保留原判原文 + 给出反证**，不把错句悄悄删掉。
 
 ★ 副作用提醒：我此前发给 team-lead / `ws-ch2-rules` 的消息里**已含这两句错判**，已在随后的更正消息中撤回；**以本报告 §4.2 / §4.4 为准**。
+
+### 7.3 ★ 环境坑：Bash 工具里的 `grep` 是** broker 包装器**，会**静默返回空且 `exit=0`**
+
+由 `ws-verify-shard` 广播，我复核成立并在本报告的多处取证中**实际中过**：
+
+```
+$ which -a grep
+/Applications/WorkBuddy.app/…/cli/vendor/shim/brokered-bin/grep    ← ★ PATH 优先命中
+/usr/bin/grep
+```
+
+**我中的两次**（都在本次审计里，且都会导致**假结论**）：
+1. 查 `main:verify.py` 里 `环境\|pytest` 的分布 ⇒ **返回空**。我先是怀疑"模式方言"，后才用**分开的两次 grep + 逐版本计数**得到真值。**若我当时就用它下结论，会得出"main 里连 `pytest` 字样都没有"这种明显错误的判断。**
+2. 查 `run_all_gates.py` / `pre-commit.sh` 是否跑 verify（§3.4）⇒ **两条"无匹配"**，我用它写了"都不跑 verify 分片"。**结论后来经 Python 复算是对的**（两者确实不引用 `verify.py`），但 **`injection` 其实各出现 2 次** —— 也就是说**我的取证过程给出的是假证据，只是碰巧结论为真**。
+
+**规矩（本报告此后遵守，建议全流照做）**：
+- 计数/存在性一律用 **Grep 工具**（内置 ripgrep，不受影响）/ **`/usr/bin/grep`** / **Python**（`pathlib` + `str.count` / `subprocess` 取 `git show`）；
+- **`"空输出" ≠ "无匹配"`** —— 尤其在模式里用了 `\|` 这类依赖方言的写法时；
+- 同族两条（`ws-verify-shard` 实测、我采纳）：**管道会吞退出码**（`cmd | tail -3; echo $?` 报的是 `tail` 的码；要真码就写成 `{ cmd; echo "EXIT=$?"; } 2>&1 | tail -3`）；**`head -N` 会截断 diff**（会漏 hunk ⇒ 误判成"只删了注释"）。
+
+★ **对 §3.2 的连带自查**：`injection-f = 33` 这个数字来自 **`test_shard_case_counts_within_quota` 主动跑出来的断言消息**（`assert not {'injection-f': 33}`），**不是**我 greps 出来的；§3.3 的红来自**真实 pytest 执行**。⇒ 两条红灯**不受本环境坑影响**。
