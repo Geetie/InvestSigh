@@ -10,6 +10,13 @@
 `scripts/orchestrate/pipeline.py::StepHandler`（`(run_date: date, scope: str) -> StepOutcome`）
 **逐字一致**，故编排器一行即可接入。
 
+★ **`run_date` / `scope` 语义（`P7-3` 根因修复）** —— 二者**均被真实使用**：
+
+- `run_date` = **as-of 上界**：只取行情真源中 `day ≤ run_date` 的点（`Ch9 §3.4.1` 双时间轴），
+  故 `run_date` 落在数据窗口内不同位置 → **不同**的输入窗口 → 可能产出**不同**的建议；
+  输入窗口**完全**由真源行情与 `run_date` 共同决定，**不**用任何仓库内夹具窗口冒充。
+- `scope` = **目标证券选取**：命中真源证券时优先于默认选取。
+
 ★ **诚实标注**：step 6 的**完整**处理器（含模型侧假设生成 / 基准选取 / 价格抓取）
   属阶段②③，**本批次未实现**；本批次**不改**共享文件 `pipeline.py`。故此处只提供
   接缝与注册函数，真实注册动作由主理人在集成时执行：
@@ -21,7 +28,8 @@ register_into(pipeline)          # 默认注册到 step 6（公司 vs 基准预�
 
 ★ **不产交易信号时也如实回传**：`StepOutcome.signals_emitted` = 本次**新交易信号**数
   （仅 `buy` / `sell` 计入；`maintain` / `pending` 不产新信号，`Ch7 §D.4`）。
-  门拒绝（不出建议）或输入缺失时 `degraded=True` + `produced=[]`，**不伪造**结论。
+  门拒绝（不出建议）、**真源输入缺失**或**幂等命中**时 `degraded=True` + `produced=[]`，
+  **不伪造**结论（`§一 底线 3`）。
 """
 
 from __future__ import annotations
@@ -32,23 +40,29 @@ from typing import Any
 
 
 def make_decision_handler(root: str | Path, *, step_no: int = 6) -> Any:
-    """构造 step ⑥ 的处理器：跑 `run_decide.run_default(root)`，把产物引用回传编排器。
+    """构造 step ⑥ 的处理器：跑 `run_decide.run_default(root, run_date=..., scope=...)`。
 
-    - `produced` = 本次落库的 `recommendation_id`（**对象引用**，非文件名）；
+    - `produced` = 本次**真正新增落库**的 `recommendation_id`（**对象引用**，非文件名）。
+      ★ 不是"本会产出的 id"：**幂等命中**（同窗口 + 同规则版本重跑）时为空，
+      否则 `pipeline.py` 的 G1-05 空执行守卫会被击穿。
     - `signals_emitted` = 新交易信号数（`buy` / `sell`）；
-    - `degraded` = 门拒绝 / 输入缺失 / 未出建议 → **显式**标记，不静默。
+    - `degraded` = 门拒绝 / **真源输入缺失** / 未出建议 → **显式**标记，不静默。
+
+    ★ `run_date` 作为 **as-of 上界**、`scope` 作为**目标证券选取**，二者均经 `run_default`
+      真实使用（见模块 docstring）；输入窗口来自**真源行情**（`<root>/facts/prices.jsonl`），
+      **不**来自任何仓库内夹具。
 
     返回类型为 `StepHandler`（从 `scripts.orchestrate.pipeline` **惰性导入**，避免
     包级急切依赖与循环导入）。
     """
     root_path = Path(root)
 
-    def handler(_run_date: date, _scope: str) -> Any:
+    def handler(run_date: date, scope: str) -> Any:
         from scripts.orchestrate.pipeline import StepOutcome
 
         from .run_decide import run_default
 
-        report = run_default(root_path)
+        report = run_default(root_path, run_date=run_date, scope=scope)
         return StepOutcome(
             produced=list(report.recommendation_ids),
             judgment_change={},
@@ -58,8 +72,9 @@ def make_decision_handler(root: str | Path, *, step_no: int = 6) -> Any:
 
     handler.__name__ = f"decision_recommendation_step_{step_no}"
     handler.__doc__ = (
-        f"决策层 step {step_no} 处理器（`Ch7 §F` 端到端时序；"
-        f"run_date 由行情输入窗口决定，本函数不按 run_date 筛选输入）"
+        f"决策层 step {step_no} 处理器（`Ch7 §F` 端到端时序）。"
+        f"输入窗口由**真源行情**（`<root>/facts/prices.jsonl`）与 `run_date`（as-of 上界）共同决定，"
+        f"`scope` 用于选取目标证券；真源缺输入 → 无产出 + 如实降级（不伪造）。"
     )
     return handler
 

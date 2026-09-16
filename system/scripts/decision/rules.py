@@ -356,13 +356,84 @@ def build_recommendation(
     )
 
 
+# ── 幂等键 + 版本链（`P7-4`；`Ch9 §3.5` 阶段⑤） ──
+#
+# 设计口径（逐字）：`Ch9 §3.5` 阶段⑤ 决策的**幂等键** = `(security_id, issued_at, version)`，
+# 输出 = `recommendations`（含规则版本 + 证据版本）。
+#
+# ★ 本实现的映射（**全部落在 `schema/models.py` 现有字段上，不新增冻结字段**，`R-04`）：
+#   - `security_id` ↔ `recommendation.security_id`；
+#   - `issued_at`   ↔ 判断**输入窗口** `[start_date, review_date]`（`Ch2 §D.2`：`start_date` 必填、
+#                      `horizon` 决定复查节点）—— 即"同一输入窗口"；
+#   - `version`     ↔ `recommendation.rule_version`（规则版本，`Ch7 §E`）。
+#   由此"同一'输入窗口 + 规则版本'重跑 → 不追加"在 `recommendations` 上可判定。
+#
+# ★ 版本链（让 `schema.store.as_of` 对 `recommendations` 可用）：同一业务键
+#   `(security_id, start_date)` 的每次**新增**写入取 `version = 既有同键行数 + 1`，并同步写
+#   `recorded_seq`（`TimeMixin`，"同一业务键取最大者为当前版本"）→ `as_of(rows, ["security_id",
+#   "start_date"])` 取到最新版本。`Recommendation` 已带 `version` 与 `recorded_seq`
+#   （`TimeMixin`），**无需**新增字段。
+
+
+def _row_recommendation_identity(row: Mapping[str, Any]) -> tuple[str, str]:
+    """从 JSONL 原始行取业务键 `(security_id, start_date)`（版本链分组键）。"""
+    return (str(row.get("security_id", "")), str(row.get("start_date", "")))
+
+
+def _recommendation_identity(rec: Recommendation) -> tuple[str, str]:
+    """从 `Recommendation` 取业务键 `(security_id, start_date)`（版本链分组键）。"""
+    return (rec.security_id, rec.start_date.isoformat())
+
+
+def _row_idempotency_key(row: Mapping[str, Any]) -> tuple[str, str, str, str]:
+    """从 JSONL 原始行取幂等键（与 `_recommendation_idempotency_key` **同口径**）。"""
+    return (
+        str(row.get("security_id", "")),
+        str(row.get("start_date", "")),
+        str(row.get("review_date") or ""),
+        str(row.get("rule_version", "")),
+    )
+
+
+def _recommendation_idempotency_key(rec: Recommendation) -> tuple[str, str, str, str]:
+    """建议的幂等键 = `Ch9 §3.5` 阶段⑤ `(security_id, issued_at, version)` 的现有字段表达。
+
+    `(security_id, start_date, review_date, rule_version)` —— 见上方映射说明。
+    """
+    return (
+        rec.security_id,
+        rec.start_date.isoformat(),
+        rec.review_date.isoformat() if rec.review_date else "",
+        rec.rule_version,
+    )
+
+
 def persist_recommendation(root: str | Any, rec: Recommendation) -> int:
     """把建议落 `facts/recommendations.jsonl`（**复用** `schema.store.append_records`）。
 
-    返回实际写入行数（1）。追加式不可变 + 文件锁 + pydantic 校验由 `schema.store` 统一承担，
-    本模块**不新增**第二条写路径（`G-06` 唯一真源）。
+    返回**实际写入行数**（新增 → `1`；**幂等命中 → `0`**）。
+
+    - **幂等**（`P7-4` / `Ch9 §3.5` 阶段⑤）：同一"输入窗口 + 规则版本"重跑 → **不追加**
+      （判据 = `(security_id, start_date, review_date, rule_version)` 已在真源中出现）。
+    - **版本链**：新增行取 `version = 既有 `(security_id, start_date)` 行数 + 1`，并写
+      `recorded_seq = version`，使 `schema.store.as_of` 对该业务键可取到最新版本。
+    - 追加式不可变 + 文件锁 + pydantic 校验由 `schema.store` 统一承担，本模块**不新增**
+      第二条写路径（`G-06` 唯一真源）。
+
+    ★ **诚实登记的残留**（`R-04`，**不称为"原子"**）：本函数"先读全量判键、再追加"是**两次**
+      独立操作，`append_records` 的 `fcntl` 文件锁**只覆盖追加那一步**——并发写者仍可能
+      在读写之间插入同键行（首版为单写者约定，`Ch9 §3.10 J6`；`scripts/compute.store`
+      的 `append_derived_value_ids` 采用同一形态，本处与之保持一致，未额外引入第二条锁）。
     """
-    return append_records(root, "recommendations", [rec])
+    from schema.store import read_records
+
+    rows = read_records(root, "recommendations")
+    key = _recommendation_idempotency_key(rec)
+    if any(_row_idempotency_key(row) == key for row in rows):
+        return 0
+    version = sum(1 for row in rows if _row_recommendation_identity(row) == _recommendation_identity(rec)) + 1
+    stamped = rec.model_copy(update={"version": version, "recorded_seq": version})
+    return append_records(root, "recommendations", [stamped])
 
 
 def compare_and_decide(

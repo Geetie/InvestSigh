@@ -4,6 +4,10 @@
 - `build_recommendation` 构造 `schema.models.Recommendation`（`action` 四值、`horizon` 区间）；
 - 提前判断三要素缺项 → **不出建议**（`EarlyJudgmentIncomplete`）；
 - `persist_recommendation` **复用** `schema.store.append_records` → 落 `facts/recommendations.jsonl`；
+- **幂等键**（`P7-4` / `Ch9 §3.5` 阶段⑤）：同"输入窗口 + 规则版本"重跑 → **不新增行**；
+  反向对照：**不同**窗口 → **应新增**；
+- **版本链**：同业务键 `(security_id, start_date)` 的新版本写 `version` / `recorded_seq`，
+  `schema.store.as_of` 对 `recommendations` 可取到**最新版本**；
 - `rebuild_index` 从 `facts/` 全量重建 `index/`（索引非真源）。
 """
 
@@ -22,9 +26,10 @@ from scripts.decision.rules import (
     persist_recommendation,
 )
 from schema.models import Recommendation, RecommendationAction
-from schema.store import read_models, rebuild_index
+from schema.store import as_of, read_models, read_records, rebuild_index
 
 START = date(2026, 4, 1)
+REVIEW = date(2026, 9, 15)
 
 
 def _buy_decision():
@@ -32,6 +37,21 @@ def _buy_decision():
     decision = decide(inp, JudgmentChange(fact_set_changed=True))
     assert decision is not None
     return inp, decision
+
+
+def _rec(*, recommendation_id="rec-persist", start=START, review=REVIEW, rule_version="decision-v1"):
+    inp, decision = _buy_decision()
+    return build_recommendation(
+        decision,
+        inp=inp,
+        recommendation_id=recommendation_id,
+        security_id="usDEMO",
+        horizon="2q",
+        start_date=start,
+        rule_version=rule_version,
+        review_date=review,
+        evidence_version_ids=("dv-total_return-co-demo-compute-v1",),
+    )
 
 
 def test_build_recommendation_fields() -> None:
@@ -44,7 +64,7 @@ def test_build_recommendation_fields() -> None:
         horizon="2q",
         start_date=START,
         rule_version="decision-v1",
-        review_date=date(2026, 9, 15),
+        review_date=REVIEW,
         evidence_version_ids=("dv-total_return-co-demo-compute-v1",),
     )
     assert isinstance(rec, Recommendation)
@@ -107,17 +127,7 @@ def test_early_judgment_with_full_trio_is_accepted() -> None:
 
 
 def test_persist_appends_and_rebuilds_index(scratch) -> None:
-    inp, decision = _buy_decision()
-    rec = build_recommendation(
-        decision,
-        inp=inp,
-        recommendation_id="rec-persist",
-        security_id="usDEMO",
-        horizon="2q",
-        start_date=START,
-        rule_version="decision-v1",
-        evidence_version_ids=("dv-total_return-co-demo-compute-v1",),
-    )
+    rec = _rec()
     written = persist_recommendation(scratch, rec)
     assert written == 1
 
@@ -128,21 +138,49 @@ def test_persist_appends_and_rebuilds_index(scratch) -> None:
     assert index_path.exists() and index_path.stat().st_size > 0
 
 
-def test_persist_is_append_only(scratch) -> None:
-    inp, decision = _buy_decision()
-    for rid in ("rec-a", "rec-b"):
-        rec = build_recommendation(
-            decision,
-            inp=inp,
-            recommendation_id=rid,
-            security_id="usDEMO",
-            horizon="2q",
-            start_date=START,
-            rule_version="decision-v1",
-        )
-        persist_recommendation(scratch, rec)
+def test_persist_same_window_rerun_does_not_append(scratch) -> None:
+    """`P7-4`：同"输入窗口 + 规则版本"重跑 → **不新增行**（幂等）。
+
+    ★ 修复前的反例：旧 `persist_recommendation` 直接 `append_records`，重跑会**追加重复**
+      `recommendation_id`；旧断言把这一缺陷写成了期望（见 `ws_decision_fix_report.md`）。
+    """
+    rec = _rec()
+    assert persist_recommendation(scratch, rec) == 1
+    # 重跑同一窗口 + 同一规则版本 → 幂等命中，**0 新增**
+    assert persist_recommendation(scratch, rec) == 0
     rows = read_models(scratch, "recommendations")
-    assert [r.recommendation_id for r in rows] == ["rec-a", "rec-b"]
+    assert [r.recommendation_id for r in rows] == ["rec-persist"]
+
+
+def test_persist_different_window_appends_new_row(scratch) -> None:
+    """**反向对照**：**不同**输入窗口 → **应新增**（幂等键不是恒 true 的"永远跳过"）。"""
+    assert persist_recommendation(scratch, _rec(recommendation_id="rec-a", start=START)) == 1
+    assert (
+        persist_recommendation(
+            scratch, _rec(recommendation_id="rec-b", start=date(2026, 6, 1))
+        )
+        == 1
+    )
+    rows = read_models(scratch, "recommendations")
+    assert sorted(r.recommendation_id for r in rows) == ["rec-a", "rec-b"]
+
+
+def test_version_chain_is_usable_via_as_of(scratch) -> None:
+    """同业务键 `(security_id, start_date)` 的新版本 → `version` / `recorded_seq` 递增，
+    `schema.store.as_of` 取到**最新版本**（修复前 `version` 恒 1、`recorded_seq` 恒 None）。"""
+    # 同窗口、不同**规则版本** → 视为该业务键的新版本（写入放行）
+    assert persist_recommendation(scratch, _rec(rule_version="decision-v1")) == 1
+    assert persist_recommendation(scratch, _rec(rule_version="decision-v2")) == 1
+
+    rows = read_records(scratch, "recommendations")
+    assert len(rows) == 2
+    assert [r["version"] for r in rows] == [1, 2]
+    assert [r["recorded_seq"] for r in rows] == [1, 2]
+
+    latest = as_of(rows, ["security_id", "start_date"])
+    assert len(latest) == 1
+    assert latest[0]["rule_version"] == "decision-v2"
+    assert latest[0]["recorded_seq"] == 2
 
 
 def test_recommendation_action_enum_is_four_values_only() -> None:

@@ -237,9 +237,28 @@ def assert_early_judgment_complete(rec: Any) -> None:
     三要素字段名与 `Ch2 §C.1` / `Ch1 §C.1` **逐字一致**：`assumptions[]` / `evidence_gaps[]` /
     `verification_conditions[]`。
 
-    ★ "同版本写入"断言（`rec.trio_written_seq <= rec.version_seq`）**仅在对象同时暴露
-      这两个字段时**执行：`schema.models.Recommendation` 带 `version` 但不带
-      `trio_written_seq`，故该断言对其为 no-op；三要素**非空**这一 A-06 核心拦截不受影响。
+    ★ **`Ch7 §D.7`（约 `:418`）的"同版本写入"断言 = 生产不可满足（已登记，待设计侧裁定）**：
+
+      设计原文逐字（`07_产业链传导与股票建议/02_实现方案.md §D.7`，约 `:418`）：
+      `assert rec.trio_written_seq <= rec.version_seq   # 与第一章 G1-01 一致：同版本写入`
+
+      该断言引用 **两个** 字段 `trio_written_seq` 与 `version_seq`。而冻结的
+      `schema.models.Recommendation`（`Ch9 §3.3.4` R-07）**两者皆无** —— 它带 `version`（int）
+      与 `TimeMixin.recorded_seq`，但**没有** `trio_written_seq`，也**没有** `version_seq`。
+      依 `CONVENTIONS.md::R-04`（"设计未写的一律不新增"）本实现**不得**为其补造字段，故：
+
+      - **有判别力的部分**：当对象**确实暴露** `trio_written_seq` / `version_seq` 时，
+        `trio_written_seq > version_seq` → 抛 `EarlyJudgmentIncomplete`
+        （由 `tests/decision/test_gate.py::test_early_judgment_same_version_assertion_is_conditional`
+        钉住 —— 证明本断言**不是恒真**）；
+      - **生产恒 no-op 的部分**：对 `Recommendation`（及其构造用的 `SimpleNamespace`）两字段
+        皆缺 → 断言**不执行**（no-op）。
+
+      ★ 该"生产不可满足"事实不因此自动满足设计意图：`Ch1 §C.1` G1-01 的**结构性**保证
+        （三要素与结论**同一次写入**、同一行内）在本实现成立（三要素与 `version` 同在一条
+        `Recommendation` 记录里生成），但设计写的是一条**运行时字段断言**，二者不等价。
+        登记见 `system/reports/ws_decision_dod.md`（已知缺口）与
+        `system/reports/ws_decision_fix_report.md`（`P7-5`：设计原文引用 + 推理）。
     """
     trio = {
         "assumptions": rec.assumptions,

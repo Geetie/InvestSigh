@@ -27,19 +27,28 @@
 ## 逐条可测的验收标准（AC）
 
 ### AC-01 真跑通（真实 `DerivedValue` → 真实建议）
-- [ ] **触发方式**：`python system/scripts/decision/run_decide.py <code_root> --stock-prices <jsonl> --benchmark-prices <jsonl> --start <d> --end <d>`
+- [ ] **触发方式（显式注入）**：`python system/scripts/decision/run_decide.py <code_root> --stock-prices <jsonl> --benchmark-prices <jsonl> --start <d> --end <d>`
+- [ ] **触发方式（真源默认，★ `P7-2` 修复后新增）**：`python system/scripts/decision/run_decide.py <code_root> [--run-date <d>] [--scope <security_id>]`
+      —— 读 `<code_root>/facts/prices.jsonl`（+ `facts/benchmarks.jsonl`，回落 `rules/benchmark.yaml`）；
+      **无真源行情 → 无产出**（`exit 2` + 可读输入缺失报错，**不伪造**）。
 - [ ] **可观察结果**：命令 **exit 0**，输出 JSON 含 `decision.action` 与 `recommendation_id`；`<code_root>/facts/recommendations.jsonl` 出现一行**真实** `Recommendation`（含 `action/status/rule_version/change_reason/horizon/start_date`）
 - [ ] **不是单测调通**：证据 = 真命令行的原样 stdout + 退出码（非 pytest 断言）
 - [ ] **真实 `DerivedValue`**：个股与基准的两个收益值均由 `scripts.compute.returns.compute_total_return` 从**行情点序列**真算得出（带 `formula` + `operands` + `method_version`），**非**包装裸数字
 
 ### AC-02 持久化（write-read-reload）
 - [ ] 写 `facts/recommendations.jsonl` → **删 `index/`** → `schema.store.rebuild_index()` 重建 → 重读 `facts/recommendations.jsonl` 数据**仍在**（`facts/` 是真源，`index/` 是可重建索引）
-- [ ] 单测 `tests/decision/test_persistence.py` 断言：追加写出 1 行（`persist_recommendation` 复用 `append_records`）、`read_models` 回读为 `Recommendation`、`rebuild_index` 生成的 `index/facts.sqlite` 非空；且再次追加 → 2 行（**append-only**）
+- [ ] 单测 `tests/decision/test_persistence.py` 断言：写出 1 行（`persist_recommendation` 复用 `append_records`）、`read_models` 回读为 `Recommendation`、`rebuild_index` 生成的 `index/facts.sqlite` 非空；**同"输入窗口 + 规则版本"重跑 → 不新增行（幂等）**（`test_persist_same_window_rerun_does_not_append`），并配**反向对照**：**不同窗口 → 应新增**（`test_persist_different_window_appends_new_row`）。
+      ★ **`P7-4` 修回**：修复前该 AC 写成"再次追加 → 2 行（append-only）"，把**重跑重复落库**这一缺陷写成了**期望**；现改为"重跑**不**新增行"。`version` / `recorded_seq` 亦按设计填，使 `schema.store.as_of` 对 `recommendations` 的版本链可用（`test_version_chain_is_usable_via_as_of`）。
 
 ### AC-03 真接线（谁调用它）
 - [ ] 决策层暴露编排器接缝 `scripts/decision/step.py::make_decision_handler(root)`（签名与 `scripts/orchestrate/pipeline.py::StepHandler` 一致：`(run_date, scope) -> StepOutcome`）；**当前真实消费方**：`scripts/decision/run_decide.py`（真跑 CLI）与 `tests/decision/**`
 - [ ] `RecommendationInput` **从哪来**：由调用方按 `Ch7 §D.5` 构造（**该标的自身** `baseline` + `stock_forecast` + `benchmark_forecast` + `own_evidence`）；行情→`DerivedValue` 由 `scripts/compute` 产出
 - [ ] **★ 诚实标注**：`pipeline.py` 的 step 6 处理器属阶段③，**本批次不改共享文件 `pipeline.py`**，故 AC-03 判定为 **PARTIAL**（提供注册线 + 真实 CLI 消费方；注册动作待主理人集成）
+- [ ] **★ `P7-1`/`P7-3` 修回（阻断级）**：`make_decision_handler` 不再忽略 `run_date` / `scope`
+      —— `run_date` = **as-of 上界**（`Ch9 §3.4.1`）、`scope` = **目标证券选取**，二者经 `run_default` 真实生效；
+      输入窗口来自**真源行情** `<root>/facts/prices.jsonl`，**不再**读 `system/tests/**` 夹具。
+      **空仓库（18 JSONL 全 0 行 + rules/）上 step 6：`produced == []`、`degraded == True`、
+      `facts/recommendations.jsonl` / `facts/benchmarks.jsonl` 零新增行**。
 
 ### AC-04 守卫真拦得住（injected → exit 1，不是 warn）
 - [ ] **吃原始数字**：`forecast.worksheet = 1234`（裸数字）→ `require_derived_worksheet` **响亮拒绝**（`RawNumberRejected`）且 `decide()` 返回 `None`（**不生成建议**）
@@ -94,5 +103,19 @@
 - `V-06` 会因新增 `tests/decision/` 而报红（**预期**）：需主理人在集成时于 `verify.py::BATCHES` 增批次 `tests/decision/`（本批次**不改**共享文件）。
 - `rules_lock_guard` 权限非 0444 属环境项（git 不记录只读位）→ 已 `chmod 444 rules/*.yaml` bootstrap，非本模块缺陷。
 - `Ch7 §D.2` 设计文本用 `research_baseline_done`，而 `Ch9 §N9.1-05` 的 `ResearchDepth` 枚举 token 为 `baseline_done`（+`tracking`）—— 本层**对齐 schema 权威枚举**（`baseline_done` 及以上 = 已完成基线研究），并在报告登记该口径对齐。
-- `Recommendation`（`schema/models.py`）带 `version` 但不带 `trio_written_seq` → `assert_early_judgment_complete` 的"同版本写入"断言仅在对象暴露该字段时执行（三要素**非空**这一 A-06 核心拦截不受影响）。
+- ★ **`P7-5`（生产不可满足，需设计侧裁定 —— 由"条件化"升级）**：设计 `Ch7 §D.7`（约 `:418`）逐字要求
+  `assert rec.trio_written_seq <= rec.version_seq   # 与第一章 G1-01 一致：同版本写入`，
+  而其引用的 `trio_written_seq` 与 `version_seq` **两字段在冻结的 `Recommendation`
+  （`Ch9 §3.3.4` R-07）中皆不存在**（该模型只有 `version`（int）与 `TimeMixin.recorded_seq`）。
+  依 `CONVENTIONS.md::R-04`（设计未写的一律不新增）本实现**不得**补造字段 →
+  - **有判别力的部分**：对象**确暴露**该两字段时，`trio_written_seq > version_seq` → 抛
+    `EarlyJudgmentIncomplete`（`test_early_judgment_same_version_assertion_is_conditional`，证明**非恒真**）；
+  - **生产恒 no-op 的部分**：对 `Recommendation` / `SimpleNamespace` 两字段皆缺 → 断言不执行。
+  → 判定：**生产不可满足，需设计侧裁定**（补字段 **或** 改写为结构性断言）；`G1-01` 的**结构性**保证
+  （三要素与结论同一行、同一次写入生成）在本实现成立，但**不等于**设计写的那条运行时断言。
+  设计原文引用与推理见 `system/reports/ws_decision_fix_report.md`。
+- ★ **`P7-1`/`P7-2`/`P7-3`/`P7-4`/`P7-6` 已修**（§九 独立审计批次 7 根因修复）：
+  `run_default` 读**真源**（不再读 `tests/**` 夹具、不再忽略 `root`）；handler 真实使用 `run_date`/`scope`；
+  补幂等键 + 让 `as_of` 版本链对 `recommendations` 可用；空 `root` 上 CLI 给**可读**输入缺失报错（`exit 2`）。
+  证据与原样命令见 `system/reports/ws_decision_fix_report.md`。
 - 本层**不实现** `R5` 的价格下跌**阈值**判定（阈值属实施参数，未冻结）→ 只接受**已判定的布尔** `price_drop_triggered` 并置 `recheck_required`，不自动止损/抄底。
