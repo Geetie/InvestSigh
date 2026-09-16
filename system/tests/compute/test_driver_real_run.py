@@ -81,3 +81,27 @@ def test_cli_fails_on_integrity_violation(scratch: Path, cli) -> None:
     proc = cli("scripts/compute/run_derived.py", scratch, "--no-persist")
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "缺 formula" in proc.stdout
+
+
+def test_run_derived_version_restatement_writes_new_row(scratch: Path) -> None:
+    """★ C-02 端到端：上游重述（同 `method_version`、**新 `version`**）→ 新增行，旧行保留。
+
+    审计复现缺陷：重述后 `values_written: 0` + `RESULT: OK`，陈旧值被静默沿用。
+    """
+    first = driver.run_derived(scratch, prices_file=AGIX_PRICES, start=START, end=END, version="v1")
+    assert first.values_written > 0
+    rows_v1 = store.read_rows(scratch, store.DERIVED_VALUES_STEM)
+    assert {r["version"] for r in rows_v1} == {"v1"}
+
+    # 同 version 重跑 → 幂等（0 新增，written_derived_ids 为空）
+    again = driver.run_derived(scratch, prices_file=AGIX_PRICES, start=START, end=END, version="v1")
+    assert again.values_written == 0
+    assert again.written_derived_ids == []
+
+    # 上游重述（新 version，method_version 不变）→ **新增行**，旧行逐字节保留
+    restated = driver.run_derived(scratch, prices_file=AGIX_PRICES, start=START, end=END, version="v2")
+    assert restated.values_written > 0
+    rows = store.read_rows(scratch, store.DERIVED_VALUES_STEM)
+    assert len(rows) == len(rows_v1) + restated.values_written
+    assert {r["version"] for r in rows} == {"v1", "v2"}
+    assert [r for r in rows if r["version"] == "v1"] == rows_v1, "旧行（v1）必须逐字节不变"

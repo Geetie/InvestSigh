@@ -3,7 +3,7 @@
 
 ```
 python system/scripts/compute/run_derived.py [code_root] \
-    [--prices-file PATH] [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--strict]
+    [--prices-file PATH] [--start YYYY-MM-DD] [--end YYYY-MM-DD] [--version V] [--strict]
 ```
 
 做什么（**真读真算真落**，非单测）：
@@ -34,7 +34,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from scripts.compute.contract import ComputeError  # noqa: E402
+from scripts.compute.contract import DEFAULT_VERSION, ComputeError  # noqa: E402
 from scripts.compute.driver import run_derived  # noqa: E402
 
 
@@ -55,6 +55,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--end", default=None, help="区间止 YYYY-MM-DD（默认用行情末日）")
     parser.add_argument("--strict", action="store_true", help="存在缺口对象 → exit 1")
     parser.add_argument("--no-persist", action="store_true", help="只算不落盘（供纯校验）")
+    parser.add_argument(
+        "--version",
+        default=DEFAULT_VERSION,
+        help="上游基线版本（Ch9 §3.5 阶段④ 幂等键的 version 分量；上游重述时须传入新值）",
+    )
     args = parser.parse_args(argv)
 
     root = Path(args.code_root).resolve() if args.code_root else _ROOT
@@ -75,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
             start=start,
             end=end,
             persist=not args.no_persist,
+            version=args.version,
         )
     except (ComputeError, FileNotFoundError, ValueError) as exc:
         print(f"[INPUT-ERROR] run_derived: {type(exc).__name__}: {exc}", file=sys.stderr)

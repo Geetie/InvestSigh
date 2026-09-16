@@ -29,13 +29,14 @@ from typing import Any, Mapping, Sequence
 from schema.models import DerivedValue
 
 from .contract import (
+    DEFAULT_VERSION,
     ComputeGap,
     MissingInput,
     gap_for,
     safe_compute,
 )
 from .returns import CorporateActionPoint, PricePoint, compute_benchmark_return, compute_total_return
-from .store import append_derived_values, append_gaps, iter_all_values
+from .store import append_derived_value_ids, append_gaps, iter_all_values
 
 PRICES_REL = "facts/prices.jsonl"
 BENCHMARKS_REL = "facts/benchmarks.jsonl"
@@ -47,11 +48,17 @@ VALID_REQUIRED_FIELDS = ("formula", "operands", "method_version")
 
 @dataclass
 class DriverReport:
-    """一次真实运行的结果摘要（供 CLI 打印与测试断言）。"""
+    """一次真实运行的结果摘要（供 CLI 打印与测试断言）。
+
+    - `derived_ids`：**本次算出的全部** `DerivedValue`（不论是否真落库）；
+    - `written_derived_ids`：**本次真正新增落库**的 `DerivedValue`（幂等重跑 → 空）；
+    - `values_written`：真正新增落库的**行数**（= `len(written_derived_ids)`）。
+    """
 
     values_written: int = 0
     gaps_written: int = 0
     derived_ids: list[str] = field(default_factory=list)
+    written_derived_ids: list[str] = field(default_factory=list)
     gap_ids: list[str] = field(default_factory=list)
     integrity_violations: list[str] = field(default_factory=list)
     hard_errors: list[str] = field(default_factory=list)
@@ -65,6 +72,7 @@ class DriverReport:
             "values_written": self.values_written,
             "gaps_written": self.gaps_written,
             "derived_ids": sorted(self.derived_ids),
+            "written_derived_ids": sorted(self.written_derived_ids),
             "gap_ids": sorted(self.gap_ids),
             "integrity_violations": list(self.integrity_violations),
             "hard_errors": list(self.hard_errors),
@@ -195,6 +203,7 @@ def run_derived(
     start: date | None = None,
     end: date | None = None,
     persist: bool = True,
+    version: str = DEFAULT_VERSION,
 ) -> DriverReport:
     """跑一遍确定性计算：基准总回报（经 `return_guard`）+ 缺口对象，并落 `derived/`。
 
@@ -202,6 +211,8 @@ def run_derived(
       缺对象/缺行情/窗口不足 → **缺口对象**（`safe_compute` 折叠）。
     - 另对每个有行情的证券调一次 `compute_total_return`（个股口径演示）。
     - `persist=False` → 只算不落（供纯校验）。
+    - `version` = **上游基线版本**（`Ch9 §3.5` 阶段④ 幂等键的 `version` 分量）：上游重述时
+      **必须显式传入新 `version`**，否则旧值会被幂等键保留（`store.append_derived_value_ids`）。
     """
     root_path = Path(root)
     report = DriverReport()
@@ -301,7 +312,8 @@ def run_derived(
         _collect(outcome, values, gaps, report)
 
     if persist:
-        report.values_written = append_derived_values(root_path, values)
+        report.written_derived_ids = append_derived_value_ids(root_path, values, version=version)
+        report.values_written = len(report.written_derived_ids)
         report.gaps_written = append_gaps(root_path, gaps)
 
     report.integrity_violations = assert_derived_integrity(root_path)

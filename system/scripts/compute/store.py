@@ -11,8 +11,9 @@
 |---|---|
 | 只追加 | 只 `open(path, "a")`，**无** UPDATE/DELETE |
 | 防并发 | **复用** `schema.store._file_lock`（同一 `index/.locks/`，**不新增**第二条锁路径，纪律 11） |
-| 幂等 | `(derived_id, method_version)` 已存在 → **跳过追加**（`Ch9 §3.5` 阶段④幂等键；`N9.2-11`） |
-| `method_version` 变更 | `(derived_id, method_version)` 是新键 → **新增行**，旧行保留（`Ch9 §2.3`） |
+| 幂等 | `(derived_id, version, method_version)` 已存在 → **跳过追加**（`Ch9 §3.5` 阶段④幂等键 `(company_id, version, method_version)`；`N9.2-11`） |
+| `method_version` 变更 | `(derived_id, version, method_version)` 是新键 → **新增行**，旧行保留（`Ch9 §2.3`） |
+| `version` 变更（上游重述） | 同 `derived_id`/`method_version`、新 `version` → **新键 → 新增行**（防"上游重述被静默沿用旧值"；`Ch9 §3.5` 阶段④） |
 
 消费方：`scripts/trace/traceback.py::_find_derived()` 真读 `derived/*.jsonl`。
 """
@@ -26,7 +27,7 @@ from typing import Any, Iterable, Sequence
 from schema.models import DerivedValue
 from schema.store import _file_lock  # 复用唯一文件锁实现（纪律 11 / Ch9 §3.10 J6）
 
-from .contract import ComputeGap
+from .contract import DEFAULT_VERSION, ComputeGap
 
 DERIVED_DIRNAME = "derived"
 DERIVED_VALUES_STEM = "derived_values"
@@ -78,35 +79,69 @@ def read_rows(root: str | Path, stem: str) -> list[dict[str, Any]]:
     return out
 
 
-def existing_keys(root: str | Path) -> set[tuple[str, str]]:
-    """已存在的 `(derived_id, method_version)` 键集合（幂等判据）。"""
+def existing_keys(root: str | Path) -> set[tuple[str, str, str]]:
+    """已存在的 `(derived_id, version, method_version)` 键集合（幂等判据）。
+
+    ★ `version` 是 `Ch9 §3.5` 阶段④ 幂等键的分量（上游基线版本）；旧行若未写 `version`
+      列，按 `DEFAULT_VERSION` 归一（兼容历史行），不改变其字节。
+    """
     return {
-        (str(row.get("derived_id", "")), str(row.get("method_version", "")))
+        (
+            str(row.get("derived_id", "")),
+            str(row.get("version", DEFAULT_VERSION)),
+            str(row.get("method_version", "")),
+        )
         for row in read_rows(root, DERIVED_VALUES_STEM)
     }
+
+
+def append_derived_value_ids(
+    root: str | Path,
+    values: Sequence[DerivedValue],
+    *,
+    version: str = DEFAULT_VERSION,
+    skip_existing: bool = True,
+) -> list[str]:
+    """追加 `DerivedValue`（返回**实际写入**的 `derived_id` 列表）。
+
+    ★ 幂等键 = `(derived_id, version, method_version)`（`Ch9 §3.5` 阶段④：
+      `(company_id, version, method_version)`）。`version` 是**上游基线版本**：
+
+    - 首次某 `(derived_id, version, method_version)` → **写入**（返回其 `derived_id`）；
+    - 同键重跑 → **跳过**（不重复追加）；
+    - 上游重述（同 `derived_id`/`method_version`、**新 `version`**）→ **新键** → **新增行**，
+      旧行保留（追加式不可变，`Ch9 §3.4.2`）。
+
+    `version` 作为 `derived/` 真源的行级列落库（`derived/` 是计算层自有真源；不改冻结的
+    `schema/models.py::DerivedValue`）。逐行 JSON 序列化，`sort_keys=True` 保证可 diff。
+    """
+    seen = existing_keys(root) if skip_existing else set()
+    written: list[str] = []
+    lines: list[str] = []
+    for value in values:
+        key = (value.derived_id, version, value.method_version)
+        if skip_existing and key in seen:
+            continue
+        seen.add(key)
+        written.append(value.derived_id)
+        lines.append(_dump_row(value, version))
+    _append_lines(root, DERIVED_VALUES_STEM, lines)
+    return written
 
 
 def append_derived_values(
     root: str | Path,
     values: Sequence[DerivedValue],
     *,
+    version: str = DEFAULT_VERSION,
     skip_existing: bool = True,
 ) -> int:
     """追加 `DerivedValue`（返回**实际写入**行数）。
 
-    - `skip_existing=True`（默认）：`(derived_id, method_version)` 已存在则跳过
-      —— 重跑同日不重复（幂等），但 `method_version` 变更**必然**写新行（`Ch9 §2.3`）。
-    - 逐条 JSON 序列化，`sort_keys=True` 保证可 diff（`Ch9 §3.3.1`：JSONL 逐行 diff）。
+    幂等键 = `(derived_id, version, method_version)`；语义与 `append_derived_value_ids` 一致，
+    本函数只是其"写了几行"的计数视图（兼容既有调用方）。
     """
-    seen = existing_keys(root) if skip_existing else set()
-    lines: list[str] = []
-    for value in values:
-        key = (value.derived_id, value.method_version)
-        if skip_existing and key in seen:
-            continue
-        seen.add(key)
-        lines.append(_dump_row(value))
-    return _append_lines(root, DERIVED_VALUES_STEM, lines)
+    return len(append_derived_value_ids(root, values, version=version, skip_existing=skip_existing))
 
 
 def append_gaps(
@@ -130,9 +165,15 @@ def append_gaps(
     return _append_lines(root, DERIVED_GAPS_STEM, lines)
 
 
-def _dump_row(value: DerivedValue) -> str:
-    """`DerivedValue` → 单行 JSON（`Decimal`/`datetime` 走 pydantic 的 json 模式）。"""
-    return json.dumps(value.model_dump(mode="json"), ensure_ascii=False, sort_keys=True)
+def _dump_row(value: DerivedValue, version: str = DEFAULT_VERSION) -> str:
+    """`DerivedValue` → 单行 JSON（`Decimal`/`datetime` 走 pydantic 的 json 模式）。
+
+    `version` 作为 `derived/` 真源的**行级列**并入（`Ch9 §3.5` 阶段④ 幂等键的 `version`
+    分量）；冻结的 `schema/models.py::DerivedValue` 不含该字段，故在序列化处补列，**不改模型**。
+    """
+    row = value.model_dump(mode="json")
+    row["version"] = version
+    return json.dumps(row, ensure_ascii=False, sort_keys=True)
 
 
 def history_for(root: str | Path, derived_id: str) -> list[dict[str, Any]]:

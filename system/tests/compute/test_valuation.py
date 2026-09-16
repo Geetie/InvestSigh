@@ -18,12 +18,17 @@ from scripts.compute.contract import (
     UndefinedComputation,
 )
 
+# Ch5 §D.3：baseline 版本时间（早）与估值计算时间（晚）——两者**都必须显式给出**。
+BASELINE_AT = datetime(2026, 8, 1, tzinfo=timezone.utc)
+COMPUTE_AT = datetime(2026, 9, 10, tzinfo=timezone.utc)
+
 
 def test_value_per_share_range_known_value() -> None:
     """EV=1000, 净负债=200, 股数=100 → 权益 800 → 每股 8；×[10,15] → [80,120]。"""
     rng = valuation.compute_value_per_share_range(
         Decimal("1000"), Decimal("200"), Decimal("100"), Decimal("10"), Decimal("15"),
         subject="sec_nvda", operands=["baseline-1", "shares-1"], method_version="val-v1",
+        baseline_analyzed_at=BASELINE_AT, computed_at=COMPUTE_AT,
     )
     assert rng.low.value == Decimal("80")
     assert rng.high.value == Decimal("120")
@@ -40,6 +45,7 @@ def test_range_probability_defaults_to_none() -> None:
     rng = valuation.compute_value_per_share_range(
         Decimal("1000"), Decimal("0"), Decimal("100"), Decimal("10"), Decimal("12"),
         subject="s", operands=["a"], method_version="v1",
+        baseline_analyzed_at=BASELINE_AT, computed_at=COMPUTE_AT,
     )
     assert rng.probability is None
 
@@ -49,6 +55,7 @@ def test_net_cash_adds_back() -> None:
     rng = valuation.compute_value_per_share_range(
         Decimal("1000"), Decimal("-100"), Decimal("100"), Decimal("1"), Decimal("1"),
         subject="s", operands=["a"], method_version="v1",
+        baseline_analyzed_at=BASELINE_AT, computed_at=COMPUTE_AT,
     )
     assert rng.low.value == Decimal("11")
 
@@ -93,6 +100,44 @@ def test_order_check_requires_explicit_times() -> None:
     """时间契约必须显式（不得默认当前时间，否则倒填不可检）。"""
     with pytest.raises(MissingInput):
         valuation.require_baseline_before_compute(None, datetime(2026, 9, 10, tzinfo=timezone.utc), subject="s")
+
+
+def test_value_range_double_none_is_rejected_not_now_default() -> None:
+    """★ C-05：双时间 `None` → **拒绝**（曾静默跳过顺序校验并以 `now()` 兜底）。
+
+    依据 `Ch5 §D.3`：`compute_valuation(baseline_version, params, *, compute_time)` 的
+    `compute_time` 为**必填** kwarg；`Ch5 §D.4` 版本倒序规则要求"倒序 → 拒绝"。
+    故本函数两时间**都必须显式**，双 `None` → `MissingInput`（缺口类），**不得**回落 `now()`。
+    """
+    with pytest.raises(MissingInput):
+        valuation.compute_value_per_share_range(
+            Decimal("1000"), Decimal("0"), Decimal("100"), Decimal("10"), Decimal("12"),
+            subject="s", operands=["a"], method_version="v1",
+        )
+
+
+def test_value_range_valid_times_compute_normally() -> None:
+    """反向对照：两时间都给且顺序正确（baseline 早于 compute）→ 正常算出（不误伤）。"""
+    rng = valuation.compute_value_per_share_range(
+        Decimal("1000"), Decimal("0"), Decimal("100"), Decimal("10"), Decimal("12"),
+        subject="s", operands=["a"], method_version="v1",
+        baseline_analyzed_at=BASELINE_AT, computed_at=COMPUTE_AT,
+    )
+    assert rng.low.value == Decimal("100")
+    assert rng.high.value == Decimal("120")
+
+
+def test_implied_growth_none_input_is_missing_not_typeerror() -> None:
+    """`None`（缺失）→ `MissingInput` 缺口类异常，**不得**裸 `TypeError`。"""
+    with pytest.raises(MissingInput):
+        valuation.compute_implied_growth_ratio(
+            None, Decimal("5"), Decimal("100"), subject="s", operands=["a"],
+        )
+
+
+def test_enterprise_value_none_input_is_missing_not_typeerror() -> None:
+    with pytest.raises(MissingInput):
+        valuation.compute_enterprise_value(None, Decimal("0"), subject="s", operands=["a"])
 
 
 def test_order_check_passes_when_baseline_earlier() -> None:
