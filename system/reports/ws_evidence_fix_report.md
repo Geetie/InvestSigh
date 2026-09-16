@@ -209,7 +209,7 @@ claims: 5   claim_propagation: 0   companies: 2   tasks: 3   baselines: 1   reco
 - **⑦`G-B10-07`**：`classify_and_record` **已幂等**（`run#2` 本模块增量 = 0；反向对照必写）；`run#1 = +5` 逐行解释清楚（1 行 step 1 重复版 + 4 行本模块首写）；**唯一残留 +1 系 step 1 既有重复版，由 `ws/idempotency` `aa8a3ee` 修**（叠加后 `run#2` 两文件皆 0，见 §②-8）。
 - **③G3 / ⑤G6**：落点在 `scripts/daily/**`，**已按主理人裁决（2026-09-16「归属随模块走」）移交 `ws/daily-fix`，本流未动该域**（见 §④）。
 
-**提交哈希**：首交付 `66422a88ac0b15ce9e19af6f09c2f66239214d42`（11 files, +1220/-21）；`G-B10-07` 硬化见本轮增量提交（本节文末补记）。
+**提交哈希**：首交付 `66422a88ac0b15ce9e19af6f09c2f66239214d42`（11 files, +1220/-21）；`G-B10-07` 硬化 = `9ba54a8`（4 files, +159/-9）。分支 `ws/evidence-fix`。
 
 ---
 
