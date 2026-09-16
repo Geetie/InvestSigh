@@ -1,0 +1,12 @@
+{"security_id": "usDEMO", "day": "2026-04-01", "price": "100.00", "is_nav": false, "source_ref": "fixture:demo_stock_prices:2026-04-01"}
+{"security_id": "usDEMO", "day": "2026-04-15", "price": "112.50", "is_nav": false, "source_ref": "fixture:demo_stock_prices:2026-04-15"}
+{"security_id": "usDEMO", "day": "2026-05-01", "price": "121.00", "is_nav": false, "source_ref": "fixture:demo_stock_prices:2026-05-01"}
+{"security_id": "usDEMO", "day": "2026-05-15", "price": "133.40", "is_nav": false, "source_ref": "fixture:demo_stock_prices:2026-05-15"}
+{"security_id": "usDEMO", "day": "2026-06-01", "price": "148.90", "is_nav": false, "source_ref": "fixture:demo_stock_prices:2026-06-01"}
+{"security_id": "usDEMO", "day": "2026-06-15", "price": "145.10", "is_nav": false, "source_ref": "fixture:demo_stock_prices:2026-06-15"}
+{"security_id": "usDEMO", "day": "2026-07-01", "price": "152.30", "is_nav": false, "source_ref": "fixture:demo_stock_prices:2026-07-01"}
+{"security_id": "usDEMO", "day": "2026-07-15", "price": "160.80", "is_nav": false, "source_ref": "fixture:demo_stock_prices:2026-07-15"}
+{"security_id": "usDEMO", "day": "2026-08-03", "price": "171.20", "is_nav": false, "source_ref": "fixture:demo_stock_prices:2026-08-03"}
+{"security_id": "usDEMO", "day": "2026-08-17", "price": "183.60", "is_nav": false, "source_ref": "fixture:demo_stock_prices:2026-08-17"}
+{"security_id": "usDEMO", "day": "2026-09-01", "price": "192.40", "is_nav": false, "source_ref": "fixture:demo_stock_prices:2026-09-01"}
+{"security_id": "usDEMO", "day": "2026-09-15", "price": "200.00", "is_nav": false, "source_ref": "fixture:demo_stock_prices:2026-09-15"}
