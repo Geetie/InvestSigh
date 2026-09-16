@@ -516,8 +516,8 @@ RC=0        ← 11 条（含本次新增的第 ⑪ 条）
 |---|---|
 | `G9-1`：`daily_run::task_state_auditable` **必须补实现**，不许以 `ineffective` 收尾 | 在 `stage_daily_run_passed()` 内实现 `施工图:203` 的 `all_tasks_have_status(run_window)`：每行 `status` **存在且 ∈ `TaskStatus` 五态**；违例带 `task_id` + 实际值 + 合法域。原 `ineffective` 探针如期变红 → 改成正向反例，并另加**判别力绑定**测试。 |
 | `G9-2`：`review_append_only` **按设计实现 append-only**，不许改 id 措辞 | 按 `Ch10 §D.5` 补两个**互不重叠**的被检面（6.3）；`delivery.yaml` **一行未动**。 |
-| `G9-2`：先查清 `expansion` 里有没有「三层齐备」自己的 id | **没有**（`delivery.yaml:124-133` 只有 3 条）。且**「三层齐备」在全设计区没有「通过判据」级的逐字出处** —— 见 6.5，**待你裁**。 |
-| `G9-2`：`(success, failure, pending)` 三类记录 | **全代码区无载体**（grep 只命中 `delivery.yaml:132` 那句声明本身）⇒ 按 `G-03` 保留为**临时 `ineffective`** 并写明原因 —— 见 6.5，**待你裁**。 |
+| `G9-2`：先查清 `expansion` 里有没有「三层齐备」自己的 id | **没有**：`delivery.yaml` 阶段⑤ `pass_criteria_testable` **恰好 3 条**、`exit_artifacts: ['三层复盘记录']` ⇒「三层齐备」**只在退出物里，无通过判据身份**（一手事实已自查复核）。裁定 = **保持中间态**，升级为 **`T-15`**（见 6.5.1）。 |
+| `G9-2`：`(success, failure, pending)` 三类记录 | **全代码区无载体**（grep 只命中 `delivery.yaml:132` 那句声明本身）⇒ 按 `G-03` 保留为**临时 `ineffective`** + 探针。裁定 = **载体属设计范围**，升级为 **`T-17`**；已按要求附**推荐方案（只写未实现）**（见 6.5.2）。 |
 | 现场变化：`append_only_guard` 在 worktree 里曾恒空放行（`G-RC-12`） | 已 `merge main` 取得修复，并**把它变成阶段⑤ 的可检项**（6.3 ①）。 |
 
 ### 6.2 `G9-1` 的可执行证据（**原始输出 + 退出码**）
@@ -632,23 +632,46 @@ RESULT: FAIL（3 violations）   ← 1 条本判据 + 2 条既有台账
 ⇒ 去重口径改为「**测试路径全局唯一**」（防的是同一测试被登记多次冒充多条证据，而不是防同判据多轴）。
 义务本身（A：每条已绑定判据 ≥1 条 `counterexample`）**不受影响**。
 
-### 6.5 仍待你裁定（**我未自行改措辞**，`R-04`）
+### 6.5 待裁定项与裁定结果（张力 `T-15` / `T-17`）
 
-**① 「三层齐备」是一条没有设计出处的尺** —— 我逐处查过，**"三层必须齐备"在全设计区
-没有「通过判据」级的逐字依据**：
+#### 6.5.1 ① 「三层齐备」的身份 —— 裁定：**保持中间态**，升级为需求方待裁项 `T-15`
 
-| 出处 | 逐字内容 | 它到底约束什么 |
-|---|---|---|
-| `Ch10 §C.1`（`10/02:198`） | `eval_layer` \| enum \| `research_quality`/`forecast_quality`/`investment_result` | **取值域**（合法值有哪三个），**不是**"三个都必须出现" |
-| `Ch10 §C.4`（`10/02:250`） | `assert layer in VALID_LAYERS, "三层不得新增/合并"` | **取值域**断言 |
-| `Ch10 §C.2`（`10/02:215`） | "三层**不合并**：禁止把三层压成单一 `score`/`confidence`/综合评分" | **负向断言**（禁综合评分） |
-| `施工图:215 / :234` | "**退出物**：三层复盘记录" | **退出物**声明；`:234` 的通过判据只列 3 条，**不含齐备性** |
+**★ 可核的肯定事实**（`delivery.yaml` 是**实现区可核**的声明面；本节实测复核，非转述）：
 
-⇒ 选项：**(a)** 批准新增一条 id，我逐字引 `Ch10 §C.4:250`「三层不得新增/合并」（**我倾向这条**）；
-**(b)** 判定它不属验收判据、删掉该检查（代价：丢掉一层现存判别力，且"退出物：三层复盘记录"无人守）；
-**(c)** 你给别的落点。**在你批之前我保持现状**（仍挂在 `review_append_only` 上，未改措辞、未新增 id）。
+```
+$ python - <<'PY'   （读 registry/delivery.yaml，取 delivery_stages 里 key=expansion 的那条）
+阶段⑤ key = expansion | delivery_stage = 5
+pass_criteria_testable 条数 = 3
+   - research_standard_consistent | automated | 研究标准**保持一致**（Ch4 §G）
+   - investment_result_verifiable | automated | 投资结果**可核验**（`Ch10 §N10.3-04` 前向记录）
+   - review_append_only           | automated | 复盘 **append-only**（`(success, failure, pending)` ⊆ 记录集，禁选择性删除）
+exit_artifacts = ['三层复盘记录']
+```
 
-**② `(success, failure, pending)` 三类记录的载体是谁** —— 实测**全代码区无承载**：
+⇒ **「三层齐备」只在 `exit_artifacts` 里，没有通过判据身份**；`pass_criteria_testable` 里
+**没有**它自己的 id。这正是现在它被 `review_append_only` 顶着的**结构性原因**。
+
+★ **口径修正（采纳 team-lead 的裁定并自查）**：我原先的表述偏向「**全设计区**没有逐字出处」——
+那是**穷举式否定**，易被「你搜漏了」反驳。现改为上面的**可核肯定事实**：
+**`delivery.yaml` 阶段⑤ 的判据列表恰好 3 条 + 退出物实际清单**，任何人可复跑复核。
+设计侧佐证（`Ch10 §C.1` 只定义 `eval_layer` 取值域、`§C.4:250` 的
+`assert layer in VALID_LAYERS` 亦为取值域断言）**降为佐证**，不再作为主论据。
+
+**裁定**（team-lead，选项 **(c)** —— 既非 (a) 也非 (b)）：
+- **不批 (a) 新增 id**：新增 id 就必须让 `delivery.yaml` 声明它（否则会是"绑定了一条未声明的判据"，
+  `assert_criteria_implemented` 与 `criterion_effectiveness_guard` 都会红）；而
+  `pass_criteria_testable` 是 `施工图 §2 阶段⑤` **通过判据列表的转写**，
+  **给它加一条 = 改需求面**，超出实现方权限。
+- **不批 (b) 删检查**：那会让阶段⑤ 的退出物无人守，且已实现的真 append-only 语义白做。
+- ⇒ **保持现状**：检查保留、仍挂 `review_append_only` 名下、在登记里**显式标"★ 待裁定"**。
+  同时做到：不违 `R-04`（未新增 id）、不静默（待裁定白纸黑字进登记）、判别力不丢（真的会拦）。
+
+**已落账**：该张力升级为 **`T-15`**（「退出物『三层复盘记录』是否升格为阶段⑤ 通过判据」），
+本节的实测即是它最完整的一份证据陈述。登记表对应条目的 `note` 已同步补上上述一手事实。
+
+#### 6.5.2 ② `(success, failure, pending)` 的载体 —— 裁定：**属设计范围**，待裁项 `T-17`
+
+实测**全代码区无承载**：
 
 ```
 ═══ 证据 4/4：三类记录这条的判别力实测为 0 ═══
@@ -660,9 +683,23 @@ B 只留赢的(全 success)           EXIT=1
 `Ch10 §D.5:332` 逐字要求「成功 / 失败 / `pending`（待判断）各有结构性记录，不可选择性删除」，
 但 `success`/`failure`/`pending` 三元组在代码区**只出现在 `delivery.yaml:132` 那句声明里**
 （`schema/models.py` 无对应枚举、`facts/*.jsonl` 无对应字段）⇒ 按 `G-03` 只能显式记账为
-**「无被检对象」**。我把它登记为**临时 `ineffective`**（条目里写明：临时、原因是**载体未定**、
-补实现的提交号见本节），并留了探针测试 —— 一旦有载体，该探针**当场变红**，强制更新登记（铁律 5）。
-**请你指定载体**，或确认它属后续阶段待交付。
+**「无被检对象」**。已登记为**临时 `ineffective`** + 探针测试 —— 一旦有载体，探针**当场变红**，
+强制更新登记（铁律 5）。
+
+**裁定**：team-lead **不单方面指定载体**（载体决定**真源结构**，属设计范围）⇒ 升级为 **`T-17`**。
+
+**★ 推荐方案（应 team-lead 要求给出；只写、未实现，供需求方拍板）**：
+
+| 项 | 建议 |
+|---|---|
+| 载体 | **复用现有复盘记录真源**：`facts/tasks.jsonl` 的 `eval_result` / `eval_result_history`（`Ch10 §C.4:253` 已钉死 `append("facts/tasks", e)`） |
+| 新字段 | `result_kind ∈ {success, failure, pending}`（**加在既有对象上**） |
+| ★ 为什么**不**新建表 | `facts/` 的**表集合不得增删改名**（22 stem 已冻结） ⇒ 新建表 = 改真源结构，代价与风险都远大于加一个字段；且 `Ch10 §D.5` 说的是"**记录**"，不是"表" |
+| 配套反例 | 断言 **`{success, failure, pending} ⊆ 记录集的 `result_kind` 取值集合**（即三类**各有**结构性记录）；反例 = 只留 `success`（或删掉 `failure` 行）⇒ 阶段⑤ 必须红 |
+| 与现有 ② 的分工 | 现有 ② 判"**层**（`eval_layer`）不得消失"；新字段判"**复盘结果类别**（`result_kind`）不得消失"。两者轴不同 ⇒ 不重复，可并存为两条 `counterexample` |
+| 落点归属 | 需需求方先定向（`T-17`）；定位后在 `scripts/review/record_eval.py` 写入侧与 `stage_gate` 读取侧各补一处（**同一字段**，`G-06`） |
+
+★ 实现后**同一条探针测试会当场变红** —— 这是刻意设计的移交形态（铁律 5）。
 
 ### 6.6 诚实标注：`① append-only 覆盖性` 的判别力是**弱**的
 
@@ -689,7 +726,7 @@ B 只留赢的(全 success)           EXIT=1
 由 **0.51s → 0.86s**；已改**就地导入**（只有阶段④ 用得到它），`prep` 回到 **0.72s**，
 差异只由 `daily_run` 承担。新门禁 `criterion_effectiveness_guard` 2.04s。
 
-### 6.8 ⚠️ 给后续各流的约束：分片 B 余量只剩 1
+### 6.8 ⚠️ 分片余量约束与 team-lead 的处置裁定
 
 `tests/injection/test_criterion_effectiveness.py` 由 23 → **26** 例，所属分片
 `injection-b` 由 28 → **31** 例，而 `test_shard_coverage.py::test_shard_case_counts_within_quota`
@@ -702,8 +739,17 @@ $ PYTHONPATH=tests <py> -m pytest tests/injection/test_criterion_effectiveness.p
 ```
 
 ⇒ **往本文件再加 >1 个用例就会让分片配额断言变红**（这正是它该有的行为：防"某片单轮跑不完 ⇒
-门禁被静默关掉"）。修法是**把新用例放进新文件并登记到另一片**，或由 `verify.py` 维护者重排分片。
-`verify.py` 属 `V-02` 保护范围，**我未改动**，在此上报。
+门禁被静默关掉"）。
+
+**team-lead 裁定（已落账）**：
+- **本卡继续做完，不动分片** —— 分片重组由 team-lead 做（`verify.py` 是**共享文件**，
+  多方同时改必冲突，且属 `V-02` 保护范围）⇒ **我未改动 `verify.py`**。
+- ★ **新增用例一律进新文件**，不得再往 `test_criterion_effectiveness.py` 里塞 ——
+  因为 **13-A（`chapter4_g_depth`）与 13-C（`evidence_locatable`）都要各加一条反例用例**，
+  该文件已无余量。
+- 若确需再加：建 `tests/injection/test_criterion_effectiveness_expansion.py`，
+  并登记进**有余量的片**（片内 ≤32 是硬约束，由 `test_shard_coverage.py` 核）。
+- ⇒ **我不得为了让新用例有地方而去调别人的分片**（那是 team-lead 的活）。
 
 ### 6.9 本节清洁性
 
