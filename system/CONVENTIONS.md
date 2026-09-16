@@ -46,13 +46,20 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
 
 | 批次 | 内容 | 超时 | 实测 |
 |---|---|---|---|
-| `unit` | `tests/unit/` | 60s | 1.5s |
-| `conflict` | `tests/conflict/` | 30s | 0.4s |
-| `guards` | `tests/guards/` | 60s | 1.9s |
-| `injection` | `tests/injection/` | 120s | 13.3s |
-| `root` | `tests/test_ch11_invariants.py` | 30s | 0.4s |
-| `gates` | `run_all_gates.py`（19 项门禁） | 60s | 4.0s |
-| `stage` | `stage_gate.py --stage all` | 30s | 0.3s |
+| `unit` | `tests/unit/` | 60s | 2.0s |
+| `conflict` | `tests/conflict/` | 30s | 0.3s |
+| `guards` | `tests/guards/` | 60s | 3.7s |
+| `injection` | `tests/injection/` | 120s | 27.4s |
+| `root` | `tests/test_ch11_invariants.py` | 30s | 0.3s |
+| `compute` | `tests/compute/`（确定性计算层） | 60s | 4.2s |
+| `graph` | `tests/graph/`（依赖图与 T12 传播） | 60s | 3.8s |
+| `validators` | `tests/validators/`（locator 定位校验器） | 30s | 3.8s |
+| `claim` | `tests/claim/`（主张五态状态机） | 30s | 3.6s |
+| `gates` | `run_all_gates.py`（20 项门禁） | 60s | 2.3s |
+| `stage` | `stage_gate.py --stage all` | 30s | 0.2s |
+
+★ 后 4 个批次由**主理人在集成时统一加入**（`reports/parallel_workstreams.md §5 I-3`）——
+  并行工作流的 Agent **不得**自行改 `verify.py`（三方同改必冲突），只报"需新增批次"。
 
 ### V-03 **超时 = 该批有问题**，且**绝不算通过**
 

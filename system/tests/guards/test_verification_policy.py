@@ -18,6 +18,8 @@
 
 from __future__ import annotations
 
+import re
+
 from pathlib import Path
 
 import pytest
@@ -41,7 +43,10 @@ def _patch(root: Path, rel: str, old: str, new: str) -> None:
 def test_policy_guard_passes_on_pristine_tree(code_root: Path) -> None:
     proc = run_gate(GUARD, code_root)
     assert proc.returncode == 0, f"干净树上验证规范守卫误报\n{proc.stdout}\n{proc.stderr}"
-    assert "batches: 7" in proc.stdout
+    # ★ **不要写死批次数**（初版断言 `"batches: 7"`，集成时统一加批次后即 11 →
+    #   测试因"批次变多"而红。那是**脆断言**：把"实现细节的数量"当成契约。
+    #   这里只断言与本测试目的相关的两件事：守卫跑通、覆盖检查无遗漏。
+    assert re.search(r"batches: \d+", proc.stdout), "未上报批次数"
     assert "test_files_uncovered: 0" in proc.stdout
 
 
