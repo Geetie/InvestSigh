@@ -12,11 +12,34 @@
 
 set -u
 
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+# ★★ 问根之前**必须摘掉 `GIT_DIR`**（与 `append_only_guard` 那处**同一根因**，实测过）：
+#   在 git 钩子里 `GIT_DIR` 是**已导出**的；此时**不带** `GIT_WORK_TREE` 的
+#   `git rev-parse --show-toplevel` **不查仓库、直接把 cwd 当工作树根**返回。
+#   后果：**从子目录提交**时 `REPO_ROOT` 会算成那个子目录 ⇒ `CODE_ROOT` 指错 ⇒
+#   各门要么扫不到对象、要么找不到 `rules/`。
+#   （`append_only_guard` 已经在 linked worktree 上因此**恒空放行**过 —— 纪律 4 静默失效。
+#     本处是同一根因的第二个落点。）
+#   → 摘掉 `GIT_DIR`/`GIT_WORK_TREE`/`GIT_PREFIX`，让 git 从 cwd **向上**发现仓库；
+#     ★ 但**保留 `GIT_INDEX_FILE`** —— 它指向**本工作树自己的索引**，摘了会读错暂存区。
+REPO_ROOT="$(
+  unset GIT_DIR GIT_WORK_TREE GIT_PREFIX
+  git rev-parse --show-toplevel 2>/dev/null
+)" || {
   echo "pre-commit: 无法定位仓库根（git rev-parse 失败）" >&2
   exit 1
 }
+if [ -z "$REPO_ROOT" ]; then
+  echo "pre-commit: 仓库根解析为空 —— 拒绝在根不明的情况下跑门禁" >&2
+  exit 1
+fi
 cd "$REPO_ROOT" || exit 1
+
+# ★ 自检：根算错时**响亮失败**，不要让它退化成"所有门都扫不到对象而通过"。
+#   这正是本项目反复对抗的形态：**没有可检对象 ≠ 已验证**（`G-03`）。
+if [ ! -d "$REPO_ROOT/system/scripts" ]; then
+  echo "pre-commit: 根解析可疑 —— '${REPO_ROOT}/system/scripts' 不存在（cwd=${PWD}）" >&2
+  exit 1
+fi
 
 # 解析 Python：优先环境变量，其次隔离 venv，最后退回 python3
 PY="${WORKBUDDY_PY:-}"
