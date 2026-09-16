@@ -14,7 +14,7 @@
 | **G-02** | **数据/指令分离执行器未实现**：G-01 的被测对象。设计明确它是 C 档自建项（"规则 = 只读 Git 文件（模型不可写）" + "数据/指令分离执行器 + 测试"） | `Ch9 §3.2.1` 第 6 行 | **高** | ⚠️ **PARTIAL（独立审计否决了 `DONE`）**：**实现已完成且经独立验证**（`scripts/guard/` 7 模块 + `injection_guard` 第 19 项门禁 + `handle_external_request` 路由入口；我逐条复现过四处反事实），**但从未被任何非测试代码调用** —— 真实仓库 `facts/claims.jsonl` = **0 行**、`raw/` 仅 `.gitkeep`，`grep process_external_text\|guard.executor` 在 `tests/` 之外 **0 命中**。按 `§一 底线 2` 属 **Wiring Failure**（能通过 100% 覆盖率测试、主流程从不触发）。★ 生产接线**不属阶段②**（原判已被推翻，见 `G-13` 的判据纠正）→ 追踪项 **G-13**。审计报告：`reports/batch4_independent_audit.md` · 第二轮 `…_round2.md` |
 | **G-03** | **`facts/` 13/18 个 JSONL 无消费方**：仅 `industry_nodes.jsonl` 有 44 行（且**有写无读**，`§6.2 Empty Execution`）；其余 12 个业务代码零引用、且为空文件 | `Ch9 §3.3.3` / `§十三 第 2 问` | **高**（阶段① 固有） | `PARTIAL`：消费方按设计在 ②–⑤ 阶段随各层交付而产生；**不得据此判"已验证"** |
 | **G-04** | **7 条声明为 `automated` 的通过判据未实现**（本实现已用 `criterion()` 在函数体内**显式绑定**，并在报告里逐条列出）：<br>`nvidia_sample`: `chapter4_g_depth` · `evidence_locatable`<br>`core_chain`: `t01_t14_all_pass` · `graph_and_ask_traceable`<br>`daily_run`: `coverage_verifiable`<br>`expansion`: `research_standard_consistent` · `investment_result_verifiable` | `registry/delivery.yaml` 各阶段 `pass_criteria_testable` | **高** | `OPEN`（阶段②–⑤ 前置；**前置齐备时会直接阻断该阶段**） |
-| **G-05** | **`scripts/{compute,decision,graph,validators}/` 是空包**：施工图把它们列为 ②③ 阶段 C 档承重块（确定性计算 / 三维决策函数 / T12 传播 / `locator_check`） | `施工图 §3.2` | 中（②③ 前置） | `OPEN` |
+| **G-05** | **`scripts/{compute,decision,graph,validators}/` 是空包**：施工图把它们列为 ②③ 阶段 C 档承重块（确定性计算 / 三维决策函数 / T12 传播 / `locator_check`） | `施工图 §3.2` | 中（②③ 前置） | ⚠️ **PARTIAL（已实现，但仍是孤儿）**：批次 5/5b/5c 已建成 `compute`（82 用例）· `graph`（36）· `validators`+`claim`（20+20）· `decision`（86）；**但四者 `AC-03 真接线` 全部 FAIL** —— `pipeline.py` 只注册 step 1 → 见 `G-20`/`G-21`/`G-14`。**"包里不是空的" ≠ "已验收"** |
 | **G-06** | **`--require-l4` / `--require-l5` 无调用方**：阶段③/④ 的硬门开关是死代码 | `Ch2 §B.4` / `conflict_scan.py` docstring | 中 | `OPEN`（阶段③④ 前置） |
 | **G-07** | **`run_all_gates.py` 只跑 `stage_gate --stage prep`**：阶段②–⑤ 的阻塞只在测试里跑 `--stage all`，不进 CI/pre-commit | `施工图 §2` | 中 | `PARTIAL`：阶段① 内合理（②–⑤ 本应阻塞）；进入② 时须改为跑当前阶段 | 
 | **G-08** | **`rules/review.yaml:32` 的 `guard:` 指向不存在的 `detect_horizon_extension`**：该 yaml 已注明"（阶段②/③ 实现）"，但 `guard:` 字段仍指向一个不存在的函数名 | `Ch2 §D.3` | 低 | `OPEN`：`rules/` 已锁 0444，修改须走 `chmod → 改 → 重锁` 显式流程（见 `lock_rules.py` 文档头） | 
@@ -131,3 +131,34 @@
 故这是**阶段① 编排缺陷 + 声明脱节**（原判"阶段② 采集层"已由主理人推翻，见 `G-13` 行与张力 `T-08`）。
 `AC-01` / `AC-03` 因此**保持 FAIL**，在 `T-08` 裁定与接线完成前**不得标完成**。
 独立审计另开 4 条 `OPEN`（`AC-05` 异常逃逸 / `injection_guard` B·C 可绕过 / `AC-15` 证据真空 / `raw/` 静默覆盖）。
+
+---
+
+# 批次 6 新增缺口（`G-14` ~ `G-22`）—— `§九` 独立审计（并行三流）产物
+
+> **来源**：`reports/ws_independent_audit_compute.md` · `reports/ws_independent_audit_graph_claim.md`
+> （**换人、新会话、对抗性**；判据全部为 raw CLI / 短脚本 + `文件:行号` 证据）
+> **结论**：`ws/compute` · `ws/graph` · `ws/claim` **均 not accepted**（FAIL 5 / PARTIAL 5 / UNKNOWN 6）。
+> **任务书**：`reports/batch6_fix_taskbook.md`
+
+| # | 缺口 | 设计锚点 | 严重度 | 状态 |
+|---|---|---|---|---|
+| **G-14** | **★ 阻断级：`claim → graph` 跨流传播契约三层不匹配**。`transition.py:335` 调 `forward_closure(claim_id, max_depth=3, detect_cycle=True)`；真实签名 `forward_closure(code_root, start, *, max_depth, source, edges, known_refs, valid_asof)` —— ① `code_root` 才是第 1 位置参数；② `start` 必填；③ **无 `detect_cycle`**。实测 `TypeError: forward_closure() got an unexpected keyword argument 'detect_cycle'`。**且**返回 `ClosureResult`（`@dataclass`，**不可迭代**）其 `reached` 为**裸 ref 字符串**，而 `_normalize_ref` 要求 `.object_type`/`.object_id` → 永不成立。**后果**：任何 `superseded` 真跑都抛错，且因 `_append_claim`（`:403`）先于 `_propagate`（`:414`），**在真源留下 `status=superseded` 行 + 0 条 recheck 任务 = 半数据**，违反追加式一致性 | `Ch6 §E.4`（`superseded` 复用第九章传播）· `Ch9 §3.4.3` · `§3.4.2`（追加式） | **阻断** | `IN-FIX`（`fix/claim-propagation`） |
+| **G-15** | **重复实现同一传播（`G-06` 唯一真源）**：`scripts/graph/propagate.py::propagate_retraction` 已完整实现闭包+入队+深度回退（幂等键 `recheck::<ref>::<target>`）；`transition.py` 又自带一套（`_normalize_ref` + `_append_recheck_task`），用**第三种键格式** `recheck::<claim_id>::<type>::<id>` → 在**同一 `facts/tasks.jsonl`** 争用同段前缀，同逻辑任务得出两种键 → **重复建单**。违反 `纪律 11 复用优先` | `Ch9 §3.4.3` · `§3.5` 阶段④幂等键 · `G-06` | 高 | `IN-FIX`（同上，一并消除） |
+| **G-16** | **测试桩吞掉参数 → 真实路径零覆盖**（`G-14` 长期潜伏的**元凶**）：`tests/claim/test_transition.py:92` 的 `_closure_fn(*_args, **_kwargs)` 接受一切参数，签名错位**永远测不出来**；唯一另一处（`:276`）用 `monkeypatch` 把 resolver 换成 `lambda: None`，同样**绕过**真实路径 | `§5.1 AC-04`（真跑真实脚本）· `§一 底线 3` | 高 | `IN-FIX`（删桩 + 补真实路径用例） |
+| **G-17** | **`schema/store.py::read_records` 对缺失真源静默 `return []`** → 与"真源存在但 0 行"**不可区分**；守卫据此 `exit 0` 判 PASS。属"**无被检对象被当已验证**"的翻版 | `G-03` · `§一 底线 3` | 中 | `OPEN`（集成 `I-3`） |
+| **G-18** | **`ws/compute` 四条静默缺陷**（详见任务书 §2）：`C-01` `require_nonzero` 放过 `None` → 裸 `TypeError` 而非缺口对象（含 `rate=None` 缺汇率，DoD AC-05 明文要求缺口）· `C-02` 幂等键缺 `version` → 上游重述后**静默保留陈旧值并报 OK** · `C-03` `step.py:49` `produced` 语义错 → **击穿 `G1-05` 空执行守卫** · `C-05` `valuation.py` 双 `None` 静默跳过 `Ch5 §D.3` 顺序校验并注入 `now()` | `Ch9 §3.5` · `Ch5 §D.2/§D.3` · `Ch2 §B.4` G1-05 | 高 | `IN-FIX`（`fix/compute-silent-defects`） |
+| **G-19** | **`ws/compute` 设计偏离 4 项**：`growth.py:104` `cash_threshold = 0.8` **硬编码阈值**（`纪律 1` 禁参数内置）· `Ch4 §D.3` 分档实现给 `medium`+标志位与 DoD"四档不压成分数"表述不一致 · `NumericClaim` 复用**零命中**（DoD AC-08 声称复用） · `share_count`/`compute_date` 从未落库（`Ch5 §D.2` 要求） | `Ch4 §D.3` · `Ch5 §D.2` · `纪律 1` · `纪律 11` | 中 | `OPEN`（修或如实登记，由 `fix/compute-silent-defects` 逐条判定） |
+| **G-20** | **`ws/graph` 无生产调用方（`AC-03` FAIL）**：全树 grep 穷尽，`scripts.graph` / `graph_integrity_guard` 在 `scripts/graph/**` 之外**零引用**；`run_all_gates.py`（20 项）与 `pre-commit.sh` 均未收录；`pipeline.py` 只注册 step 1 → **孤儿模块** | `Ch2 §B.3`（命中即 fail）· `§一 底线 2` | 高 | `OPEN`（集成 `I-2`） |
+| **G-21** | **`ws/claim` 孤儿调用孤儿（`A-AC-03` FAIL）**：`transition.py` 确实调 `claim_locator_problems(...)`（调用**真实存在**），但 `transition.py` **自身零生产调用方**，且 `locator_check` **未注册门禁** | `Ch6 §D` · `G-07` | 高 | `OPEN`（集成 `I-1` + `I-2`） |
+| **G-22** | **DoD 契约文本过期（`B-AC-01` FAIL）**：`ws_claim_dod.md` 的 AC-01 与迁移表基于"采集层写 `status='active'`"，但 `schema/models.py::Claim.status` 默认值**已改为 `ClaimStatus.pending_verification`**（封闭 `StrEnum`，`active` 非合法取值）→ DoD 迁移表 `(active, pending_verification)` 那格标 ✅ 而**代码无 `active` 键**。属"**DoD 写了、代码不认**"（`§六 假交付`）。另：`ws_claim_dod.md A-AC-08` 引用的 `Ch9 §3.4.6 措施①/②` **子锚点在设计区不存在**（`§3.4.6` = 注入防护，无 ①②）→ 违反 `纪律 6` | `Ch6 §E.1` · `Ch9 §3.4.6` · `纪律 6` | 中 | `OPEN`（集成 `I-5`；**根因是主理人改 schema 默认值后未同步 DoD，主理人自己的失误**） |
+
+### ★ 批次 6 审计的三条方法论价值（必须记住）
+
+1. **"已合并 ≠ 已验收"被实证**：三流的 AC 判定原本**全部来自作者自报**；换人审计后，
+   同一批代码多出 **5 条 FAIL + 5 条 PARTIAL**，其中 `G-14` 是**阻断级**。
+2. **吞参数的测试桩 = 签名错位的永久掩体**（`G-16`）。凡"注入式"测试，桩**必须显式形参签名**，
+   否则测的是桩、不是实现。这条应升格为通用规范。
+3. **`--no-verify` 的反向证实有效**：集成 worktree 未用 `--no-verify` 即通过 pre-commit
+   → 反证三流的 `--no-verify` 属环境性（`V-06` 未预置批次），不是掩盖代码问题。
+

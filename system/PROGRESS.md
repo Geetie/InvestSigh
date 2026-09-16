@@ -201,6 +201,8 @@ sh system/scripts/ops/run_pytest.sh tests/<子目录>                # 直接跑
 
 ### 7.3 当前验证基线（**分批，各自独立超时**）
 
+> ⚠️ **已被 §9.4 取代**（批次 11 → 12，用例 389 → 475）。此段保留为批次 5/5b/5c 当时的历史证据。
+
 **11 个批次，全部合格**（`stage` 的 `exit=1` 为设计预期：①PASS + ②–⑤BLOCKED）：
 
 ```
@@ -229,8 +231,79 @@ compute 82 · graph 36 · validators 20 · claim 20）；**20 项门禁**全绿�
 ## 八、下一步
 
 1. ✅ 并行三流已并入 `main`（`a543983`）
-2. **阶段② 最小真实采集**：用 WorkBuddy 网络能力抓 NVIDIA 官方原文 → 走 step 1 → 落 `raw/` + `claims`，
-   先把"**从互联网到唯一真源**"这条链用**真实数据**跑通（`施工图 §1.3` 把"取数"裁定为 B 档复用）
-3. `compute`/`graph` 签名已冻结 → 可开**第二批并行流 `ws/decision`**（阶段③ 的门）
-4. 仍等需求方裁定：`T-08`（step 2–6 声明 vs 现实）· `p01`/`p03` 冻结
-5. 待评估：~30 个 `(str, Enum)` 是否统一切 `StrEnum`（同一 `str()` 陷阱）
+2. ✅ `ws/decision` 已并入 `main`（`1bbdbc1`）+ `verify.py` 批次 **11 → 12**
+3. ✅ **`§九` 独立审计已完成**（换人、对抗性）→ 三流 **均 not accepted**，见 §九
+4. 🔄 **批次 6 修复与集成收口**（进行中）：`fix/claim-propagation` · `fix/compute-silent-defects`
+   + 主理人集成主线 `I-1`~`I-5`（任务书 `reports/batch6_fix_taskbook.md`）
+5. ⏳ 仍等需求方裁定：**`T-08`**（`rules/pipeline.yaml` 声明 step 1–6 首版已实现 vs 现实）·
+   `p01`/`p03` 参数冻结
+6. 待评估：~30 个 `(str, Enum)` 是否统一切 `StrEnum`（同一 `str()` 陷阱）
+7. 未做：`ws/decision` 的独立审计（批次 7 排期）
+8. 阶段② 最小真实采集：用 WorkBuddy 网络能力抓 NVIDIA 官方原文 → 走 step 1 → 落 `raw/` + `claims`
+
+---
+
+## 九、`§九` 独立审计结论（**"已合并 ≠ 已验收"被实证**）
+
+自审（`reports/parallel_workstreams_self_audit.md`）只证明了"已合并"。换人做对抗性独立审计后：
+
+| 流 | 判定 | FAIL | PARTIAL | UNKNOWN |
+|---|---|:--:|:--:|:--:|
+| `ws/compute` | **not accepted** | 1 | 2 | 2 |
+| `ws/graph` | **not accepted** | 1 | 1 | 2 |
+| `ws/claim` | **not accepted** | 3 | 2 | 2 |
+
+**四条流的 FAIL 高度同构 —— `AC-03 真接线` 全部不合格**（全是孤儿模块）。
+**共同根因 = `G-13`**：`pipeline.py::_register_default_steps()` **只注册了 step 1**，
+而 `rules/pipeline.yaml`（0444 锁定 = 设计真相源）声明 **step 1–6 `implemented_in_first_version: true`**。
+
+### 9.1 最关键的一处（阻断级 `G-14`）
+
+`scripts/claim/transition.py:335` 调 `forward_closure(claim_id, max_depth=3, detect_cycle=True)`，
+真实签名是 `forward_closure(code_root, start, *, max_depth, source, edges, known_refs, valid_asof)` ——
+**`code_root` 才是第 1 位置参数、`start` 必填、且根本没有 `detect_cycle`**。实测：
+
+```
+$ python -c "from scripts.graph.closure import forward_closure; forward_closure('C1', max_depth=3, detect_cycle=True)"
+TypeError: forward_closure() got an unexpected keyword argument 'detect_cycle'
+```
+
+**且**返回 `ClosureResult`（`@dataclass`，**不可迭代**）、其 `reached` 是**裸 ref 字符串**，
+而调用侧 `_normalize_ref` 要求 `.object_type`/`.object_id` → **永不可能成立**。
+后果：① 任何 `superseded` 真跑必抛错；② 因 `_append_claim`（`:403`）先于 `_propagate`（`:414`），
+**真源留下 `status=superseded` 行 + 0 条 recheck 任务 = 半数据**（违反追加式一致性）。
+
+**为什么 389 个测试全绿也没抓到**：`tests/claim/test_transition.py:92` 的注入桩是
+`_closure_fn(*_args, **_kwargs)` —— **吞掉一切参数**，签名错位永远测不出来 → **真实传播路径零覆盖**。
+
+### 9.2 主理人复核时发现的、比审计报告更深一层的问题（`G-15`）
+
+`scripts/graph/propagate.py::propagate_retraction` **已完整实现同一件事**
+（`object_index` → ref→stem；`RECHECK_STEM_TYPES` 过滤；幂等键 `recheck::<ref>::<target>`；`apply` 落库 + 深度回退）。
+`transition.py` 又自带一套，用**第三种幂等键** `recheck::<claim_id>::<type>::<id>`，
+与 graph 的在**同一 `facts/tasks.jsonl`** 争用同段前缀 → **重复建单**。违反 `G-06 / 纪律 11`。
+
+### 9.3 `ws/compute` 的四条"静默缺陷"（`G-18`）
+
+| # | 位置 | 静默行为 |
+|---|---|---|
+| `C-01` | `contract.py:167` | `require_nonzero` 判 `value == 0`，`None` 静默放过 → 裸 `TypeError` 而非缺口对象 |
+| `C-02` | `contract.py:150` | 幂等键缺 `version` → 上游重述后**静默保留陈旧值并报 OK** |
+| `C-03` | `step.py:49` | `produced` 用"本次重算全部 id" → **击穿 `G1-05` 空执行守卫** |
+| `C-05` | `valuation.py:114` | 双 `None` 静默跳过 `Ch5 §D.3` 顺序校验并注入 `now()` |
+
+### 9.4 批次 6 的验证基线（**12 批 / 475 用例全绿**）
+
+```
+unit 42 · conflict 6 · guards 56 · injection 119 · root 8
+compute 82 · graph 36 · validators 20 · claim 20 · decision 86 · gates 20 项 · stage 预期 exit=1
+```
+
+`verify.py --batch all` 全批合格；`20 项门禁` 全绿；pre-commit `batches: 12` `test_files: 39` `uncovered: 0`。
+
+### 9.5 主理人在本批新增的一处失误（第 4 条）
+
+改 `schema.models.Claim.status` 默认值为 `pending_verification` 后，**没有同步 `ws_claim_dod.md`**
+→ 该 DoD 的 AC-01 与 5×5 迁移表仍写 `status="active"`，出现"DoD 写了、代码不认"（`G-22`）。
+**教训：改被多方引用的契约字段，必须把"引用它的文档"一并纳入改动面。**
+
