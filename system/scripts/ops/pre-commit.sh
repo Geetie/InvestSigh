@@ -108,6 +108,12 @@ run_gate "graph_integrity_guard" "$CODE_ROOT/scripts/graph/graph_integrity_guard
 #    绑定只证明"接了"，不证明"真的在查"（把 coverage_check 换成空实现，绑定数不变而门禁变绿）。
 run_gate "criterion_effectiveness_guard" "$CODE_ROOT/scripts/checks/criterion_effectiveness_guard.py" "$CODE_ROOT"
 
+# ⑫ 跨载体绑定（缺口 G-55）：`rules/scenario.yaml` 的取值域 ↔ 实现侧枚举 ——
+#    两侧值相同、各自自洽，**只改一侧不会红** ⇒ 漂移可以无限期存在。
+#    ★ 必须与 `run_all_gates.py::GATES` **同时**登记（`G-07`）：只进一处 = "提交时放行、CI 时拦"（或反之），
+#      两处口径不一致本身就是同一族的缺陷。
+run_gate "scenario_tag_binding_guard" "$CODE_ROOT/scripts/checks/scenario_tag_binding_guard.py" "$CODE_ROOT"
+
 if [ "$FAILED" -ne 0 ]; then
   echo "pre-commit: 有门禁阻断，提交被拒。" >&2
   exit 1
