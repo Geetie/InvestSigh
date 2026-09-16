@@ -592,11 +592,20 @@ def _child_env() -> dict[str, str]:
       | 关 | 每次 **0.026s**，12/12 全过 |
 
       故**验证子进程一律在沙箱外跑**（用户要求），只影响本进程派生的验证子进程。
+
+    ★ 第三道闸门 `CODEBUDDY_SAFE_DELETE_ENABLED`（`E` 裁定 = (甲) **合法配置**，非绕过）：
+      只关上面两个时，**每次删除仍会 spawn 一次 node CLI** ⇒ 夹具批次照样打穿
+      宿主**回合级**删除预算（`V-08`/`V-09`），症状是"连单个用例目录都被拒删"、
+      其后所有建夹具的用例集体报 `E`（看起来像"测试坏了"）。
+      本仓把 `0` **显式**写进派生环境，使「一律在沙箱外跑」这句**声明**与**实现**一致。
+      `E` 下即**生产/门禁口径**（CI 亦然）。
+      三行的**唯一真源** = `checks/verification_policy_guard.py::BROKER_ENV_VARS`，少写会被判红。
     """
     return {
         **os.environ,
         "CODEBUDDY_SAFE_DELETE_SANDBOX": "0",
         "CODEBUDDY_BROKERED_FS_HOOK_ENABLED": "0",
+        "CODEBUDDY_SAFE_DELETE_ENABLED": "0",
     }
 
 

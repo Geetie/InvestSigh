@@ -26,6 +26,13 @@ set -eu
 
 export CODEBUDDY_SAFE_DELETE_SANDBOX=0
 export CODEBUDDY_BROKERED_FS_HOOK_ENABLED=0
+# ★ 第三道闸门：**安全删除本身**的开关（`E` 裁定 = (甲) 合法配置，非绕过）。
+# 只关前两个时，每次删除仍会 spawn 一次 node CLI ⇒ 夹具批次照样打穿宿主
+# **回合级**删除预算（`V-08`/`V-09`）⇒ 连单个用例目录都被拒删、后面全部报 `E`。
+# `E` 下即**生产/门禁口径**（本仓 CI 与 `verify.py` 派生批次亦然）。
+# 守卫 `verification_policy_guard.py::BROKER_ENV_VARS` 是这三行的**唯一真源**，
+# 少写一行会被它据实判红（声明↔实现机器绑定）。
+export CODEBUDDY_SAFE_DELETE_ENABLED=0
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT/system"
