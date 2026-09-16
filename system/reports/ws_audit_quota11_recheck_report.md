@@ -169,9 +169,11 @@ assert "环境" in why and "pytest" in why, (
 ### 3.4 这两条红**不会被任何门禁自动暴露**
 
 ```
-$ grep -n "injection\|verify.py" system/scripts/ops/run_all_gates.py      → 无匹配
-$ grep -n "injection\|verify.py" system/scripts/ops/pre-commit.sh         → 无匹配
+$ grep -n "injection\|verify.py" system/scripts/ops/run_all_gates.py      → 「无匹配」  rc=1   ★★ 假零 ★★
+$ grep -n "injection\|verify.py" system/scripts/ops/pre-commit.sh         → 「无匹配」  rc=1   ★★ 假零 ★★
 ```
+
+> ★★★ **上面这两行是"假零"，不是证据 —— 请勿单独引用本块。** 裸 `grep` = broker 的 **toybox 0.8.13**（`command -v grep` → `…/shim/brokered-bin/grep`），**不支持 `\|`**，失败形态 = `0` 命中 + `rc=1` + **零诊断**。下面另附**完整的真证据三件套**。
 
 ★ **本节的取证方法已更正（结论不变，但原取证过程不可信）**：
 我最初是用 **shell `grep -n "injection\|verify.py"`** 得到"无匹配"的。事后（`ws-verify-shard` 广播的环境告警）查明：**Bash 工具里的 `grep` 解析到的是宿主 broker 包装器（toybox），不是真 `grep`；我那个模式里的 `\|` 正是它不支持的 GNU 扩展运算符，于是它静默给出空输出，而 `exit 0` 是管道（`| head`/`| wc`）的退出码** —— 精确机制见 **§7.3.4**。我**用 Python 复算**（不经任何 grep）后才敢下结论：
@@ -183,6 +185,24 @@ pre-commit.sh      "verify.py" 出现 0 次   "verify" 出现 0 次   "injection
    run_all_gates.py:47   ("injection_guard.py", "scripts/checks/injection_guard.py", ()),
    pre-commit.sh:95      run_gate "injection_guard" "$CODE_ROOT/scripts/checks/injection_guard.py" "$CODE_ROOT"
 ```
+
+★★ **本处经 `auditor-batch11` 独立复算并报出**（对象 `main@2f62f5d`，2026-09-16 23:4x，属其"grep 依赖型结论全量重证"）。我**逐格复现，全部成立**，并按下述**三件套**把证据补全：
+
+```
+（甲）原文（假零，仅留痕）       裸 grep -n 'injection\|verify.py' <文件>  → 空 + rc=1
+
+（乙）复测：/usr/bin/grep -nE 'injection|verify\.py' <文件>      ← -E 且同时改写模式
+     scripts/ops/run_all_gates.py:47    ("injection_guard.py", "scripts/checks/injection_guard.py", ())
+     scripts/ops/pre-commit.sh:95       run_gate "injection_guard" "$CODE_ROOT/scripts/checks/injection_guard.py" "$CODE_ROOT"
+     ⇒ 两处命中都与 verify 分片无关（是另一道门禁 injection_guard）⇒ **结论不变**：两文件都不引用 `verify.py`
+
+（丙）地板真值 / 控制组 —— 证明"仪器是活的、零是方言造成的"，不是工具整体坏掉：
+     /usr/bin/grep -cE 'guard'    run_all_gates.py → 17      裸 grep -c 'guard'    run_all_gates.py → 17
+     /usr/bin/grep -c  'run_gate' pre-commit.sh     → 15      裸 grep -c 'run_gate' pre-commit.sh     → 15
+     ⇒ 纯字面在**两个引擎上完全一致** ⇒ 差异**只在** `\|` 这一格，**不能**推广成"裸 grep 一概不可信"（`V-10`）
+```
+
+★ `auditor-batch11` 给这种形态起的名很准：**「碰巧正确的假证据」** —— **结论对、论证无效**。它与 `G-62`/`G-63`/`G-64` 同族但**更隐蔽**：那几例的判据是"恒真/恒假"，这一例是**论证不成立而结论恰好落对**，于是**没人会去查论证**，还会被下游一路复用。⇒ 已补进 §5 第 9 条。
 
 ★ **上面那句"静默给出空输出"不是一个推测 —— 是活体反例，而且受害者是我自己**（可直接复跑）：
 
@@ -355,13 +375,15 @@ verify.py                          |  21 +
    ★★ **本条的规范出处是主干 `CONVENTIONS.md::V-10`**（它比我全：多一格第三引擎，且已有管道规矩 4）—— 本节只是**独立收敛**，见 §7.3.6。
    ★★★ **本条我原先写的处置是错的、已作废**：我原写"**此后一律用 Grep 工具** / `/usr/bin/grep` / Python"。按 `V-10` 规矩 1，**没有"一律改成 X"的安全写法** —— `Grep` 工具（ripgrep）**也是方言**：它把 `\|` 当**字面竖线**（0 / 真值 20，**静默零**）、**不支持反向引用**（`(.)\1` → 0 / 真值 607，且不报错），只是支持 `\b`。⇒ 正确处置是**知道你在用哪个方言 + 附引擎指纹与 `rc` 原文 + 每格给地板真值**，不是换一把"更高级"的锤子。
    **§3.2/§3.3 的数字不来自 greps**（一个来自断言消息、一个来自 pytest 执行），故不受影响。
-9. **本报告 §3.4 的"都不跑 verify 分片"这条**：我最初用坏 grep 取证，**已用 Python 复算重取**（`verify.py` 0 次 / `injection` 各 2 次、均为 `injection_guard`，与分片无关）⇒ 结论保持。★ 且现已**复现出当初那个假阴性**：`grep -n "injection\|verify.py" run_all_gates.py` 裸 grep 给空 + `rc=1`，`/usr/bin/grep` 给**第 47 行**（真的存在）—— 唯一变量就是 `\|`（§3.4 末尾）。
+9. **本报告 §3.4 的"都不跑 verify 分片"这条**：我最初用坏 grep 取证，**已用 Python 复算重取**（`verify.py` 0 次 / `injection` 各 2 次、均为 `injection_guard`，与分片无关）⇒ 结论保持。★ 且已**复现出当初那个假阴性**：`grep -n "injection\|verify.py" run_all_gates.py` 裸 grep 给空 + `rc=1`，`/usr/bin/grep` 给**第 47 行**（真的存在）—— 唯一变量就是 `\|`（§3.4）。★★ **该处由 `auditor-batch11` 独立复算并报出（对象 `main@2f62f5d`），我逐格复现成立**；§3.4 已改为**栅栏自带"假零"标记**（防止被单独引用）+ **真证据三件套（原文 / `/usr/bin/grep -nE` 复测 / 地板真值控制组）**。他把这种形态命名为 **「碰巧正确的假证据」**（结论对、论证无效）—— 比我先前的"错的工具给出对的结论"更准，本节采用他的命名。
 10. **★ `1f58b16` 的作者归不到任何队友**（§7.3.5）：本机全局 git 身份统一为 `Geetie`（我自己的提交也全是），**`%an`/`%ae` 对"哪位队友"零区分力** ⇒ 属 `G-61`（判据与对象不同源）。我只保留"分支名 + commit message 自述"这一层证据，并标注**不可证**。**连带**：`ws/step56-skipped` 上我这 3 个提交，别人同样无法用 git 元数据证明是我写的。
 11. **★ 我从主干重新学到的两条方法论**（§7.3.6）：**(a) 举证半径陷阱的反向形态** —— `ws-verify-shard` 按 `V-11` 更正了他"你没覆盖 X"的越界（只读了回信、没读主干）；**我接受前也没去主干查**，同族。⇒ 收到"你没覆盖 X"，**第一步是去主干查 X 是否存在**。**(b) `V-10` 规范仪器 `probe_grep_engine.sh` 只跑 BRE 列、不含 `-E`** —— 我那张表的 `-E` 列**恰好补上这个缺口的一半证据**，但**我不动主干文件、也不另做重复探针**，只向主理人申报（§7.3.6 末）。
 12. **★ 按 `team-lead` 定稿补测后的三条修正**（§7.3.7）：**(a)** 失效集**含 `\b`**，我此前多处漏写，已全部补上（实测裸 BRE `\bxaa` → 0 / `rc=1`，真值 1）；**(b)** 「遇到问题就加 `-E`」**是危险建议**，我原先的表述不够严 —— `-E` 只对**已改写成 ERE 的模式**有效，**原样字符串加 `-E`** 在 `/usr/bin/grep` 上 `rc=2` 响亮、在裸 toybox 上**静默 `rc=1`**（同一条建议换引擎，后果反向）；**(c)** `V-12`（非交互 merge）我已自查：`5318e74` 明确带 `-m`，`981e7cc` **不可判**（默认消息非唯一指纹），且**无 `MERGE_HEAD`/`MERGE_MSG` 残留、全仓无模板污染提交** ⇒ 我这边**未发生** `V-12` 事故。
 13. **★ 我申报的仪器缺口（`-E` 两列 + ripgrep 列无背书）在主干仍开着**（`refs/heads/main = 612cafe` 时点：`probe_grep_engine.sh` 仍只有 `BARE_GREP` / `REAL_GREP` 两列）。**等主理人派活，我不自裁、不改主干文件、不另建重复探针。** 另附一条：`V-10:481` 的"**且不报错**"只对 **`Grep` 工具**成立，对 **`rg` CLI 不成立**（后者 `rc=2` + 解析错误 + `--pcre2` 提示）—— 见 §7.3.7 第 3 条。
 14. **★ 红灯 A 已关闭（`11968b2` 之后），但"关闭"≠"解决"**（§3.6）：我同语义复算 `a30 b32 c31 d29 e32 f27 g24 = 205`，无片 >32 ⇒ 关；**但 `b=32` / `e=32` 零余量，下一条新增用例无处可放**。另：**`f33 g18` 是我落后 main 一格时量到的旧值，已作废**（§3.6.1 留痕 —— 我自己差点把"版本不同"报成"卡片写错"）。
 15. **★ 我 6 个提交已全部进 `main`**（`8ada895` merge；`main..ws/step56-skipped` 现已为空）；且 `main` **已采纳**我 §7.3.7 的两条发现：`3d35a76`「`V-10` 拆分 `rg` CLI 与 `Grep` 工具（响亮性不同源）+ 数字带对象版本 + 同名参数不同义」、`1052793`「`V-10` 地板真值改引仪器（**承认此前违反自身 `V-11` 仪器轴**）」。**"待合并"这一项对我的卡已清零。**
+16. **★ 同族更正：另有两处报告把根因误归给 "BSD grep"**（`auditor-batch11` 报；我已实测确认 `ch13e` / `x13r` 那两份确有此归因）—— 正确根因是 **Bash 里裸 `grep` 是 broker 的 toybox 0.8.13**，不是 BSD（`/usr/bin/grep` 的 BSD BRE **完全支持** `\|`）。**本报告自查：无此误归因**（全文只有 §7.3 一处把 `/usr/bin/grep` 正确标注为 BSD）；**也未引用任何 `run_gate` 条数**，故无需重取。⇒ 已把 `x13r` 的属主线索（按卡归属 = `ws-ch2-rules`）转告 `auditor-batch11`；**注意"属主"仍只是卡归属推断，提交作者不可判**（§7.3.5）。
+17. **★ 新增的 `run_gate` 条数基准（供他人对齐，我不引用）**：`main@2f62f5d` 实测 `pre-commit.sh` 的真调用 **14** 条（`/usr/bin/grep -nE '^[[:space:]]*run_gate '`，末条 = `:126 rule_key_alignment_guard`）；含函数定义/注释的宽匹配 **15** 行。**引用条数必须带【对象 + 时刻】**（`V-11` 仪器轴）。
 
 ---
 
