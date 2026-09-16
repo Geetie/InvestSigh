@@ -53,6 +53,11 @@ GATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("locator_check.py", "scripts/validators/locator_check.py", ()),
     # ── 缺口 G9：绑定 ≠ 会拦 —— "每条已绑定判据必须有可执行反例"这项义务的机器绑定 ──
     ("criterion_effectiveness_guard.py", "scripts/checks/criterion_effectiveness_guard.py", ()),
+    # ── 批次 12-A：反编造引文溯源（缺口 G-B10-05）──
+    # `locator_check.py` 判据 4 只在 `full_text_read=true` 时比 hash；
+    # 真实主张全部是 `full_text_read=false`，故这类此前**没有任何**引文↔原文机械校验。
+    # 本守卫**只**管辖 `false` 那支（互补而非重复，G-06 唯一真源）。
+    ("quote_provenance_guard.py", "scripts/checks/quote_provenance_guard.py", ()),
 )
 
 TIMEOUT_MARK = "TIMEOUT"
