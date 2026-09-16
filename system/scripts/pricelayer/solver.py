@@ -122,6 +122,18 @@ RULE_BOUND_ENTRIES: tuple[tuple[str, str], ...] = (
 )
 """``(规则文件, 本模块实际读取的顶层键)`` 的机器绑定对照集合（`Ch11 §D.2`）。"""
 
+# ★★ 两种"缺件"必须**在读数上可区分**（主理人第五轮裁定 (甲) 的附加条件，`G-62`）：
+#   ① 缺的是**有设计逐字依据**的字段 ⇒ 回落值**用了**设计原文里的那个值（可指到节号）；
+#   ② 缺的是**设计里本无逐字值**的标签（`selection` / `overflow`）⇒ 只能给空串，
+#      **不存在**"被设计认可的默认值"。
+#   两者若共用一个 token，下游会误以为"有一个设计认可的默认值被应用了" ⇒ 故**分设 token**，
+#   并由 `test_display_fallback_note_distinguishes_the_two_kinds` **机器绑定**（改名即红）。
+NOTE_NO_DISPLAY_KEY = "NO_DISPLAY_KEY"
+"""缺键 ⇒ **用了设计逐字回落值**（该字段有设计逐字依据）。"""
+
+NOTE_NO_DISPLAY_LABEL = "NO_DISPLAY_LABEL"
+"""缺键 ⇒ **空串，本无设计逐字回落值**（该标签在设计里查不到逐字值）。"""
+
 
 @dataclass(frozen=True)
 class SolutionSetDisplay:
@@ -137,6 +149,12 @@ class SolutionSetDisplay:
       ★ **不丢信息**：缺键事实由 `notes` 保留；改标志只是**不再过度声称**，不是删信息。
     - `notes`：记每条**未**从文件读到的字段（主理人裁定 ③-2：`design_default` 必须打 note，
       否则就是静默降级）。★ 由构造保证：`notes` 非空 ⟺ `value_source == "design_default"`。
+      ★★ **两种缺件必须可区分**（裁定 (甲) 的**附加条件**，`G-62`）—— 靠 **token 不同**做到，
+      不靠散文：① 有设计逐字依据的字段 ⇒ `NO_DISPLAY_KEY`（note 里写明**用了**哪个回落值）；
+      ② 设计里本无逐字值的标签（`selection`/`overflow`）⇒ `NO_DISPLAY_LABEL`
+      （note 里写明**本无**回落值、只是空串）。
+      否则下游会误以为"有一个**被设计认可过的**默认值被应用了"。
+      由 `test_display_fallback_note_distinguishes_the_two_kinds` **机器绑定**（改名即红）。
     """
 
     default_count: int
@@ -195,8 +213,9 @@ def load_solution_set_display(root: str | Path | None = None) -> SolutionSetDisp
         """
         if key not in node:
             notes.append(
-                f"NO_DISPLAY_KEY: {VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
-                f"{key} 缺失 —— 该字段取设计逐字回落值 {code_default}（非'已核'）"
+                f"{NOTE_NO_DISPLAY_KEY}: {VALUATION_METHODS_YAML}:: "
+                f"{RULE_KEY_SOLUTION_SET_DISPLAY}.{key} 缺失 —— 该字段取**设计逐字回落值** "
+                f"{code_default}（有设计逐字依据）（非'已核'）"
             )
             return code_default
         try:
@@ -212,9 +231,9 @@ def load_solution_set_display(root: str | Path | None = None) -> SolutionSetDisp
     max_count = _int_field(RULE_KEY_MAX_COUNT, MAX_DISPLAY_CAP)
     if RULE_KEY_MUST_SHOW_MULTIPLE not in node:
         notes.append(
-            f"NO_DISPLAY_KEY: {VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
-            f"{RULE_KEY_MUST_SHOW_MULTIPLE} 缺失 —— 该字段取设计逐字回落值 "
-            f"{DESIGN_MUST_SHOW_MULTIPLE}（非'已核'）"
+            f"{NOTE_NO_DISPLAY_KEY}: {VALUATION_METHODS_YAML}:: "
+            f"{RULE_KEY_SOLUTION_SET_DISPLAY}.{RULE_KEY_MUST_SHOW_MULTIPLE} 缺失 —— "
+            f"该字段取**设计逐字回落值** {DESIGN_MUST_SHOW_MULTIPLE}（有设计逐字依据）（非'已核'）"
         )
         must_show_multiple = DESIGN_MUST_SHOW_MULTIPLE
     elif not isinstance(node[RULE_KEY_MUST_SHOW_MULTIPLE], bool):
@@ -235,9 +254,9 @@ def load_solution_set_display(root: str | Path | None = None) -> SolutionSetDisp
     for key in (RULE_KEY_SELECTION, RULE_KEY_OVERFLOW):
         if key not in node:
             notes.append(
-                f"NO_DISPLAY_KEY: {VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
-                f"{key} 缺失 —— 规则文件未声明该标签，字段为空串"
-                "（**无设计逐字值可回落**）（非'已核'）"
+                f"{NOTE_NO_DISPLAY_LABEL}: {VALUATION_METHODS_YAML}:: "
+                f"{RULE_KEY_SOLUTION_SET_DISPLAY}.{key} 缺失 —— 该标签在设计里**本无逐字回落值** "
+                "⇒ 字段为空串（**不是「用了某个被设计认可的默认值」**）（非'已核'）"
             )
     return SolutionSetDisplay(
         default_count=default_count,

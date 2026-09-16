@@ -241,16 +241,26 @@ value_source="rules" if not notes else "design_default",
 - **第五轮裁定（甲）** 定的是**声明的粒度**："标志只能覆盖它声称覆盖的单位"——即"**声称什么**"。
 - ⇒ 两者是**同一方向上的收紧**，**不是翻转**。（主理人原话：*"这条不属于'反向改自己刚立的判据'"*。）
 
-#### 顺带：`selection` / `overflow` 也纳入标志范围（**本流的选择，登记请复核**）
+#### 顺带：`selection` / `overflow` 也纳入标志范围 —— ★ 裁定：**保留纳入**，但**加一条可区分性条件**
 
 `solution_set_display` 的 5 个字段里，`selection`/`overflow` 是**自由文本标签**、**没有设计逐字
 回落值**（设计里查不到这两个标签的"逐字值"）⇒ 严格看它们不构成"回落"。但 (甲) 的字面是
 "**全部字段都来自文件**才叫 `rules`"，且 `""` 确实**不是从文件读到的** ⇒ 本流**选择纳入**：
 缺它们 ⇒ note + `design_default`。
-★ **理由偏好严**：纳入只会**多报**、不会漏报（`G-03`：宁严勿松）；且这两个字段在
-`solution_set_display` 里是**展示口径的一部分**（"代表解 + 区间包络" / 折叠策略），
-并非无关装饰。★ **若主理人认为应把它们排除**，改动面 = 该循环少两个键 + 1 条用例，
-**我已按"可低成本回退"的方式实现**（同一循环、同一 note 机制）。
+
+**★ 主理人裁定：保留纳入（维持本流的选择）** —— (甲) 的字面就是"全部字段都来自文件"，
+`""` 确实不是从文件读到的 ⇒ 老实报 `design_default` 是对的；且**只多报不少报**（`G-03` 宁严勿松）。
+
+**★★ 附加条件（`G-62`）：两种缺件在读数上必须可区分。** 否则下游会误以为
+"有一个**被设计认可过的**默认值被应用了"。故**不靠散文措辞、靠 token 分设**：
+
+| 情形 | token | note 必须能读出 |
+|---|---|---|
+| **有**设计逐字依据的字段（`default_count` / `max_count` / `must_show_multiple`） | `NOTE_NO_DISPLAY_KEY` | **用了哪个**设计逐字回落值（值本身写在 note 里 + "有设计逐字依据"） |
+| 设计里**本无**逐字值的标签（`selection` / `overflow`） | `NOTE_NO_DISPLAY_LABEL` | **本无**回落值、只是空串（**不是**「用了某个被设计认可的默认值」） |
+
+⇒ 由 `test_display_fallback_note_distinguishes_the_two_kinds` **机器绑定**
+（token 改名 / 两种情形混用 ⇒ **当场红**），并含**反向对照**：字段齐备时**两种 token 一个都不出现**。
 
 ---
 
@@ -674,6 +684,43 @@ test_valuation.py            通过  31 / 失败  0
 〔对象 = `ws/ch5-pricelayer` @ `9d59302`（`git merge main` 之后，零冲突）；取样时刻 = `2026-09-16T15:55:20Z`〕
 ⇒ 说明"并入 `main` 的新改动（`degrade.py` / `pipeline.py` / `verify.py`）**没有打黄本模块任何用例**"。
 
+#### 附加条件（`G-62`）：两种缺件**在读数上可区分** —— 原始输出
+
+裁定 (甲) 之后主理人加了一条附加条件：`selection`/`overflow` **没有设计逐字回落值** ⇒ note 里
+**必须把两种情况分开写**，否则下游会误以为"有一个**被设计认可过的**默认值被应用了"。
+落地方式 = **token 分设**（不是只改措辞），实测原样输出：
+
+```text
+token①   = NO_DISPLAY_KEY          （缺键 ⇒ 用了设计逐字回落值）
+token②   = NO_DISPLAY_LABEL        （缺键 ⇒ 空串，本无设计逐字回落值）
+两 token 相异 = True
+
+=== ① 有设计逐字依据的字段 ===
+  删 default_count          value_source=design_default
+     NO_DISPLAY_KEY: rules/valuation-methods.yaml:: solution_set_display.default_count 缺失 —— 该字段取**设计逐字回落值** 3（有设计逐字依据）（非'已核'）
+  删 max_count              value_source=design_default
+     NO_DISPLAY_KEY: rules/valuation-methods.yaml:: solution_set_display.max_count 缺失 —— 该字段取**设计逐字回落值** 5（有设计逐字依据）（非'已核'）
+  删 must_show_multiple     value_source=design_default
+     NO_DISPLAY_KEY: rules/valuation-methods.yaml:: solution_set_display.must_show_multiple 缺失 —— 该字段取**设计逐字回落值** True（有设计逐字依据）（非'已核'）
+
+=== ② 设计里本无逐字值的标签 ===
+  删 selection              value_source=design_default
+     NO_DISPLAY_LABEL: rules/valuation-methods.yaml:: solution_set_display.selection 缺失 —— 该标签在设计里**本无逐字回落值** ⇒ 字段为空串（**不是「用了某个被设计认可的默认值」**）（非'已核'）
+  删 overflow               value_source=design_default
+     NO_DISPLAY_LABEL: rules/valuation-methods.yaml:: solution_set_display.overflow 缺失 —— 该标签在设计里**本无逐字回落值** ⇒ 字段为空串（**不是「用了某个被设计认可的默认值」**）（非'已核'）
+
+=== ③ 反向对照：字段齐备 ===
+  value_source=rules  notes=()
+```
+
+★ **两种情形在 token 层面就分开了** ⇒ 下游只需判前缀即可区分，**不必解析散文**。
+★ 机器绑定：`test_display_fallback_note_distinguishes_the_two_kinds`（token 改名 / 混用 ⇒ 红；
+并断言"① 的 note 里必须出现具体回落值"、"② 的 note 里必须出现「本无」且不得出现①的 token"）。
+
+**★ 全量复核（附加条件落地后，同口径）**：**通过 202 / 失败 0**
+（`test_solver.py` 34 → **35**，即新增的这条机器绑定；其余 7 个模块逐模块不变）
+〔取样时刻 = `2026-09-16T16:00:08Z`；`exit=0`〕
+
 ---
 
 ### V-2 六门禁在**真仓库真源**上运行（`code_root = system`）
@@ -832,7 +879,7 @@ RESULT: PASS（0 violations）        EXIT=0
 - **本模块测试**：`tests/pricelayer` **168 passed**，退出码 **0**（`verify.py --batch pricelayer` 实测 91.26s/300s）。
   ★ **该读数的取样时刻早于第四轮**（§1-5 修 3–8 之前）——对象是修订轮的树，**不是当前 `HEAD`**（口径 10）。
   第四/五轮新增用例后**未**复跑该命令（`G-60` 排他窗口 + 主理人指令）；当前树的证据见 §② **V-1k**（196/0）
-  与 **V-1l**（**201/0**，含本轮裁定甲的 5 组新 parametrize）——**两者都不是 pytest 路径**。
+  与 **V-1l**（**202/0**，含裁定甲的 5 组新 parametrize + 1 条可区分性机器绑定）——**两者都不是 pytest 路径**。
   ⇒ **不得**把 168 当成当前树的读数；正式复跑**待窗口关闭**，届时在此处补报**真**读数（条数 + 耗时）。
 - **门禁**：`pre-commit.sh` **全部门禁放行**（exit 0），**无 `--no-verify`**；`V-06` 因新批次登记而闭环（`uncovered 0`）。
 - **反例有效性**：**6/6 守卫**有可执行反例（exit=1）+ 反向对照（exit=0）（`DEMO_EXIT=0`）；

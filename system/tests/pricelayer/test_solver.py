@@ -444,6 +444,67 @@ def test_display_partial_fallback_downgrades_value_source(
     )
 
 
+def test_display_fallback_note_distinguishes_the_two_kinds(
+    scratch: Path, real_rules
+) -> None:
+    """★★ 裁定 (甲) 的**附加条件**（主理人第五轮）：两种缺件**在读数上必须可区分**。
+
+    ① **有设计逐字依据**的字段（`default_count`/`max_count`/`must_show_multiple`）
+       ⇒ 回落值**真的用了**设计原文里的某个值 ⇒ token = `NOTE_NO_DISPLAY_KEY`，
+       note 里要能读出**用的是哪个值**。
+    ② **设计里本无逐字值**的标签（`selection`/`overflow`）⇒ 只能给空串，
+       **不存在**"被设计认可的默认值" ⇒ token = `NOTE_NO_DISPLAY_LABEL`，
+       note 里必须写明**本无**回落值。
+
+    ⇒ 若两者共用一个 token，下游会误以为"有一个**被设计认可过的**默认值被应用了"（`G-62` 不可区分）。
+    ⇒ 本用例是**机器绑定**：token 改名 / 两种情形混用 ⇒ **当场红**。
+
+    ★ 反向对照（同文件 `test_display_real_rules_records_rules_source_without_note`）：
+      字段齐备 ⇒ 两种 token **一个都不出现**（不得无差别打 note）。
+    """
+    import yaml
+
+    from scripts.pricelayer.solver import NOTE_NO_DISPLAY_KEY, NOTE_NO_DISPLAY_LABEL
+
+    assert NOTE_NO_DISPLAY_KEY != NOTE_NO_DISPLAY_LABEL, "两种缺件必须用不同 token"
+
+    def _notes_after_dropping(key: str) -> tuple[str, ...]:
+        real_rules(scratch, "valuation-methods.yaml")
+        path = scratch / "rules" / "valuation-methods.yaml"
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        doc["solution_set_display"].pop(key)
+        path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+        return load_solution_set_display(scratch).notes
+
+    # ① 有设计逐字依据 ⇒ 用 NOTE_NO_DISPLAY_KEY，且必须写出"用了哪个回落值"
+    for key, code_value in (("default_count", DEFAULT_DISPLAY_CAP), ("max_count", MAX_DISPLAY_CAP)):
+        notes = _notes_after_dropping(key)
+        hit = [n for n in notes if key in n]
+        assert len(hit) == 1, notes
+        assert hit[0].startswith(NOTE_NO_DISPLAY_KEY), hit[0]
+        assert NOTE_NO_DISPLAY_LABEL not in hit[0], (
+            f"{key} 有设计逐字依据，不得标成'本无回落值'：{hit[0]}"
+        )
+        assert str(code_value) in hit[0], f"note 必须写明用了哪个回落值：{hit[0]}"
+
+    # ② 设计里本无逐字值 ⇒ 用 NOTE_NO_DISPLAY_LABEL，且**不得**声称用了某个回落值
+    for key in ("selection", "overflow"):
+        notes = _notes_after_dropping(key)
+        hit = [n for n in notes if key in n]
+        assert len(hit) == 1, notes
+        assert hit[0].startswith(NOTE_NO_DISPLAY_LABEL), hit[0]
+        assert NOTE_NO_DISPLAY_KEY not in hit[0], (
+            f"{key} 在设计里本无逐字值，不得标成'用了设计回落值'：{hit[0]}"
+        )
+        assert "本无" in hit[0], f"note 必须写明本无回落值：{hit[0]}"
+
+    # ③ 反向对照：字段齐备 ⇒ 两种 token 一个都不出现
+    real_rules(scratch, "valuation-methods.yaml")
+    clean = load_solution_set_display(scratch)
+    assert clean.notes == (), clean.notes
+    assert not any(NOTE_NO_DISPLAY_KEY in n or NOTE_NO_DISPLAY_LABEL in n for n in clean.notes)
+
+
 def test_cli_flags_must_show_multiple_drift(scratch: Path, real_rules, run_script) -> None:
     """★ 裁定 ③-3：`must_show_multiple` 被改而代码回落值未改 → CLI **exit 1**。
 
