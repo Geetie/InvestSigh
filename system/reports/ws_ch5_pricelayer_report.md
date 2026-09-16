@@ -7,6 +7,10 @@
 > ★ **本报告为修订轮（第二轮）状态**。首轮已合并入主干（merge `4468da5`），随后主理人拿**真 `rules/` 文件**探出
 > 两处「夹具与真文件不同源」缺陷（**与 `G-43`/`G-45` 同族**）。两处已修，并把**整类问题的防复发装置**一起补上
 > （见 §①-2 与 §② V-1c）。首轮状态已不适用，故全文按修订后状态重写。
+>
+> **本轮提交**：修订内容提交 `9552e8c` → 合并 `main`（`3c7b34d`）得合并提交 **`60aab53`**；
+> 提交前跑 `git merge main`（**零冲突**），合并后重跑 `bootstrap_worktree.sh`（复原 `rules/` 0444，
+> 因 `git merge` 只跟踪可执行位、`rules/*.yaml` 一进树就是 `0644`）+ 重跑批次与 `pre-commit`（见 §② V-0′/V-3）。
 
 ---
 
@@ -128,6 +132,20 @@ $ /Users/gaza/.workbuddy/binaries/python/envs/default/bin/python system/scripts/
 | `test_step_wiring.py` | 7 | **11** |
 | `test_package_laziness.py` | 5 | 5 |
 | **合计** | **127** | **168** |
+
+### V-0′ 合并 `main` 之后**重跑**（同一命令，同一工作树）
+
+```sh
+$ git merge main                      # Update bef9628..3c7b34d，33 files changed，**零冲突**
+$ sh system/scripts/ops/bootstrap_worktree.sh
+bootstrap_worktree ✓ rules_lock_guard 通过（纪律 9 不变量已复原）
+$ git status --short                  # 空（只改权限位，内容零变更）
+
+$ …/python system/scripts/ops/verify.py --batch pricelayer
+✓ [pricelayer] tests/pricelayer/（Ch5 价格层：反解多解/估值路由/倒填/情景/历史外推/每日解释）  exit=0  54.48s/300s  exit=0
+168 passed in 53.62s
+```
+→ 合并后 **168 passed / exit=0**，实测 **54.48s/300s**。**`main` 已推进到 `3c7b34d`（含 13-A 价值层、`ws-ch13e` 等），本批仍全绿**。
 
 ### V-1 六门禁 **反例（exit≠0）/ 反向对照（exit=0）** 真机演示
 
@@ -285,6 +303,14 @@ $ git diff --stat   -- system/rules system/registry   # 空
 → **只改权限位、内容零变更**（未走 `lock_rules.py`，避免 `locked_at`/SHA 台账无谓翻动）。
 另：`rules/` 是 **0444**，所以**演示/测试里凡要"改真规则"的都必须先拷贝再改副本**（`/tmp/ch5_demo_rules.py` 与 `real_rules` 夹具均如此，见 §①-2 装置 2/4）。
 
+**合并后 `pre-commit` 重跑**：
+
+```sh
+$ sh system/scripts/ops/pre-commit.sh
+pre-commit ✓ 全部门禁放行        PRECOMMIT_EXIT=0
+$ git status --short             # 空
+```
+
 ### V-4 批次与阶段门（诚实登记非本流的红点）
 
 ```sh
@@ -351,7 +377,10 @@ RESULT: PASS（0 violations）        EXIT=0
 
 ### 提交哈希
 
-- 见随附提交（提交信息内不含动态哈希；哈希由 `git rev-parse HEAD` 另附于回报消息）。
+- **修订内容提交**：`9552e8c`
+- **合并 `main`（`3c7b34d`）后的合并提交**：`60aab53`（试合并**零冲突**；合并后 `bootstrap_worktree.sh` + 批次重跑 + `pre-commit` 全绿，见 §② V-0′/V-3）
+- 首轮提交：`9834f4f`（已在主干，merge `4468da5`）
+- （提交信息内不含动态哈希；哈希由 `git rev-parse HEAD` 另附于回报消息。）
 
 ### `git status --short`（提交前，修订轮）
 
@@ -373,6 +402,9 @@ RESULT: PASS（0 violations）        EXIT=0
  M system/tests/pricelayer/test_valuation.py
 ```
 （**未使用 `git add -A`**；只 add 上表 15 个文件 + 本报告。`rules/**`、`facts/**`、`derived/**`、`schema/**` 无任何改动。）
+
+**提交后**：`git merge main`（零冲突，33 files changed）→ `bootstrap_worktree.sh` → 批次重跑 168 passed → `pre-commit` 全绿 →
+`git status --short` **空**（工作树干净、无未跟踪残留）。
 
 ---
 
@@ -435,3 +467,5 @@ RESULT: PASS（0 violations）        EXIT=0
 - **不做**：不写 `rules/**`（0444 + SHA256 锁）—— 候选值全部写在测试夹具副本内。
 - **宿主抖动如实登记**：同一套 168 例在本工作树内实测 **53.89s ~ 91.26s**（≈1.7×波动，宿主配额/删除监察所致，见 `CONVENTIONS.md` 对 `rmtree` 的实测）。超时取上限 300s 正是为了**让这种抖动不误报**。
 - **本流改了 `CONVENTIONS.md`**（补批次表缺行 + 订正批次数 20→21），**这是共享文件**；改动仅限批次表两行，未触碰规范正文。若主理人认为该表应由他人维护，可整块回退。
+- **与同轮并入的 `scripts/valuelayer/_rules.py` 交叉核对（同一纪律的第二个实现，结论一致）**：该模块（13-A 价值层）把 `rules/{baseline,metric-sets}.yaml` 集中成**唯一读口**，走 `_cached_yaml`（P-02）、缺文件/缺键/值非法**响亮失败**、**不内置兜底默认值**——与本流 `solver`/`valuation`/`scenario_guard`/`daily_explain` 的读法**同构**（同一 `P-02` 读口 + 同类 note 口径）。
+  该模块对 `tbd` 与「缺键」**刻意分开**（`tbd` = 管了但待拍板 ⇒ 不可核 + note；缺键 = 根本没管 ⇒ 响亮失败），本流在**结论层面**已等价：`load_*` 在缺键时回落**设计逐字值**并记 note，而 `check()` 的 `*-RULE-BINDING` 判据集**同时**把该键列为必需 ⇒ **门禁当场 exit 1**（§② V-1c 用例②实测）。**唯一有待裁定的差异**：`_rules.py` 选择"缺键即在**读口**抛错"，本流选择"读口宽松+note、**门禁**响亮"（好处是 `load_*` 可被无门禁场景单独复用，坏处是单独调 `load_*` 时不会抛）。**若主理人裁定统一到 `_rules.py` 口径**，本流改动面 = 4 个 `load_*` 各加一处 `raise`（键名表已在常量里，无需改逻辑）。

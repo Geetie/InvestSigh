@@ -485,6 +485,14 @@ python scripts/ops/run_all_gates.py . --timeout 30
 **禁用做法（本轮明确不做）**：不给 `method_version` 造一个规则文件里没有的键；不发明 `when` 表达式求值器；
 不用 `or ""` / `try-except-pass` 之类的静默兜底 —— **程序写错必须响**。
 
+**提交与合并**：修订内容提交 `9552e8c` → `git merge main`（`3c7b34d`，**零冲突**）→ 合并提交 `60aab53`。
+合并后**重跑** `bootstrap_worktree.sh`（`git merge` 只跟踪可执行位，`rules/*.yaml` 一进树即 `0644` ⇒ 必须复原 0444；
+只 `chmod`、内容零变更）、批次（**168 passed / 54.48s / 300s / exit=0**）、`pre-commit`（**全绿**）；`git status --short` 空。
+
+**与同轮并入的 `scripts/valuelayer/_rules.py` 交叉核对**：该模块（13-A）与本流**同构**（`_cached_yaml` 唯一读口 +
+缺键响亮 + 不内置默认值）。唯一差异：`_rules.py` 在**读口**抛错，本流在**门禁**响亮（`*-RULE-BINDING` 把键列为必需 ⇒ exit 1，
+用例②实测）。若裁定统一，本流改动面 = 4 个 `load_*` 各加一处 `raise`（键名表已是常量）。
+
 **待裁定 / 缺口（修订后；1 / 3 / 5 三项已由主理人答复，此处记答案不记问题）**：
 ① 两个规则文件**已由 `ws-ch2-rules` 装入**（`bb32863`）+ `bef9628` 补 `solution_set_display`，本流已按真键名读；
 ② `§E.2` 子串判据 vs `R-06 ①`（本流已改词元等价 + 结构判据）仍待主理人裁定是否修订设计表述；
