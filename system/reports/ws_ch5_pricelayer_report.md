@@ -172,8 +172,9 @@ Python 里**后一份静默遮蔽前一份** ⇒ 这 9 个副本**从不执行**
 处置：以 AST 哈希定位第二个副本整块删除（`+0 / -101` 与 `+0 / -30`，**纯删除**），
 并逐文件名核对关键用例仍在；**pytest 收集数不变**（遮蔽态与实际态都是 1 个/名）。
 
-> **待办（不隐瞒）**：本轮的 pytest 用例（把上表 8 处 + 修 4 写成永久回归锁）**尚未写**——
-> 原因见 §② V-1h：本轮仍在 `G-60` 排他窗口内，**写而不能跑**的用例不提交。
+> **已办**：上表 8 处缺键 + 修 4 的**永久回归用例已写并逐条执行**（9 条新用例 + 2 条反向对照）——
+> 方式见 §② V-1j：`pytest` **命令**仍未跑（`G-60` 排他窗口），但把**测试函数本体**用**手搓等价夹具**
+> 直接调用执行了断言。窗口关闭后仍需按正式路径 `verify.py --batch pricelayer` 复跑一次。
 
 ---
 
@@ -434,10 +435,42 @@ keep_original_judgment_time 置假              rules       1 |        rules    
 
 `team-lead` 指令："本轮窗口内其他流请不要跑 pytest …… 你的 `pricelayer` 批等它回结论，
 **在此之前不要跑 pytest**（`pre-commit` 可跑）。"
-⇒ 本轮**未运行** `verify.py --batch pricelayer`，也**未运行**任何 pytest 形式的命令；
+⇒ 本轮**未运行** `verify.py --batch pricelayer`，也**未运行** `pytest` 命令；
 故**不给出**任何"通过数/耗时"。上方 V-1h 的证据**全部**是**不经 pytest** 的直连探针 + 守卫 CLI 退出码
 （`G-60` 的删除配额只影响 pytest 的 `_clear_work_dir()`，与本方式无关）。
-**待窗口关闭**：①补写本轮 8 处缺键 + 修 4 的永久回归用例；②重跑批次并回报**真**读数。
+**待窗口关闭**：按正式路径重跑批次并回报**真**读数（含耗时）。
+
+### V-1j 本轮新增用例的**执行**证据（不跑 `pytest` 命令，但**执行测试函数本体**）
+
+本轮把 8 处缺键 + 修 4 写成永久回归用例后，**没有**留在"写了没跑"的状态：
+用 `importlib` 载入测试模块，**手搓等价夹具**（`scratch` = `mkdtemp`；
+`real_rules` = `conftest.copy_real_rules`；`run_script` = 照 `conftest` 逐字复刻的 `subprocess.run`；
+`write_jsonl` = `conftest.write_jsonl.__wrapped__()`），再按签名注入参数**直接调用测试函数**。
+
+```text
+✓ test_scenario_guard.py::test_missing_probability_default_is_flagged_not_read_as_compliant
+✓ test_scenario_guard.py::test_missing_must_be_null_50_50_is_flagged
+✓ test_scenario_guard.py::test_missing_blocking_when_and_record_method_version_are_flagged
+✓ test_scenario_guard.py::test_empty_blocking_when_is_flagged
+✓ test_scenario_guard.py::test_reverse_control_cli_passes_on_real_rules_file
+✓ test_valuation.py::test_missing_valuation_compute_entry_is_flagged
+✓ test_valuation.py::test_reverse_control_cli_passes_on_real_rules_file
+✓ test_solver.py::test_missing_default_count_is_flagged
+✓ test_solver.py::test_missing_solver_ref_is_flagged
+✓ test_solver.py::test_cli_clean_on_real_rules_file
+✓ test_daily_explain.py::test_missing_on_hit_key_is_flagged_by_binding
+✓ test_daily_explain.py::test_missing_threshold_key_fails_loudly_without_claiming_fallback
+✓ test_daily_explain.py::test_cli_clean_on_real_rules_file
+✓ test_daily_explain.py::test_trigger_missing_on_hit_key_records_note
+失败数 = 0
+```
+
+★ **这条证据的性质必须说清（不夸大）**：它证明的是**断言与夹具用法**在真实对象上成立；
+它**不等于** pytest 运行 —— 没有收集、没有 fixture 终结器、没有 `pytest_sessionstart`
+（而那正是 `G-60` 配额作用的环节）。故**不能**据此声称"批次通过"，只能声称"这些用例的断言已执行且成立"。
+★ 途中两个坑如实登记：①`pytest` 新版本**禁止直接调用 fixture 函数**（`Failed: Fixture "write_jsonl" called directly`）⇒
+改用 `.__wrapped__()`；②`daily_explain._rule_binding_violations` 是 **`(root, trigger)` 两参**，
+首轮探测用错签名得到**假读数**（"旧=1"）⇒ 已用 `inspect.signature` 核正后重测。
 
 ---
 
@@ -724,5 +757,5 @@ RESULT: PASS（0 violations）        EXIT=0
 (乙) 保持现状（`rules` + 逐键 note）。★ 本流**不自行翻转**：这条已被第三轮的裁定 ③-2 解释过一次，
 翻转等于**反向改自己刚立的判据**，且会动到 3 个读口 + 若干用例 ⇒ 请主理人裁定（若选甲，改动面 = 3 个 `load_*` 各 1 行 + 1 条用例的断言）。
 
-**（b）本轮 pytest 用例未写**（与 §② V-1i 同一条）：8 处缺键 + 修 4 的**永久回归锁**待窗口关闭后补，
-与批次重跑合并在**同一次提交**里 —— 目的是**每一条提交的用例都是我跑过的**（不提交"写了没跑"的用例）。
+**（b）本轮 pytest 用例：已写、已逐条**执行**，但**未跑 `pytest` 命令**（与 §② V-1i/V-1j 同一条）。
+正式路径 `verify.py --batch pricelayer` 待窗口关闭后复跑；届时在 §③ 补报**真**读数（不在此处写条数 —— 见 §② V-1i）。

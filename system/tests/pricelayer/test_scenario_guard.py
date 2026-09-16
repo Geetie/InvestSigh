@@ -567,3 +567,85 @@ def test_design_status_default_is_deliberately_not_bound() -> None:
 
     assert DEFAULT_SCENARIO_METHOD_STATUS == "pending"
     assert "pending" in DESIGN_SCENARIO_METHOD_STATUSES, "默认值必须落在设计取值域内"
+
+
+# ── 第四轮：**缺子键 ≠ 值合规**（合法值恰是 `null`/`false` 的那两个键最危险）──
+
+
+def _scenario_doc(scratch: Path, real_rules) -> tuple[Path, dict]:
+    """把**真** `scenario.yaml`（+ `freeze.yaml`）复制进副本并解析 —— 第四轮用例的最小夹具。"""
+    import yaml
+
+    real_rules(scratch, "scenario.yaml", "freeze.yaml")
+    path = scratch / "rules" / "scenario.yaml"
+    return path, yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def _put_doc(path: Path, doc: dict) -> None:
+    import yaml
+
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+
+
+def test_missing_probability_default_is_flagged_not_read_as_compliant(
+    scratch: Path, real_rules, run_script
+) -> None:
+    """★ 第四轮主反例：**删** `probability.default` ⇒ 必须 `exit 1`（不得读成"合规 null"）。
+
+    该键的**合法值就是 `null`** ⇒ 旧写法 `probability.get("default") is not None`
+    在键不存在时 `.get` 回 `None`，判据**通过** —— 即"文件里根本没写"被读成"已确认不默认 50/50"
+    （**假通过**）。故必须先判"键在不在"，再判"值对不对"（`Ch11 §D.2`；`G-03`：跳过不是通过）。
+    """
+    path, doc = _scenario_doc(scratch, real_rules)
+    doc["probability"].pop("default")
+    _put_doc(path, doc)
+    proc = run_script("scripts/pricelayer/scenario_guard.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "SCENARIO-RULE-BINDING" in proc.stdout
+    assert "probability.default 缺失" in proc.stdout
+
+
+def test_missing_must_be_null_50_50_is_flagged(
+    scratch: Path, real_rules, run_script
+) -> None:
+    """★ 同族：删 `probability.must_be_null_50_50`（**合法值就是 `false`**）⇒ 必须 `exit 1`。
+
+    旧写法 `bool(probability.get("must_be_null_50_50"))` 在缺键时得 `False` ⇒ 判据通过
+    ⇒ "缺键"被静默读成"已确认不默认 50/50"。
+    """
+    path, doc = _scenario_doc(scratch, real_rules)
+    doc["probability"].pop("must_be_null_50_50")
+    _put_doc(path, doc)
+    proc = run_script("scripts/pricelayer/scenario_guard.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "must_be_null_50_50 缺失" in proc.stdout
+
+
+def test_missing_blocking_when_and_record_method_version_are_flagged(
+    scratch: Path, real_rules, run_script
+) -> None:
+    """★ 判据⑥⑦：删 `blocking.when` 与 `promotion.record_method_version` ⇒ **两条**违例都要出现。
+
+    旧写法用 `doc.get(k)` 取值后再比 ⇒ 缺键时**静默跳过**（"无可比对象"），
+    于是"阻塞条件/是否须记版本"这两个事实从规则面消失而门禁全绿。
+    """
+    path, doc = _scenario_doc(scratch, real_rules)
+    doc["scenario_method_blocking"].pop("when")
+    doc["scenario_method_promotion"].pop("record_method_version")
+    _put_doc(path, doc)
+    proc = run_script("scripts/pricelayer/scenario_guard.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "scenario_method_blocking.when 缺失" in proc.stdout
+    assert "record_method_version 缺失" in proc.stdout
+
+
+def test_empty_blocking_when_is_flagged(
+    scratch: Path, real_rules, run_script
+) -> None:
+    """★ `when: ""`（键在但值为空）：旧写法 `if declared_when and …` 让**空串静默通过** ⇒ 必须红。"""
+    path, doc = _scenario_doc(scratch, real_rules)
+    doc["scenario_method_blocking"]["when"] = ""
+    _put_doc(path, doc)
+    proc = run_script("scripts/pricelayer/scenario_guard.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "scenario_method_blocking.when='' 与代码回落值" in proc.stdout
