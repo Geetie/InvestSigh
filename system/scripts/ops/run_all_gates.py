@@ -45,6 +45,7 @@ GATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("pipeline.py", "scripts/orchestrate/pipeline.py", ()),
     ("stage_gate.py --stage prep", "scripts/delivery/stage_gate.py", ("--stage", "prep")),
     ("injection_guard.py", "scripts/checks/injection_guard.py", ()),
+    ("verification_policy_guard.py", "scripts/checks/verification_policy_guard.py", ()),
 )
 
 TIMEOUT_MARK = "TIMEOUT"

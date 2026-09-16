@@ -110,7 +110,7 @@ BATCHES: Mapping[str, Batch] = {
         _pytest("tests/conflict"), 30.0, _exit_zero,
     ),
     "guards": Batch(
-        "guards", "tests/guards/（18 守卫 × 退出码契约）",
+        "guards", "tests/guards/（20 守卫 × 退出码契约 + 验证规范）",
         _pytest("tests/guards"), 60.0, _exit_zero,
     ),
     "injection": Batch(
@@ -122,7 +122,7 @@ BATCHES: Mapping[str, Batch] = {
         _pytest("tests/test_ch11_invariants.py"), 30.0, _exit_zero,
     ),
     "gates": Batch(
-        "gates", "run_all_gates.py（19 项门禁）",
+        "gates", "run_all_gates.py（20 项门禁）",
         ("scripts/ops/run_all_gates.py", "{root}", "--timeout", "30"), 60.0, _exit_zero,
         note="门禁内部已有逐项 30s 硬超时（卡死也算不合格）",
     ),

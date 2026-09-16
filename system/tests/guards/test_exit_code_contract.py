@@ -53,6 +53,8 @@ GUARDS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("traceback", "scripts/trace/traceback.py", ()),
     ("pipeline", "scripts/orchestrate/pipeline.py", ()),
     ("stage_gate", "scripts/delivery/stage_gate.py", ("--stage", "prep")),
+    ("injection_guard", "scripts/checks/injection_guard.py", ()),
+    ("verification_policy_guard", "scripts/checks/verification_policy_guard.py", ()),
 )
 
 GUARD_IDS = [g[0] for g in GUARDS]
@@ -63,8 +65,14 @@ def test_guard_matrix_is_not_empty() -> None:
 
     一个空的 `parametrize` 会让 pytest 收集到 0 个用例而**静默全绿** ——
     比任何单条断言失败都危险（"什么都没测"看起来和"全部通过"一样）。
+
+    ★ 新增守卫必须**同时**加进本矩阵（`CONVENTIONS.md §二 G-07`）：
+      否则新守卫自己不受"干净 → 0 / 缺 code_root → 2 / 必报 scanned"三条契约约束。
     """
-    assert len(GUARDS) == 18, f"守卫矩阵项数异常: {len(GUARDS)}"
+    assert len(GUARDS) == 20, (
+        f"守卫矩阵项数异常: {len(GUARDS)}"
+        "（新增守卫请同时加进本矩阵并更新此断言）"
+    )
     assert len({name for name, _, _ in GUARDS}) == len(GUARDS), "守卫名重复"
     for _, script, _ in GUARDS:
         assert (SYSTEM_ROOT / script).exists(), f"矩阵里有不存在的脚本: {script}"

@@ -68,6 +68,9 @@ run_gate "no_placeholder_guard" "$CODE_ROOT/scripts/checks/no_placeholder_guard.
 # ⑦ 注入防护：数据/指令分离执行器 + 效果断言守卫（`Ch9 §3.4.6`；命中即 fail）
 run_gate "injection_guard" "$CODE_ROOT/scripts/checks/injection_guard.py" "$CODE_ROOT"
 
+# ⑧ 验证规范：禁止全量验证 / 每批必带超时 / 超时不算通过 / 沙箱外跑（`CONVENTIONS.md §一`）
+run_gate "verification_policy_guard" "$CODE_ROOT/scripts/checks/verification_policy_guard.py" "$CODE_ROOT"
+
 if [ "$FAILED" -ne 0 ]; then
   echo "pre-commit: 有门禁阻断，提交被拒。" >&2
   exit 1

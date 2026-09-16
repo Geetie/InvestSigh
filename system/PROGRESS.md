@@ -47,20 +47,30 @@ stage_gate.py --stage prep 0.24s
 命令：`cd system && python -m pytest tests -q -p no:cacheprovider` → `173 passed in 13.59s`
 运行后 `tests/.work/` **无残留**（`pytest_sessionstart/finish` 双保险）。
 
-### 3.1 一次性验证 + 证据留档（**不必为贴证据重跑**）
+### 3.1 分批验证 + 证据留档（**禁止一条命令全量验证**）
 
-命令：`python system/scripts/ops/verify.py --quiet` → **全绿，总耗时 18.1s**
+**规范**：`CONVENTIONS.md §一 V-01~V-06`；**机器守卫**：`scripts/checks/verification_policy_guard.py`。
 
+```bash
+python system/scripts/ops/verify.py --list                       # 看批次与超时
+python system/scripts/ops/verify.py --batch <名>                 # 一次一批（推荐）
+sh system/scripts/ops/run_pytest.sh tests/<子目录>                # 直接跑 pytest 的正确入口
 ```
-✓ pytest tests                       exit=0     14.21s
-✓ run_all_gates.py（18 项门禁）      exit=0      3.67s
-✓ stage_gate.py --stage all          exit=1      0.26s   阶段① PASS + 阶段②–⑤ 全部阻塞（纪律 12 预期行为）
-```
 
-★ `stage_gate --stage all` 的 `exit=1` 是**设计预期**（阶段未过即阻塞），
-但**不是笼统放过**：`verify.py` 显式校验「`prep: PASS` **且** 四个后续阶段逐个
-`BLOCKED`」，两条都成立才算合格 —— 否则"① 也失败了"会被掩盖。
-证据留档：`reports/verify_latest.log`（+ 最近 3 份带时间戳的）。
+| 批次 | 内容 | 超时 | 实测 |
+|---|---|---|---|
+| `unit` | `tests/unit/` | 60s | 1.5s |
+| `conflict` | `tests/conflict/` | 30s | 0.4s |
+| `guards` | `tests/guards/`（20 守卫契约 + 验证规范） | 60s | 3.3s |
+| `injection` | `tests/injection/` | 120s | 13.3s |
+| `root` | `tests/test_ch11_invariants.py` | 30s | 0.4s |
+| `gates` | `run_all_gates.py`（20 项门禁） | 60s | 4.3s |
+| `stage` | `stage_gate.py --stage all` | 30s | 0.3s |
+
+★ **7 批全绿，合计 ≈23.5s**。证据留档 `reports/verify_<批次>_latest.log`（**引用证据读该文件，不必重跑**）。
+
+★ **必须串行**：并行两个 pytest 会互删 `tests/.work/`。
+★ **必须沙箱外跑**：见 `CONVENTIONS.md §一 V-04`（Python 层 FS broker）。
 
 ### 3.2 耗时优化（原 **49.2s → 13.6s**，3.6×）
 
