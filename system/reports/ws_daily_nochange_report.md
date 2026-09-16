@@ -497,3 +497,49 @@ $PY system/scripts/ops/run_all_gates.py --timeout 30
 ★ `/tmp/wsnc/**` 是**仓外**的对拍台（`probe.py` 九例对拍 / `contract.py` 契约三验），
 **刻意不入库**（避免把实验装置混进交付物）；**可复现的判据本体已入库**为
 `system/tests/daily/test_no_change_day.py`（12 例，改后全绿 / 改前 8 红）。
+
+---
+
+## ⑥ 提交现场（命令 + 退出码 + 哈希 + `git status --short`）
+
+```
+$ git merge main --no-edit           # 提交前并主干（当时落后 15 个提交）
+15 files changed, 1408 insertions(+), 62 deletions(-)          exit=0
+
+$ git add system/scripts/tasks/gap_to_task.py \
+          system/tests/daily/test_no_change_day.py \
+          system/reports/ws_daily_nochange_report.md
+$ git commit -F /tmp/wsnc/commit_msg.txt
+[ws/daily-nochange-exit f86542c] fix(g1-04): 无变化日不再误判空执行 —— 换成可判定正向标记
+ 3 files changed, 792 insertions(+), 7 deletions(-)
+ create mode 100644 system/reports/ws_daily_nochange_report.md
+ create mode 100644 system/tests/daily/test_no_change_day.py
+★ commit exit=0          ← pre-commit **未被跳过**，全部门禁放行（阻断计数 0）
+```
+
+- **本单 commit（评审对象）**：`f86542c` = `f86542cb0183ca5a3165bbb33ffcfe52b1e75713`
+- **基点**：`90e7c94`（`main`，提交前 `git merge main` 已并）
+- **本分支相对 `main` 只有一个提交**（`git log --oneline main..HEAD` 只列 `f86542c`）
+- **本单 diff**：`65/7`（`gap_to_task.py`）+ `228/0`（新测试）+ `499/0`（本报告）
+- **`git status --short`**：**（空）** —— 工作树干净
+- **`pre-commit`**：**未使用 `--no-verify`**（team-lead 已明确本项为明令禁止）
+
+★ **首次提交被拒，如实记录**（`pre-commit: 有门禁阻断，提交被拒。`）：
+`rules_lock_guard` 与 `injection_guard` 各报 1 条 FATAL，**同一根因** ——
+`rules/valuation-methods.yaml` 权限为 `0o644`（应为 `0o444`）。
+成因：**我在 `bootstrap_worktree.sh` 之后才 `git merge main`**，而主干那次合并**更新了该规则文件的权限位**
+（内容来自主干，权限位由合并写盘时重置）。
+处置：重跑 `sh system/scripts/ops/bootstrap_worktree.sh`（**该脚本只改权限位、内容零改动**，
+是"step 0"的既有工具；**没有**用 `lock_rules.py`，因为它会顺带重写 `registry/rules.lock.json`
+—— 那会变成对共享 registry 的内容写入，本单不做）：
+
+```
+$ sh system/scripts/ops/bootstrap_worktree.sh
+bootstrap_worktree: 已把 14 个 rules 文件置为 0444（内容零改动）
+bootstrap_worktree ✓ rules_lock_guard 通过（纪律 9 不变量已复原）      exit=0
+$ git status --short system/rules system/registry
+（空 —— 内容未动）
+```
+
+★ **教训（建议入团队口径）**：**`bootstrap_worktree.sh` 必须在每次 `git merge` 之后再跑一次**，
+否则合并带来的 `rules/` 改动会让权限位退回 0644，`rules_lock_guard` / `injection_guard` 双双阻断。
