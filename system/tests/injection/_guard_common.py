@@ -3,11 +3,13 @@
 ## 为什么会有这个模块
 
 `test_guards_reject.py` 原有 **41 个用例**。夹具是**每用例复制一份 `system/`**
-（`conftest.py::code_root`，实测每份 **271 项**），而宿主对**单轮（turn）**的删除操作有
-累积配额 **9999** 项（`CONVENTIONS.md::V-08`，实测消息
-`SAFE_DELETE_BULK_CONFIRM_REQUIRED {"count":…,"threshold":9999,"scope":"turn"}`）。
-⇒ 单个文件 41 例 ≈ 41 × 271 = **11,111 项 > 9,999**，
-**这一个文件本身就超阈值**（越过之后连单个用例目录都被拒删，之后所有夹具 setup 直接报 `E`）。
+（`conftest.py::code_root`，完整夹具实测每份 **273 项**），而宿主对**单轮（turn）**的
+删除操作有累积配额（`CONVENTIONS.md::V-08`，实测消息
+`SAFE_DELETE_BULK_CONFIRM_REQUIRED {"count":…,"threshold":…,"scope":"turn"}`；
+阈值**两次观测不同**：`9999` 与 `99999`，故此处不写死它）。
+⇒ 按实测的**计数单位 ≈792/例**（≈2.9 × 273，见 `test_shard_coverage.py` 上方注释），
+单个文件 41 例 ≈ **3.2 万计数**，**这一个文件本身就远超阈值**
+（越过之后连单个用例目录都被拒删，之后所有夹具 setup 直接报 `E`）。
 
 故按 `# ═══` **分节边界**把它**纯移动**拆成两个文件：
 
