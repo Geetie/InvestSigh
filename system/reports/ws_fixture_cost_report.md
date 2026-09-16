@@ -957,3 +957,30 @@ M  system/reports/ws_fixture_cost_report.md   ← 本轮：新增「第六轮」
 ★ **本轮没有改任何代码**（`verify.py` / `conftest.py` / `tests/**` 一字未动）：
 根因已升级到**宿主侧机制**，落地等于"改门" ⇒ 按 3-4 补记的同一纪律，**先由主理人裁决**，我不擅自改。
 
+### ⑦-补2：grep 读数收敛 + 与主干 `V-10`/`V-11` 对齐（同轮，报告-only）
+
+```
+da4262f  grep 口径定稿（方言矩阵 + 两陷阱）                    ← 已被主干收走
+6af4ed8  Merge branch 'main' into ws/fixture-cost               ← 第一次合并（父 da4262f + e9a009b）
+785464c  Merge branch 'main' into ws/fixture-cost               ← 第二次合并（收 98d0c32：V-10/V-11 + 探针）
+e63a4e3  docs(report): 6.5-⑩ 关掉「exit 0 vs rc=1」争议 …      ← 6.5-⑩ 对应提交
+（⑦-补2 自身这一段的提交哈希**不写死** —— 自指哈希必然错，用 `git log --oneline -1` 取）
+```
+
+- **两次 `git merge main`**，每次都**立刻**重跑 `bootstrap_worktree.sh`（`V-07`）⇒ `exit=0`、
+  `已把 14 个 rules 文件置为 0444`、`rules_lock_guard … RESULT: PASS（0 violations）`；
+  合并后 `git rev-list --count HEAD..main` = **0**（`口径 11`）。
+- ★ **一次真实事故（如实记，供后人避坑）**：第一次我跑的是**裸 `git merge main`**，
+  非 ff ⇒ git **拉起编辑器**等提交信息 ⇒ 在非交互环境里**挂死**（`Exit 138`/SIGTERM），
+  留下 `MERGE_HEAD` 与**被模板污染的 `MERGE_MSG`**。随后 `git commit --no-edit` **把模板注释行也写进了提交信息** ⇒
+  我另做一次 **`git commit --amend -m "Merge branch 'main' into ws/fixture-cost"`** 清掉它
+  （amend 前先验 `git diff --cached --stat` **为空** ⇒ 只改 message，**没有夹带任何工作区改动**）。
+  ⇒ **纪律**：无人值守下合并一律用 **`git merge --no-edit <ref>`**（或 `GIT_EDITOR=true`）。
+- **本轮仍只改报告一个文件**（`M system/reports/ws_fixture_cost_report.md`），**无代码改动**；
+  `git status --short` **空**；`pre-commit` 逐次全绿（`RESULT: PASS（0 violations）` + `pre-commit ✓ 全部门禁放行`），
+  **全程未用 `--no-verify`**。
+- ★ 本轮**新读**：主干 `98d0c32` 已立 **`V-10`「工具输出即证据」+ `V-11`「举证半径=结论半径」**，
+  并建 `system/scripts/ops/probe_grep_engine.sh`。我**复跑了该探针**（原文在 6.5-⑩），
+  与我的矩阵**逐格一致**；据此把 6.5-① 与 6.5-⑩ 里可能被读成"我的独有发现"的两处**降级为独立收敛**。
+  ⇒ 这正是 `V-11` 在本文件上的应用：**结论主语不得比实测样本宽，也不得比别人的既有工作宽。**
+
