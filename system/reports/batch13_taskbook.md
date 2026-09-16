@@ -166,3 +166,63 @@
 1. 13-R 报告到达 → **主理人**安装 4 份候选进 `rules/` + `chmod u+w rules && python scripts/ops/lock_rules.py` → 核 `rules_lock_guard` 绿。
 2. 13-A / 13-B 报告到达 → 核 diff（三点 diff + 试合并）→ 合并 → **实测**：新增测试目录已入批次、`stage_gate --stage nvidia_sample` 的判据数变化、无新增非零门禁项。
 3. 合并后开**批次 14 独立审计**（换人复核，含"判据真的会拦"的反例复核）。
+
+---
+
+## ★ 主理人裁定（批次 13 执行期，逐条留痕）
+
+> 裁定时间：13-R 已安装并重锁（`bb32863` → `0f618a9`）、13-A/13-B 仍在各自工作树内。
+
+### R1 · `ws/ch13r-rule-candidates` **废弃 · 禁止合并**（副产物为 `ws/x13r-dual-diff-audit`）
+
+`b2e269c` / `ad33a6d` 两个 commit 把 4 份规则候选写进 `system/registry/rule-candidates/`。该目录在
+`bb32863` 里已**转为安装件并清除**（`rules/` 成为唯一真源）。若合并该分支，`registry/rule-candidates/`
+会**复活成第二份真源** ⇒ 违反 `G-06`。
+**处置**：分支**保留不删**（留痕），**永不合并**。审计产物已走 `ws/x13r-dual-diff-audit`（`9540e5f`）。
+
+### R2 · `verify.py` 双侧改动 ⇒ 冲突由**主理人**手工收
+
+13-A 需加 `valuelayer` 批次（`V-06`），13-B 已加 `pricelayer` 批次（`BATCHES` 条目 + `ORDER` 一行）。
+两侧都改同一处必然冲突。**已明令 13-A 只加自己那条、不动 `pricelayer`**；合并冲突由主理人裁。
+★ 之所以允许多方改 `verify.py` 而不是收归主理人独写：`V-06` 要求"新增测试目录**同时**加批次"，
+若主理人代劳，测试目录与批次的登记就会**跨人手脱节**（这正是 `G-28` 的成因）。冲突面小、收益大。
+
+### R3 · `stage_gate.py` 三方改动面 ⇒ 合并后**必须**重跑判据有效性门禁
+
+同一文件三条流各改一处，落在**不同函数**：
+
+| 流 | 改动点 | 函数 |
+|---|---|---|
+| 13-A | 新增 `criterion("nvidia_sample","chapter4_g_depth", v)` + 调 `valuelayer.completeness.g_depth_violations` | `stage_nvidia_sample_passed` |
+| `ws-criterion-effectiveness` | `G9-1` 补 `task_state_auditable` 真检查 | `stage_daily_run_passed` |
+| `ws-degrade-contract` | `G-43`/`G-45` 降级契约 | `stage_daily_run_passed` |
+
+⇒ 13-A 与 criterion-effectiveness 改动点相隔约 60 行、**函数不相交**（可自动合并）；
+但 criterion-effectiveness 与 degrade-contract **同改 `stage_daily_run_passed`** ⇒ **必然要人工核对**。
+★ 且 13-A **新增了一条绑定判据** ⇒ 合并后 `criterion_effectiveness_guard` 会要求它有登记。
+**合并后必跑**：`python scripts/checks/criterion_effectiveness_guard.py`，不绿不许进批次 14 审计。
+
+### R4 · 13-A 的两项 DoD 缺口（巡检发现，已回单）
+
+1. `registry/criterion_counterexamples.yaml` **无** `nvidia_sample::chapter4_g_depth` 条目（实测 `git status` 无该文件、grep 零命中）；
+2. `verify.py::BATCHES` **无** `valuelayer` 批次。
+⇒ 已在巡检中明令补齐，且**不得**碰 `pricelayer`（见 R2）。
+
+### R5 · `ws-schema-expand` 的 13-pre / 13-post **顺序修订**
+
+原计划「13-pre 键对齐守卫」在本时点**结构性不可执行**：被检对象（`scripts/valuelayer/**`、
+`scripts/pricelayer/**`）都在**未合并分支**上，`main` 里不存在 ⇒ AST 抽不出读键。
+按 `G-03`「无被检对象 ≠ 已验证」，**拒绝执行是正确的**（该流自己的判断，保留）。
+**修订后顺序**：`(D) Valuation 3 字段` → 13-A/13-B 合并 → **13-pre**（键对齐守卫：AST 抽代码实际读取键
+↔ `rules/*.yaml` 实有键，**单向缺失即红**）→ **13-post**（全消费面复核 + 硬编码阈值扫描）。
+
+### R6 · `ws-degrade-contract` 改动面复核结论：**全部在界内**（主理人先前的越界疑虑撤回）
+
+5 个 commit 涉 8 文件，逐项核对：
+- 界内本体：`scripts/daily/degrade.py` · `delivery/stage_gate.py` · `orchestrate/pipeline.py` · `tests/conftest.py` · `tests/daily/test_daily_run.py`
+- `tests/injection/test_criterion_effectiveness.py`：**在界内** —— 把 `degrade_keeps_last_valid` 的反例由手工拼行
+  改为 `write_check_records()` 真实写路径 + 对真实行定向违约注入。这正是「夹具与真形状同源（`G-06`）」的修复**本身**。
+- `tests/injection/test_wiring_guards.py`：**在界内** —— 同理，`_check_task()` 那个"生产代码从未写出过的形状"
+  （`status=done` + `output_refs=["rec-nvda-001"]`）换成唯一写入方。
+★ 教训留痕：**我一度把"改了相邻测试文件"当成越界**，实际是"修复必须改到那个测试"。判越界前先看
+**改动内容的因果方向**（是"顺手改"还是"不改就修不干净"），不要只看文件名。
