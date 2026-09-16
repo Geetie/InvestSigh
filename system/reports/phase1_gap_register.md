@@ -316,6 +316,7 @@ blocked = True
 | **`G-B10-03`** | `transmit` 的 `gain_map.undisclosed` **不在装载期校验**（不合规配置可能一路静默通过，`KeyError` 才在第一个未披露 hop 炸） | 中 | `OPEN`（修法一行；已记入批次 11 排期） |
 | **`G-B10-04`** | `raw/inbox/…amd…` 与 `raw/…amd…` **逐字节双份**（同源两份，未登记） | 低 | `OPEN` |
 | **`G-B10-05`** | 4 条真实 claim 全 `full_text_read: false`，而 `locator` 覆盖**全篇**且 `quote_hash` 相等 ⇒ `locator_check` 第 4 条判据是**单向**的（只约束 `true ⇒ 条件`），"全篇覆盖却标 false"**不告警** | 低 | `OPEN` |
+| **`G-B10-07`** | ★ **`classify_and_record` 非幂等**（自报"重复调用 0 新增"，**实测证伪**）：副本上连跑 `run_daily` 两次 → `claims` `5 → 10 → 12`（**run#1 +5、run#2 仍 +2**）；`claim_propagation` 全程 0 行。⇒ **不能接进日度步骤**（否则每次真跑都往真源追加，与 `G-B10-02` 同类）。**设计位置无误**（`Ch6 §6.3` 正是 step 2 的模型侧）—— **缺的是幂等性，不是位置**。**主理人接线已撤回**（`chain_steps.py` 注释留痕） | `Ch9 §3.4.2`（追加式不可变）· `Ch9 §3.5`（幂等键） | **高** | 🔄 **在修**（`ws/evidence-fix`，要求二次跑 0 新增 + 反向对照 + 逐行解释 run#1 的 +5） |
 
 
 

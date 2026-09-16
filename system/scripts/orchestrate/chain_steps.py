@@ -90,6 +90,16 @@ def make_verify_handler(root: str | Path, *, step_no: int = 2) -> Callable[[date
                     f"定位核验未通过（{len(report.violations)} 条违例，`Ch6 §D` / `Ch9 §3.4.6`）：{bad}"
                 ),
             )
+        # ★ **追源去重 / 独立判定的产出方尚未接线 —— 原因：它会污染真源**（实测，批次 11 待修）
+        #   证据层（`scripts/evidence/`）已建成产出方 `classify_and_record(root)`，但**实测非幂等**：
+        #     起点 `claims=5` → 副本上 `run_daily` 第 1 次 → `claims=10`（+5）；
+        #     第 2 次 → `claims=12`（**+2，仍在新增**）。
+        #   ⇒ 若接进 step 2（日度步骤），**每次真跑都会往 `facts/claims.jsonl` 追加行** ——
+        #     这与 `G-B10-02`（编排层重复落库）**同类**，且该流自报"重复调用 0 新增（幂等）"，
+        #     与实测不符 ⇒ **先不接，等幂等被修实**。
+        #   （设计位置无误：`Ch6 §6.3` 正是 step 2 的模型侧；缺的是**幂等性**，不是位置。）
+        #   登记：`G-B10-07`。
+        #
         # 定位核验过了，但 `Ch6 §6.3` 的七步判定（追源 / 交叉验证 / 采纳）属模型侧，未实现。
         return StepOutcome(
             produced=claims,
