@@ -121,6 +121,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -141,12 +142,34 @@ _PROFILE_KEYS = (
 
 #: `G-60` 的标志串（宿主 safe-delete shim 打印）。
 QUOTA_MARKER = "SAFE_DELETE_BULK_CONFIRM_REQUIRED"
-#: `verify.py` 对同一件事的自述（两处都认，避免只认一个）。
+#: `verify.py` 对同一件事的自述（**只作旁证，不作触发判据**）。
+#: ★★ **2026-09-17 实测教训（我自己的假阳性）**：本串出现在 `verify.py` **自己的归因文本**里
+#: ⇒ 拿它当触发判据 ⇒ **换行/引用源码都会命中**（`G-62` 家族的文本形态：**"文本命中" ≠ "机制触发"**）。
+#: 现改为只认**宿主守卫自己的 JSON 载荷**（见 `QUOTA_PAYLOAD_RE`），本串降为**旁证**。
 QUOTA_PHRASE = "宿主单轮删除配额耗尽"
+#: ★★ **触发判据**：宿主 safe-delete 守卫的 **payload 形状**（`[safe-delete]` 之后的**有限窗口内**
+#: 出现 `{"count":<int>`），**不是**"文本里出现某个词"。出处：`ws_verify_shard_report.md` §2.5 的一手原文。
+#: ★ 窗口取 `[\s\S]{0,200}?` 而**不是** `[^\n]*` —— 一手原文里 `[safe-delete]` 与 `{"count"…}`
+#: **不在同一行**（我第一版写成同行匹配 ⇒ 对真 payload 判 `False`；已用一正一负两条地板真值验过）。
+QUOTA_PAYLOAD_RE = re.compile(r"\[safe-delete\][\s\S]{0,200}?\{\s*\"count\"\s*:\s*\d+")
+#: `verify.py` 的**环境错误**归因（不是测试失败、也不是配额）⇒ 命中即**停轮**（`G-01` 输入/环境异常）。
+#: 出处：`verify.py::PYTEST_MISSING_MARKER`（同源，不自己造串）。
+PYTEST_MISSING_MARKER = "No module named pytest"
 #: `verify.py` 超时时的标志。
 TIMEOUT_MARKER = "[TIMEOUT]"
 #: `V-03`：`exit=124` 一律不合格。
 TIMEOUT_EXIT = 124
+
+#: ★★ **解释器也是仪器的一部分**（`口径 21` 延伸：被测配置 = 仪器）。
+#: `verify.py` 用 `sys.executable` 派生子进程 ⇒ **必须用装了 pytest 的解释器去跑 `verify.py`**，
+#: 否则每批在 ~0.06s 内全红，且 `verify.py` 会归因成"环境错误：当前解释器里没有 pytest"。
+#: ★ 顺序**照抄 `scripts/ops/run_pytest.sh:43-45`**（同源，不自己定顺序）；**但多加一步能力检查**：
+#: `run_pytest.sh` 只按 `command -v` 判"存在"，**不检查有没有 pytest** ⇒ 本脚本必须**自己验**。
+PYTHON_CANDIDATES = (
+    "$HOME/.workbuddy/binaries/python/envs/default/bin/python",
+    "<root>/.venv/bin/python",
+    "python3",
+)
 
 #: 一个 `code_root` 型夹具用例 teardown 的配额消耗（项）。出处 `13-F §2.6`：修后 **250 项/例**（修前 255）。
 #: ★ 引用值，会随 `system/` 树体积漂移 ⇒ 用前请重新量（`13-F §①` 的静态实测口径）。
@@ -345,9 +368,48 @@ def _git_rev(root: Path, rev: str) -> str:
         return f"unknown({exc.__class__.__name__})"
 
 
+def _find_pytest_python(root: Path) -> tuple[str, str]:
+    """找**装了 pytest** 的解释器。
+
+    返回 `(路径, "")` 或 `("", 原因)`。
+    ★ **开跑前**就该发现这件事：`verify.py` 用 `sys.executable` 派生子进程，解释器不对 ⇒
+    每批 ~0.06s 全红（`2026-09-17` 我因此白跑一整轮，8 条全废）。
+    ★ 顺序与 `run_pytest.sh` **同源**，但**多一步能力检查**（`import pytest`）—— 它只判"存在"。
+    """
+    seen: list[str] = []
+    for cand in PYTHON_CANDIDATES:
+        path = cand.replace("$HOME", str(Path.home())).replace("<root>", str(root))
+        if not (Path(path).exists() or shutil.which(path)):
+            seen.append(f"{path}(不存在)")
+            continue
+        try:
+            probe = subprocess.run([path, "-c", "import pytest"], capture_output=True, text=True,
+                                   check=False, timeout=60)
+        except (OSError, subprocess.SubprocessError) as exc:
+            seen.append(f"{path}(探测失败:{exc.__class__.__name__})")
+            continue
+        if probe.returncode == 0:
+            return path, ""
+        seen.append(f"{path}(无 pytest)")
+    return "", "no_pytest_capable_python:" + " ｜ ".join(seen)
+
+
+def _run_dir(root: Path) -> Path:
+    """每次运行的**原始输出**落盘目录。
+
+    ★★ 为什么必须存（`V-10`：**工具输出即证据**）：我的脚本原本把子进程的 `stdout+stderr`
+    解析完就**丢掉** ⇒ 出现异常读数时**无法追查**（`2026-09-17` 的假阳性 QUOTA 就是这种处境：
+    我知道命中了一个串，但**没有原文**，只能推断）。
+    """
+    d = root / "reports" / "sample_batch_runs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def _main_sha(root: Path) -> str:
     """取 `refs/heads/main` 的 SHA —— 读数必须能与一个**确定的代码状态**对应。"""
     return _git_rev(root, "refs/heads/main")
+
 
 
 def _head_dirty(root: Path) -> bool | str:
@@ -518,12 +580,13 @@ def _read_log_header(root: Path, name: str) -> tuple[float, float, int] | str:
     return float(m.group("elapsed")), float(m.group("timeout")), int(m.group("code"))
 
 
-def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str) -> tuple[list[dict], str]:
+def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str,
+               python_exe: str) -> tuple[list[dict], str]:
     """对单个批次取样 `repeat` 次。
 
     返回 `(rows, stop_reason)`；`stop_reason` 非空 ⇒ **整轮取样必须停止**（不重试）。
-    `preflight` 是开跑前的配额预检结论，`profile` 是本轮的被测配置标签 ——
-    两者都**原样写进每一行**（读数必须能自证当时的条件，否则不同条件下的数会被当成同一条序列）。
+    `preflight` / `profile` / `python_exe` 三者都**原样写进每一行** ——
+    读数必须能自证当时的条件，否则不同条件下的数会被当成同一条序列（`口径 21`：配置也是仪器）。
     """
     rows: list[dict] = []
     for run in range(1, repeat + 1):
@@ -533,15 +596,33 @@ def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str)
         env_now = _env_profile()
         # ★★ 新增格「`G-60` 是否真消失」（主理人签发）：**同一命令**的 `count` 前后各读一次。
         #    只读、不过管道、零夹具 —— 但★ 该读数**不可复现**（见 `_quota_state`）⇒ 只能当旁证，
-        #    硬判据仍是"输出里有没有 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`"。
+        #    硬判据是**宿主守卫自己的 payload 形状**（`QUOTA_PAYLOAD_RE`），不是"文本里出现某个词"。
         count_before = _quota_count()
         proc = subprocess.run(
-            [sys.executable, "scripts/ops/verify.py", "--batch", name],
+            [python_exe, "scripts/ops/verify.py", "--batch", name],
             cwd=str(root), capture_output=True, text=True, check=False,
         )
         verify_exit = proc.returncode          # ★ 不经管道（口径 22）
         blob = proc.stdout + proc.stderr
-        quota = (QUOTA_MARKER in blob) or (QUOTA_PHRASE in blob)
+        # ★★ **原始输出落盘**（`V-10`：工具输出即证据）—— 解析完就丢 ⇒ 异常读数无法追查。
+        raw_name = f"{name}_r{run}_{started.strftime('%Y%m%d_%H%M%S')}.log"
+        raw_path = _run_dir(root) / raw_name
+        try:
+            raw_path.write_text(blob, encoding="utf-8")
+            raw_log: str | None = str(raw_path)
+        except OSError as exc:                 # 写不进去也**不静默**：读数里显形
+            raw_log = None
+            raw_write_note = f"raw_log_unwritable({exc.__class__.__name__}):{raw_name}"
+        else:
+            raw_write_note = ""
+        # ★★ **触发判据 = 宿主守卫的 payload 形状**（不是"文本里出现某个词"）。
+        #    `2026-09-17` 实测教训：`QUOTA_PHRASE` 是 `verify.py` **自己的归因文本** ⇒ 拿它当判据会假阳性。
+        quota_payload = bool(QUOTA_PAYLOAD_RE.search(blob))
+        quota_prose_only = (not quota_payload) and (
+            (QUOTA_MARKER in blob) or (QUOTA_PHRASE in blob)
+        )
+        quota = quota_payload
+        pytest_missing = PYTEST_MISSING_MARKER in blob
         count_after = _quota_count()
         timed_out = (TIMEOUT_MARKER in blob) or (verify_exit == TIMEOUT_EXIT)
         input_error = "INPUT-ERROR" in blob
@@ -583,6 +664,11 @@ def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str)
             "env_child": env_now["child"],
             "env_caller": env_now["caller"],
             "caller_forced_by_child_env": env_now["child"] != env_now["caller"],
+            # ★★ **解释器也是仪器**：换解释器跑出的数不是同一台仪器的读数（本单 2026-09-17 实测：
+            #    裸 `python3` 无 pytest ⇒ 每批 ~0.06s 全红）。
+            "python_exe": python_exe,
+            "raw_log": raw_log,
+            "raw_log_note": raw_write_note,
             "fixture_mode": _fixture_mode(root),
             "concurrency_before": before,
             "concurrency_after": _concurrency(),
@@ -597,6 +683,10 @@ def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str)
                 header is not None and elapsed is not None and abs(header[0] - elapsed) > 0.005
             ),
             "quota_polluted": quota,
+            # ★ 判据分层：`quota_payload` 才触发；"只有文本命中"单独记，**不许**当污染（`G-62` 家族）。
+            "quota_payload_matched": quota_payload,
+            "quota_prose_only": quota_prose_only,
+            "pytest_missing": pytest_missing,
             # ★★ 「`G-60` 是否真消失」格的逐行数据（同一个 request 的删除计数前后各一次）。
             #    `None` = 读不到，**原因在 `quota_count_note` 里**（不静默）。
             "quota_count_before": count_before[0],
@@ -606,7 +696,8 @@ def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str)
             "timeout_hit": timed_out,
             "input_error": input_error,
             "verdict": (
-                "QUOTA" if quota
+                "ENV_NO_PYTEST" if pytest_missing
+                else "QUOTA" if quota
                 else "TIMEOUT" if timed_out
                 else "INPUT_ERROR" if input_error
                 else "OK" if verify_exit == 0
@@ -614,9 +705,13 @@ def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str)
             ),
         })
 
-        # 停手条件（三条都**不重试**：重试只会浪费一个轮次，并把已测数据搅脏）
+        # 停手条件（四条都**不重试**：重试只会浪费一个轮次，并把已测数据搅脏）
+        if pytest_missing:
+            return rows, ("ENV_NO_PYTEST：**解释器里没有 pytest** —— `verify.py` 用 `sys.executable` 派生子进程，"
+                          "故必须用装了 pytest 的解释器跑它（`G-01`：这是**环境/输入异常**，不是「测出问题」）。"
+                          "⇒ 本轮全部读数作废，**换解释器重跑**，不要改断言、不要改超时")
         if quota:
-            return rows, "QUOTA：宿主单轮删除配额已用完（count 与上轮相近）⇒ 换轮次，不重试"
+            return rows, "QUOTA：宿主单轮删除配额已用完（payload 判据：`[safe-delete]` + `\"count\"`）⇒ 换轮次，不重试"
         if timed_out:
             return rows, f"TIMEOUT：本格撞满超时（{timeout}s）⇒ 按 V-03 当「该批坏了」处理，**不要**先加超时"
         if input_error:
@@ -658,14 +753,23 @@ def _render(rows: list[dict], stop_reason: str) -> str:
         pa = "—（取不到）" if r["passed"] is None else str(r["passed"])
         dirty = r["head_dirty"]
         dirty_s = "★**脏**" if dirty is True else ("干净" if dirty is False else f"{dirty}")
-        lines.append(f"{i}. `python scripts/ops/verify.py --batch {r['batch']}`（run {r['run']}）")
+        lines.append(f"{i}. `{r['python_exe']} scripts/ops/verify.py --batch {r['batch']}`（run {r['run']}）")
         lines.append(f"   - **退出码**：`verify={r['verify_exit']}` ｜ `pytest={r['pytest_exit']}`")
         lines.append(f"   - **`passed` 数 = {pa}** ｜ **`elapsed` = {el}**（timeout {to}）")
         lines.append(f"   - **对象**：被测 SHA `{r['head_sha']}`（{dirty_s}）｜ 工作树 `{r['worktree']}`"
                      f" ｜ 取样时刻 `{r['started_at_local']}`"
                      f" ｜ （上下文：`main` = `{r['main_sha']}`）")
+        lines.append(f"   - 原始输出：`{r['raw_log'] or ('★未落盘：' + r['raw_log_note'])}`")
+    if any(r.get("quota_prose_only") for r in rows):
+        # ★ 这条**必须单独打印**：它是"文本命中、机制未命中"的显形（`G-62` 家族），
+        #   否则读者会把"输出里出现了那个词"误读成"守卫真的拒了"。
+        n = sum(1 for r in rows if r.get("quota_prose_only"))
+        lines.append(f"★ **{n} 条读数里出现过配额相关字样但 payload 判据未命中** ⇒ "
+                     "按判据**不算污染**（那多半是 `verify.py` **自己的归因文本**）；"
+                     "★ 这就是我 2026-09-17 假阳性的形态（判据曾是纯文本子串）。")
     lines.append("")
     lines.append(f"main SHA: `{rows[0]['main_sha']}` ｜ 首格时刻: {rows[0]['started_at_local']}")
+    lines.append(f"解释器（**仪器**）：`{rows[0]['python_exe']}`")
     lines.append(f"配额预检状态（逐行）：`{rows[0]['quota_preflight']}`"
                  + ("　★ **不适用**：子进程实测 `E=0` ⇒ 走包装器时删除守卫关 ⇒ **不消耗**宿主删除配额"
                     "（2026-09-16 裁定）" if rows[0]["quota_preflight"] == "na-wrapper" else ""))
@@ -987,6 +1091,17 @@ def main(argv: list[str] | None = None) -> int:
         _print_plan(cells or SCHEDULED_CELLS, args.repeat)
         return 0
 
+    # ★★ 第三条**仪器**前置（2026-09-17 实测教训）：**解释器必须能 import pytest**。
+    #    `verify.py` 用 `sys.executable` 派生子进程 ⇒ 用裸 `python3` 跑它 ⇒ 每批 ~0.06s 全红，
+    #    而且**看起来像"测试坏了"**（`G-61` 家族：判据/对象不同源）。必须在跑任何批次**之前**拦住。
+    python_exe, py_reason = _find_pytest_python(ROOT)
+    if not python_exe:
+        print(f"★ 拒绝开跑：**找不到装了 pytest 的解释器** —— {py_reason}", file=sys.stderr)
+        print("  依据：`verify.py` 用 `sys.executable` 派生子进程；用没有 pytest 的解释器跑它 ⇒ "
+              "每批 ~0.06s 全红（`verify.py` 自带归因 `PYTEST_MISSING_MARKER`）。"
+              "处置：换解释器，**不要**改断言、**不要**改超时。", file=sys.stderr)
+        return 2
+
     if args.no_quota_check:
         print("★ 已显式跳过配额预检（`--no-quota-check`）—— 读数里会如实标注 `skipped`，"
               "**不得**把它当成「预检通过」。", file=sys.stderr)
@@ -1026,6 +1141,10 @@ def main(argv: list[str] | None = None) -> int:
               f"（`verify.py::_child_env()` 强制置 0）⇒ 读数**不因此失效**，但已逐行记录。",
               file=sys.stderr)
 
+    # ★ 仪器自述：解释器是仪器的一部分 ⇒ 开跑前**响亮**声明（换解释器跑出的数不可混比）。
+    print(f"★ 本轮解释器（仪器）：`{python_exe}`（已验可 `import pytest`）；"
+          f"原始输出落盘目录：`{_run_dir(ROOT)}`", file=sys.stderr)
+
     all_rows: list[dict] = []
     stop_reason = ""
     for c in cells:
@@ -1046,7 +1165,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"★ `{c.name}`：配额预检**不适用**（子进程实测 `E=0` ⇒ 走包装器时删除守卫关"
                   f"⇒ 不消耗宿主删除配额，2026-09-16 裁定）⇒ 本行 `quota_preflight=na-wrapper`",
                   file=sys.stderr)
-        rows, reason = sample_one(c.name, args.repeat, ROOT, gate_status, profile)
+        rows, reason = sample_one(c.name, args.repeat, ROOT, gate_status, profile, python_exe)
         all_rows.extend(rows)
         if reason:
             stop_reason = f"{c.name} → {reason}"
