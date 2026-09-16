@@ -508,7 +508,16 @@ def _holds_valid_result(task: Mapping[str, Any]) -> bool:
 
 
 def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str, int]]:
-    """时点可核 + **覆盖可核** + 任务状态可核 + **降级保留上次有效结果**（`Ch11 §B`）。
+    """时点可核 + **覆盖可核** + **任务状态可核** + **降级保留上次有效结果**（`Ch11 §B`）。
+
+    ★ 四条判据**均已真接线**（不再是"只有声明、没有检查"）：
+
+    | 判据 | 检查落点 |
+    |---|---|
+    | `timing_replayable` | 本函数内（每条 `check_record` 必须有 `run_date`） |
+    | `task_state_auditable` | 本函数内（每条任务 `status` ∈ `TaskStatus`，缺口 `G9-1` 补） |
+    | `degrade_keeps_last_valid` | 本函数内（失败行不得丢 `last_valid_result_ref`） |
+    | `coverage_verifiable` | 复用 `scripts/daily/coverage.py`（`G-06`，不重造） |
 
     ★ `coverage_verifiable`（覆盖可核）**已在本函数内绑定**（批次 9 集成）：
       实现住 `scripts/daily/coverage.py`（`Ch3 §N3.2-03/04` 三分量分别可表达 + 深度四态可回退 +
@@ -518,6 +527,13 @@ def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
     ★ **为什么必须绑**（否则判据形同虚设）：`registry/delivery.yaml` 声明它是 automated，
       而"声明"与"实现"必须有**机器绑定**（本项目的血泪铁律 5）——
       不绑的话，**覆盖不达标时阶段④门禁不会红**，等于判据没接。
+      但**绑定只是必要条件**：绑定证明"接了"，**不证明"真的在查"**
+      （把 `cv = coverage_check(root)` 换成空 `CheckReport`，`criteria_bound` 仍是 4
+      而门禁对不达标数据变绿 —— 见 `tests/injection/test_criterion_effectiveness.py`
+      ::test_daily_run_coverage_verifiable_counterexample_is_load_bearing 钉住的现象）。
+      ⇒ 本阶段 4 条判据**各自**都有一条**可执行反例**登记在
+        `registry/criterion_counterexamples.yaml`，并另有 `criterion_effectiveness_guard.py`
+        强制"新绑判据必须登记反例"。
     """
     tasks = _read_jsonl(root / "facts" / "tasks.jsonl")
     check_records = [t.get("check_record") for t in tasks if t.get("check_record")]
@@ -571,6 +587,43 @@ def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
     for cr in check_records:
         if not cr.get("run_date"):
             v.append(Violation("daily_run", f"{cr.get('check_id')} 缺 run_date：时点不可核", "facts/tasks.jsonl"))
+    # 「任务状态可核」（`Ch8 §C.2` / `施工图 §2 阶段④` 的 `all_tasks_have_status(run_window)`）。
+    #
+    # ★ 补实现的原因（缺口 `G9-1`，由本批次实测钉出）：本判据原先**只有一行
+    #   `criterion(...)` 声明、零检查** —— 把任务 `status` 置成 `totally_bogus_status`，
+    #   阶段④ 照样 `exit 0`。即「阶段④ 的 PASS 只有 3/4 是真的」，正是
+    #   `提示词 §一 底线 2`「真接线」点名的形态。绑定（AST 有那行字面量）**不等于**会拦。
+    #
+    # ★ 判据 = 「每条任务都有**可判定的** status，**且**落在 `TaskStatus` 合法取值域内」。
+    #   两个条件缺一不可：
+    #     只查"键存在" ⇒ `status="totally_bogus_status"` 照样过（键在、值非法）；
+    #     只查"值合法" ⇒ 说不出违例是"缺字段"还是"值非法"，逐行定位会含糊。
+    #   ⇒ 用同一个 `not in legal` 判定覆盖两种形态，违例文案里分别显形。
+    #
+    # ★ 取值域**唯一真源**是 `schema/models.py::TaskStatus`（`G-06`：不重抄那 5 个字面量）。
+    #   该枚举的 5 态逐字来自 `08/02 §N8.2-04` / `Ch1 §C.3`：
+    #   `queued` / `researching` / `pending_evidence` / `done` / `failed`。
+    #   ★ **就地导入**（不放模块顶层）：`schema.models` 是 pydantic 重模块，实测顶层导入
+    #     会把 `stage_gate --stage prep` 由 0.51s 拖到 0.86s；而只有本阶段用得到它 ⇒
+    #     不该让别的阶段替它付这份开销。
+    from schema.models import TaskStatus
+
+    # ★ 字段名用**磁盘上的真名 `status`**（`models.py::Task.status`），
+    #   不用 `08/02` 表里的 `task_status` 别名 —— 真仓库实测该键不存在（避免照抄文档写错域）。
+    # ★ 可判定且穷尽（`R-06 ①`）：每条任务只落入"合法"或"违例"之一，无第三态、
+    #   不依赖任何关键词或名单。
+    legal_status = {s.value for s in TaskStatus}
+    for t in tasks:
+        got = t.get("status")
+        if not isinstance(got, str) or got not in legal_status:
+            v.append(
+                Violation(
+                    "daily_run",
+                    f"{t.get('task_id')} 的 status={got!r} 不在 TaskStatus 合法取值域内"
+                    f"（合法值 = {sorted(legal_status)}）⇒ 任务状态不可核",
+                    "facts/tasks.jsonl",
+                )
+            )
     criterion("daily_run", "timing_replayable", v)
     criterion("daily_run", "task_state_auditable", v)
     criterion("daily_run", "degrade_keeps_last_valid", v)
@@ -587,12 +640,36 @@ def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
     return (not v), v, {"tasks": len(tasks), "check_records": len(check_records), "degrade_first_day_exempt": first_day_exempt, **cv.scanned}
 
 
+def _declared_eval_layers(task: Mapping[str, Any]) -> set[str]:
+    """该行复盘记录**声明的全部层** = 当前 `eval_result.eval_layer` ∪ `eval_result_history[*].eval_layer`。
+
+    ★ 取**并集**而非单选：`eval_result` 是"当前那条"，`eval_result_history` 是**追加式累积**
+      （`models.py::Task.eval_result_history` 注明 `append-only`）。只看当前会漏掉
+      "历史里声明过、当前不再出现"的层 —— 而那正是要判的形态。
+    """
+    out: set[str] = set()
+    cur = task.get("eval_result")
+    if isinstance(cur, Mapping) and isinstance(cur.get("eval_layer"), str):
+        out.add(cur["eval_layer"])
+    hist = task.get("eval_result_history")
+    if isinstance(hist, list):
+        for item in hist:
+            if isinstance(item, Mapping) and isinstance(item.get("eval_layer"), str):
+                out.add(item["eval_layer"])
+    return out
+
+
 def stage_expansion_passed(root: Path) -> tuple[bool, list[Violation], dict[str, int]]:
     """研究标准一致（Ch4 §G）+ 投资结果可核验 + 复盘 **append-only**。
 
     ★ `research_standard_consistent` 与 `investment_result_verifiable` 已在
       `registry/delivery.yaml` 声明为 automated，本函数**尚未实现** →
       由 `assert_criteria_implemented()` 在前置产物齐备时阻断。
+
+    ★ `review_append_only` 的**真检查**（缺口 `G9-2` 补实现）逐字据 `Ch10 §D.5`，
+      见函数体内两处 `① / ②` 的注释。要点：**不重造 append-only 比对**（`G-06`），
+      而是①读 `append_only_guard` 的**判据**确认它覆盖本真源，②判**语义单调性**
+      （两处被检面互不重叠，见 ② 的注释）。
     """
     tasks = _read_jsonl(root / "facts" / "tasks.jsonl")
     eval_records = [t.get("eval_result") for t in tasks if t.get("eval_result")]
@@ -603,9 +680,95 @@ def stage_expansion_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
     for need in ("research_quality", "forecast_quality", "investment_result"):
         if need not in layers:
             v.append(Violation("expansion", f"三层复盘缺层: {need}", "facts/tasks.jsonl"))
+
+    # ═══ `review_append_only`（`Ch10 §D.5`）—— 两个**互不重叠**的被检面 ═══
+    aog_pathspec = ""
+    aog_tracked = 0
+    aog_covers = 0
+    try:
+        # ①「append-only 路径**真的覆盖**了这个真源」—— 读**判据**，不读输出文字。
+        #
+        # `Ch10 §D.5` 第 2 行逐字：「**append-only**：复盘记录一次写入即不可改
+        # （承 `Ch9 §3.4.2` pre-commit 拒改既有行）」。机制由 `scripts/checks/append_only_guard.py`
+        # 承担 ⇒ 此处**只问它的判据函数**要 pathspec 与"被跟踪文件数"，
+        # **不解析它的输出文字**、**不重造第二套 diff 比对**（`G-06`）。
+        #
+        # ★ 为什么"覆盖性"本身必须被显式检查（而不是假定）：该守卫曾有一处**既有假绿** ——
+        #   在 linked worktree 里 `GIT_DIR` 使 `rev-parse --show-toplevel` 返回 cwd ⇒
+        #   pathspec 指错 ⇒ `git diff --cached` **恒空** ⇒ 守卫对任何输入都放行
+        #   （`G-RC-12`，已由 `ws-schema-expand` 修正）。"机制存在" ≠ "机制在这个真源上生效"。
+        #
+        # ★ 判据 = 「守卫的 pathspec 指向的真源目录，正是**本函数读的那个** facts 目录，
+        #   且 glob 到 `*.jsonl`（`tasks.jsonl` 在其中）」。用**相对仓库根**的前缀比对，
+        #   而不是"被跟踪文件数 > 0" —— 后者在**夹具副本**里恒为 0（副本的 facts 不在
+        #   git 跟踪范围内），会把环境伪影误判成数据违例。故 `tracked` 只**记账**不判红
+        #   （与 `append_only_guard` 自身的既定口径一致，见其 `count_tracked_matches` docstring）。
+        from scripts.checks.append_only_guard import (
+            count_tracked_matches,
+            facts_pathspec,
+            repo_toplevel,
+        )
+
+        top = repo_toplevel(root)
+        aog_pathspec = facts_pathspec(root, top)
+        aog_tracked = count_tracked_matches(top, aog_pathspec)
+        facts_rel = (root / "facts").resolve().relative_to(top).as_posix()
+        aog_covers = 1 if aog_pathspec == f"{facts_rel}/*.jsonl" else 0
+    except Exception as exc:  # 非 git 仓库 / git 不可用 —— 显式显形（下方按未覆盖判红）
+        aog_pathspec = f"<不可用: {exc}>"
+    if not aog_covers:
+        v.append(
+            Violation(
+                "expansion",
+                f"append-only 守卫的 pathspec={aog_pathspec!r} 未覆盖本函数所读的 facts/*.jsonl"
+                " ⇒ 复盘记录所在真源不在「既有行不得改写」的射程内（`Ch10 §D.5` 第 2 行 / `Ch9 §3.4.2`）",
+                "scripts/checks/append_only_guard.py",
+            )
+        )
+
+    # ②「**已声明过的 `eval_layer` 层不得从记录集里消失**」—— 本判据的**真判别力**所在。
+    #
+    # `Ch10 §D.5` 第 3 行逐字：「**禁"只留赢的"**：断言 **某标的的复盘记录集合
+    # ⊇ 其历史全部建议（含已验证失败者）**」；第 1 行「三类记录齐全……**不可选择性删除**」。
+    #
+    # ★ 可判定的快照形态：`facts/tasks.jsonl` 是**追加式**真源 ⇒ **行序即时序**
+    #   （与 `degrade_first_day_exempt` 的追加序判定同源）。于是"同一任务在追加序上，
+    #   声明的层集合**只增不减**"就是该断言的快照形态。
+    #
+    # ★ 为什么这条**不是**重造 append-only 比对（`G-06` 的关键论据）：
+    #   diff 级 append-only 只能发现"**既有行被改写**"；而
+    #   「**新增**一行、该行不再声明此前声明过的层」在 diff 上**完全合法**（纯追加），
+    #   却正是"选择性删除"的语义违反（用户看到的历史被悄悄收窄）。
+    #   ⇒ 两者的被检面**不重叠、互补**：前者管"行有没有被改"，后者管"层有没有被丢"。
+    #
+    # ★ 可判定且穷尽（`R-06 ①`）：每条参与复盘记录流的行，其每个历史层要么仍在、要么已丢，
+    #   无第三态；不依赖任何关键词或名单。
+    seen_layers: dict[str, set[str]] = {}
+    for t in tasks:
+        tid = str(t.get("task_id"))
+        cur = _declared_eval_layers(t)
+        if not cur:
+            continue  # 该行不参与复盘记录流（不构成"记录集"），按 G-03 不计入判定
+        lost = seen_layers.get(tid, set()) - cur
+        if lost:
+            v.append(
+                Violation(
+                    "expansion",
+                    f"{tid} 的复盘记录里层 {sorted(lost)} 消失（此前已声明过）"
+                    " ⇒ 违反『已声明过的层不得从记录集里消失』（Ch10 §D.5 禁「只留赢的」）",
+                    "facts/tasks.jsonl",
+                )
+            )
+        seen_layers[tid] = seen_layers.get(tid, set()) | cur
+
     criterion("expansion", "review_append_only", v)
     v += assert_criteria_implemented(root, "expansion")
-    return (not v), v, {"eval_records": len(eval_records)}
+    return (not v), v, {
+        "eval_records": len(eval_records),
+        "aog_covers_carrier": aog_covers,
+        "aog_tracked_files": aog_tracked,
+        "tasks_with_eval_history": len(seen_layers),
+    }
 
 
 GATES = {
