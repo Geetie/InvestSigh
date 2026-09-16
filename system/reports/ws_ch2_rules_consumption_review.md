@@ -1767,3 +1767,22 @@ solver.py:679  if int(declared_max)     != MAX_DISPLAY_CAP:      → 违例
    本节所有"可执行"结论都来自**我自己的直接调用探针**（`/tmp/probe13a.py`、`/tmp/probe13b.py`），
    与它们的用例**互不覆盖**：我只能证明"这个键真被读了、改了会变行为"，**不能**代替"它们的用例全绿"。
 3. 其余 10 个 rules 文件的引用面**本轮未重扫**（§12 已按 `main` 重钉过一次；13-A/13-B 未提交 ⇒ 不影响 `main`）。
+
+### §16.7 对照组（我提交本节时**顺带白捡的**正/反控制 —— 比单点测量硬得多）
+
+我提交 §16 时，**我自己的** worktree（`ws/ch2-rules`）的 `pre-commit` 也跑了同一道 `criterion_effectiveness_guard`。
+我的树**不含** 13-A 的改动（`rules/`、`registry/` 与 `main` 一致，见 §16.6 末行）⇒ 于是同一道门禁、同一份门禁代码，在**两个树**上给出：
+
+| `scanned` / `note` 项 | **13-A 树**（含其 staged 改动） | **我的树**（= `main` 面） | 差 |
+|---|---|---|---|
+| `未绑定判据[nvidia_sample]` | **1 条**（`['evidence_locatable']`） | **2 条**（`['chapter4_g_depth', 'evidence_locatable']`） | **−1（正好少了 `chapter4_g_depth`）** |
+| `criteria_registry_entries` | 16 | 15 | +1 |
+| `registry_entry_tests_resolved` | 16 | 15 | +1 |
+| `criteria_bound` | 13 | 12 | +1 |
+
+`criteria_registry_entries` → `15 → 16` 与 `criteria_bound` → `12 → 13`、`未绑定判据[nvidia_sample]` → `2 → 1`，
+三处**同时**只动 **1** ⇒ 在这次改动里，`chapter4_g_depth` 这一条判据**恰好**从"声明 automated 但未绑定 + 无登记"变成"已绑定 + 有 1 条反例登记"。
+⇒ 这是**正/反控制对**，它同时证明两件事：
+1. **§16.2 第 1、2 项的 `2→1` 是 13-A 的改动造成的**，不是我这边环境/缓存造成的（我把同一跑在**不含**该改动的树上做了反向对照）；
+2. 这道门禁**对对象敏感**（不是常数输出）—— 否则两个树会给出同一组数。
+★ 反过来也提醒一句：**任何"门禁显示 PASS/N 条"的读数，必须连"在哪个树上跑的"一起报**；只报数字，读者无法区分"没做"和"做了但没生效"。
