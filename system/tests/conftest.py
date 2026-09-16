@@ -105,18 +105,41 @@ def _make_writable(target: Path) -> None:
             continue
 
 
-@pytest.fixture()
-def code_root(request: pytest.FixtureRequest) -> Path:
-    """一份干净的 `system/` 副本（每个测试一份，互不污染，用完即删）。"""
-    target = WORK_DIR / f"{request.node.name}-{uuid.uuid4().hex[:8]}" / "system"
-    try:
+@pytest.fixture(scope="session")
+def _empty_truth_template() -> Path:
+    """**只建一次**的"空真源 `system/` 模板"（session 级）。
+
+    ★ 为什么要有它（实测性能回归）：`code_root` 原先是 `copytree(SYSTEM_ROOT)` **再**逐例
+      `_reset_truth_source()`（18 次 `write_text` + 清 `raw/`）。真实数据进真源后实测**每例 setup
+      ≈1.0s**（`--durations` 显示最慢 12 项**全是 setup**），119 例累计 ≈120s → `injection` 批**超时**。
+      本环境**写盘远比复制慢**，故把"清空"这件事**从每例路径里挪出去**：
+      模板建一次（含清空），每例只做一次 `copytree`（实测 130 文件 ≈0.02s）。
+
+    ★ 契约不变：模板里的 `facts/*.jsonl` 全空、`raw/` 只剩 `.gitkeep` ——
+      与 `_reset_truth_source` 的"空真源契约"完全一致，只是**只算一次**。
+    ★ 刻意**不**在这里 `_make_writable`：模板保持与 `SYSTEM_ROOT` 相同的权限（`rules/` 0444），
+      可写性仍由每例的 `_make_writable` 负责（注入测试要能改文件）。
+    """
+    target = WORK_DIR / "_template" / "system"
+    if not target.exists():
         shutil.copytree(SYSTEM_ROOT, target, ignore=_ignore)
         for sub in _ENSURE_DIRS:
             (target / sub).mkdir(parents=True, exist_ok=True)
-        _make_writable(target)
-        # ★ 空真源契约（见上方 `_reset_truth_source` 的说明）：必须放在 `_make_writable` **之后**，
-        #   否则清空动作会在 0444 的 `raw/` 子项上抛 `PermissionError`。
         _reset_truth_source(target)
+    return target
+
+
+@pytest.fixture()
+def code_root(request: pytest.FixtureRequest, _empty_truth_template: Path) -> Path:
+    """一份干净的 `system/` 副本（每个测试一份，互不污染，用完即删）。
+
+    ★ 从 `_empty_truth_template`（**已清空真源**）复制，而不是从 `SYSTEM_ROOT` 复制后清空 ——
+      见模板 fixture 的说明（每例 setup 由 ≈1.0s 降回复制量级）。
+    """
+    target = WORK_DIR / f"{request.node.name}-{uuid.uuid4().hex[:8]}" / "system"
+    try:
+        shutil.copytree(_empty_truth_template, target)
+        _make_writable(target)
         yield target
     finally:
         shutil.rmtree(target.parent, ignore_errors=True)
@@ -171,16 +194,47 @@ def pristine_code_root() -> Path:
     return target
 
 
+def _clear_work_dir(*, loud: bool) -> None:
+    """清空夹具工作目录（**逐子项删**，且按需**响亮失败**）。
+
+    ★ 为什么不是一行 `shutil.rmtree(WORK_DIR, ignore_errors=True)`（**实测故障**）：
+      宿主环境的 safe-delete 对**单次批量删除**有数量阈值。原先那一行一旦被拒就**静默失败**
+      （`ignore_errors=True`），于是 `tests/.work` 跨多轮**累积到 8 万+ 项**，
+      最终每个用例的 setup 直接以 `E` 报错 —— 表现为"`unit` 批 0.91s 就红"，
+      而**日志里只有一行 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`**，极易被误读成测试坏了。
+
+      → 逐子项删把单次删除量级压到阈值内；
+      → 仍然删不干净就**响亮抛出**并给出处置提示 —— **绝不静默**（本项目三令五申的禁忌）。
+    """
+    if not WORK_DIR.exists():
+        return
+    for child in list(WORK_DIR.iterdir()):
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child, ignore_errors=True)
+        else:
+            child.unlink(missing_ok=True)
+    leftover = list(WORK_DIR.iterdir())
+    if not leftover:
+        return
+    msg = (
+        f"夹具工作目录未能清空（残留 {len(leftover)} 项，例如 {[p.name for p in leftover[:3]]}）：{WORK_DIR}\n"
+        "  宿主 safe-delete 可能拒绝了批量删除 —— 请手动清空该目录后重跑。"
+    )
+    if loud:
+        raise RuntimeError(msg)
+    print(f"\n[WARNING] {msg}\n")
+
+
 # ★ 双保险：单个 fixture 的 `finally` 在崩溃/中断时兜不住，
 #   残留的夹具副本会被 git 当源码提交（实测曾积累 53 个目录）。
-#   故在 session 起止各整目录清一次 —— **临时目录绝不允许进入仓库**。
+#   故在 session 起止各清一次 —— **临时目录绝不允许进入仓库**。
 def pytest_sessionstart(session: pytest.Session) -> None:
-    shutil.rmtree(WORK_DIR, ignore_errors=True)
+    _clear_work_dir(loud=True)
     _warn_if_fs_brokered()
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    shutil.rmtree(WORK_DIR, ignore_errors=True)
+    _clear_work_dir(loud=False)
 
 
 def _warn_if_fs_brokered() -> None:

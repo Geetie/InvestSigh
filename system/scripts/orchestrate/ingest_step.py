@@ -43,6 +43,7 @@ from __future__ import annotations
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
@@ -72,8 +73,36 @@ _ISO_DATE_PREFIX_LEN = 10
 
 
 def _code_root() -> Path:
-    """本处理器所属的代码工程根（`system/`）。"""
+    """本处理器**自身**所属的代码工程根（`system/`）。
+
+    ★ 它只是**缺省回落**，不是权威来源 —— 权威来源是**编排器绑定的 `root`**。
+      见 `make_ingest_handler` 与缺陷 `G-RC-05`。
+    """
     return _ROOT
+
+
+def make_ingest_handler(root: str | Path) -> Callable[[date, str], "StepOutcome"]:
+    """构造 step 1 处理器，**把 `root` 绑定进去**（与 `compute` / `decision` 的
+    `make_*_handler(root)` 同一范式）。
+
+    ★ 为什么必须有这个工厂（缺陷 `G-RC-05`，实测**真源被污染**）：
+      `StepHandler = Callable[[date, str], StepOutcome]` —— **签名里根本没有 root**。
+      原先把裸函数直接注册进编排器，于是处理器只能从**自身模块位置**（`Path(__file__)`）
+      解析路径。后果：**任何拿副本 `code_root` 调用 `run_daily` 的测试都会写进真仓库真源**。
+      实测：`tests/injection/test_chain_steps_wiring.py` 跑 11 次 `run_daily`，
+      在真 `system/facts/claims.jsonl` 里追加了 **12 行重复 claim**（`recorded_seq` 6–17）。
+
+      → 这与 `P7-2`（`run_decide` 忽略传入的 `root`）**是同一类缺陷**，
+        但更隐蔽：那里是"参数被忽略"，这里是"**参数根本不存在**"。
+    """
+    root_path = Path(root)
+
+    def handler(run_date: date, scope: str) -> StepOutcome:
+        return ingest_public_information(run_date, scope, root=root_path)
+
+    handler.__name__ = "ingest_public_information_bound"
+    handler.__doc__ = f"step 1 处理器（已绑定 root={root_path}）"
+    return handler
 
 
 def _inbox_files(root: Path) -> list[Path]:
@@ -157,7 +186,9 @@ def _read_text_for_locator(path: Path) -> str:
         return ""
 
 
-def ingest_public_information(run_date: date, scope: str) -> StepOutcome:
+def ingest_public_information(
+    run_date: date, scope: str, *, root: str | Path | None = None
+) -> StepOutcome:
     """step 1：把投递口的外部文本经**执行器**摄入（文本落 `raw/`、主张落 `facts/claims.jsonl`）。
 
     - 逐个 `process_raw_file(...)`（**复用**执行器，不另写一条写库路径）；
@@ -169,8 +200,11 @@ def ingest_public_information(run_date: date, scope: str) -> StepOutcome:
 
     ★ `run_date` / `scope` 由编排器传入；step 1 的采集语义**逐文件独立**，不据日期/范围筛选
       （范围筛选属阶段② 采集层，见模块 docstring「接缝」）。
+    ★ `root` **必须**由调用方（编排器）绑定 —— 见 `make_ingest_handler` 与缺陷 `G-RC-05`：
+      缺省回落 `_code_root()`（模块自身位置）**只对"在真仓库上直接调用"成立**，
+      在**副本 `code_root`**（测试 / 多 root）场景下会**写错地方**。
     """
-    root = _code_root()
+    root = Path(root) if root is not None else _code_root()
     candidates = _inbox_files(root)
     produced: list[str] = []
     degraded = False

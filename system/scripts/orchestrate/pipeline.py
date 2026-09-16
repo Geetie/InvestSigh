@@ -136,9 +136,15 @@ class Pipeline:
           模块归属与设计锚点见 `scripts/orchestrate/chain_steps.py` 的模块 docstring。
         """
         from scripts.orchestrate.chain_steps import register_chain_steps
-        from scripts.orchestrate.ingest_step import ingest_public_information
+        from scripts.orchestrate.ingest_step import make_ingest_handler
 
-        self.register_step(1, ingest_public_information)
+        # ★ **必须**用 `make_ingest_handler(self.root)` 绑定 root（缺陷 `G-RC-05`）：
+        #   `StepHandler = Callable[[date, str], StepOutcome]` 签名里**没有 root**，
+        #   若直接注册裸函数，处理器只能从 `Path(__file__)` 解析路径 →
+        #   **任何拿副本 `code_root` 调用 `run_daily` 的测试都会写进真仓库真源**
+        #   （实测：11 次 `run_daily` 在真 `facts/claims.jsonl` 追加 12 行重复 claim）。
+        #   这与 `P7-2`（`run_decide` 忽略 `root`）同类，但更隐蔽 —— 那是"参数被忽略"，这是"参数不存在"。
+        self.register_step(1, make_ingest_handler(self.root))
         register_chain_steps(self)
 
     def _load_config(self) -> dict[str, Any]:
