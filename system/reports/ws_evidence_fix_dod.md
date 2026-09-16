@@ -68,6 +68,13 @@
 - **AC-IDEM-3（增量可解释）**：`run#1 = +5` 须**逐行可解释**（`claim_id` / `version_kind` / `recorded_seq`）：= `1`（step 1 既有重复版）+ `4`（本模块首写），**不存在"多算的第 5 个根"**。
 - **AC-IDEM-4（根因归属如实）**：全链路残余 `+1`（若有）**只**来自 step 1 的重复版（`guard/executor` 缺 `(source_id, quote_hash)` 行幂等键），**由既有 `ws/idempotency` 修复** —— 本单**只读**验证"叠加后 `run#2` 两文件皆 0"，**不改其代码、不做分支操作**。
 
+### ⑧ 落库返回值：`written_claim_ids` / `written_propagation_ids`（供 `StepOutcome.produced`，契约 `4f95c3d`）
+
+- **AC-PROD-1（纯增量、向后兼容）**：`IndependenceSummary` 新两字段默认 `()`；`record_claim_updates` / `record_propagation` **仍返回 int**（既有调用方不动），id 经**可选出参** `written_ids` 带出；纯函数 `classify_independence` 恒为空。
+- **AC-PROD-2（首轮非空 / 重跑皆空）**：首轮 `written_propagation_ids`（`{"re1","re2","re3"}`）与 `written_claim_ids` 均非空且**升序**；重跑**两者皆 `()`**（`G-B10-07` 在返回值层面的判别式）。
+- **AC-PROD-3（★反向对照，`G-05`）**：把某 claim 的记录值改成与再判定结果不一致（真实变更）→ 该 `claim_id` **必须**重现于 `written_claim_ids`（证"该写时会写"，非"永远不写"）。
+- **AC-PROD-4（`G-06` 唯一真源）**：`written_*_ids` 来源 = 两个 record 函数的**唯一**"是否已存在"判定；`classify_and_record` / `chain_steps.py` **不得**重算"哪些是新的"。
+
 ### 硬约束与纪律
 
 - **AC-X1 错误路径（≥1）**：⑥ 产出方对**成环**的 `origin_claim_id` **响亮失败**（`IndependenceInputError`）；④ 非法输入不静默。

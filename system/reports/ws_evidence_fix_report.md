@@ -17,6 +17,7 @@
 | — | 三处已过期的旧说明 | 更新 `independence.py` 模块 docstring（原写"claim_alias 不做"）、`_propagation_row` 显式带 `kind`、`__init__.py` 导出新名字。 | 同上 |
 | — | 测试 | 新增 `test_contract_changes.py`、`test_origin_attribution.py`；扩 `test_budget_gate.py`（G5 正反）；修正 `test_independence_t01.py` 的"claims 只读"断言为**追加式**断言（T-12 后去重步骤合法写 claim）。 | `tests/evidence/**` |
 | **⑦** | **`G-B10-07`** 主理人实测：接线后 `classify_and_record` 非幂等（claims 5→10→12） | **已修**：`record_claim_updates` 幂等基线由"最新版本行的值"改为"**该 `claim_id` 最近记录到的非空值**"（新增 `_last_recorded_values`）—— 上游内容不变地再追加一版且丢派生字段时**不再触发重写**。自证连跑两次：run#2 本模块增量 **0**；反向对照（全新主张）**必写**。**残留 +1 系 step 1 既有重复版（非本模块），由 `ws/idempotency` `aa8a3ee` 修**（见 §②-8）。 | `scripts/evidence/independence.py`、`tests/evidence/test_origin_attribution.py` |
+| **⑧** | 为接 step 2：`StepOutcome.produced`（`4f95c3d`）需"**本轮真正新写入**"的**对象引用** | **纯增量**：`IndependenceSummary` 增 `written_claim_ids` / `written_propagation_ids`（默认空 tuple，向后兼容）；`record_claim_updates` / `record_propagation` **保留 int 返回**、经**可选出参**带出 id；`classify_and_record` 填回并返回。★ "某对象是否已存在/是否需写"的判定**只此一处**（`G-06`）：`chain_steps.py` **不得**重算。 | `scripts/evidence/independence.py`、`tests/evidence/test_origin_attribution.py` |
 
 **文件清单**（`git status --short`）：
 ```
@@ -31,8 +32,9 @@
 ?? system/tests/evidence/test_contract_changes.py
 ?? system/tests/evidence/test_origin_attribution.py
 ```
-> ★ 上表为**首个交付提交 `66422a8`** 的文件清单。**本轮增量（`G-B10-07` 硬化，在 `66422a8` 之上）**仅两文件：
-> ` M system/scripts/evidence/independence.py`、` M system/tests/evidence/test_origin_attribution.py`。
+> ★ 上表为**首个交付提交 `66422a8`** 的文件清单。之后**两轮增量**（均只两文件）：
+> `G-B10-07` 硬化（`9ba54a8`）与 ⑧ 落库返回值（`written_*_ids`）—— 均为
+> ` M system/scripts/evidence/independence.py`、` M system/tests/evidence/test_origin_attribution.py`（+ 本报告 / DoD）。
 
 ---
 
@@ -104,10 +106,10 @@ DEMO_EXIT=0
 $ sh system/scripts/ops/run_pytest.sh tests/evidence -q
 ```
 ```
-..............................................                           [100%]
-46 passed in 40.64s
+................................................                         [100%]
+48 passed in 46.99s
 ```
-**`tests/evidence`：46 passed，退出码 0**（`40.64s`，批超时 60s 内）。较首轮 44 条 **+2**：`test_reappend_dropping_derived_field_does_not_trigger_rewrite`（`G-B10-07` 硬化）、`test_new_claim_still_gets_count_reverse_control`（`G-05` 反向对照）。
+**`tests/evidence`：48 passed，退出码 0**（`46.99s`，批超时 60s 内）。累计 **+4**：`test_reappend_dropping_derived_field_does_not_trigger_rewrite`、`test_new_claim_still_gets_count_reverse_control`（`G-B10-07` / `G-05`）、`test_written_ids_nonempty_first_round_and_empty_on_rerun`、`test_written_claim_ids_reverse_control_true_change_rewrites`（⑧ `written_*_ids` 的 `produced` 判别式）。
 
 ### ②-6 提交前门禁
 
@@ -197,6 +199,45 @@ claims: 5   claim_propagation: 0   companies: 2   tasks: 3   baselines: 1   reco
 `record_claim_updates` 的幂等基线由"**最新版本行的值**"改为"**该 `claim_id` 最近记录到的非空值**"（新增 `_last_recorded_values`，按 `recorded_seq` 升序取各字段**最后一个非空值**）：上游**内容不变地再追加一版、且丢掉派生字段**（`count`/`origin` 回 `None`）时，**不再触发重写** ⇒ 幂等。
 （根因即主理人实测的 `run#1 +5 / run#2 +2`：旧基线被 step 1 的重复版"抹掉"派生字段 ⇒ 每次重写；`run#2 +2 = 1（step 1）+ 1（本模块被抹后重写）`。硬化后 `run#2 = 1（step 1 唯一残留）+ 0（本模块）`。）
 
+### ②-9 ⑧ 落库返回值：`written_*_ids`（供 `StepOutcome.produced`，契约 `4f95c3d`）
+
+**改动**：`IndependenceSummary` 增 `written_claim_ids` / `written_propagation_ids`（默认 `()`）；`record_claim_updates` / `record_propagation` **保留 `-> int`**，经**可选出参** `written_ids: list[str] | None` 带出本轮**真正写入**的 id（升降序 = 升序）；`classify_and_record` 用 `dataclasses.replace` 填回并返回。**"是否已存在"的判定只在两个 record 函数内**（`G-06`），`chain_steps.py` 侧**零重算**。
+
+**测试（`tests/evidence`，新增 2 条，`G-05` 成对）**：
+```
+$ sh system/scripts/ops/run_pytest.sh tests/evidence -q
+................................................                         [100%]
+48 passed in 46.99s
+```
+- 首轮：`written_claim_ids` 非空（4 条需打补丁的 claim：`re1..re3` + `root`，升序）、`written_propagation_ids == {"re1","re2","re3"}`（非空）；
+- 重跑：**两者皆 `()`** —— `G-B10-07` 在"模块返回值"层面的判别式（与"文件行数不增"互补；否则 `produced` 会误报本轮有产出、`G1-05` 判据失真）；
+- ★ 反向对照：把 `root` 的 `independent_evidence_count` 改成与再判定结果不一致（99 ≠ 1）后 → `written_claim_ids == ("root",)` —— **该写的时候必写**（否则"永远不写"也能骗过"重跑为空"）。
+
+### ②-10 §④-8 实测：最新版本行派生字段是否非 None（有/无 #38 对照）
+
+命令（副本；`run_daily` + `classify_and_record` **连跑两次**；按 `claim_id` 取 `recorded_seq` **最大**版本行）：
+```
+$ python /tmp/evi_idem/meas.py {real|synthetic} {without38|with38} <dst>/system
+```
+```
+# real · without38            # real · with38
+[after ×2] claims wc-l = 11   [after ×2] claims wc-l = 9
+ seq=11 count=None  amd…       seq=6 count=0  amd…
+ seq=8  count=0     tsmc…      seq=7 count=0  tsmc…
+ seq=9  count=0     nvidia-q3  seq=8 count=0  nvidia-q3
+ seq=10 count=0     nvidia-q4  seq=9 count=0  nvidia-q4
+```
+→ **无 #38**：唯一被 step 1 重复的 `amd…` 最新行 `count=None`（**洞真实、可复现**）。**有 #38**：4 条最新行 `count` **皆非 None** ⇒ **洞口已闭合（实测）**。
+
+```
+# synthetic · with38（syn-root + 3 转述，声明 root_source_id）
+ seq=208 count=None  origin=syn-root   syn-re1
+ seq=209 count=None  origin=syn-root   syn-re2
+ seq=210 count=None  origin=syn-root   syn-re3
+ seq=211 count=1     origin=None       syn-root
+```
+→ 转述主张的**应写字段**（`origin_claim_id`）最新行**非 None**；根主张的**应写字段**（`count`）最新行**非 None**。转述的 `count=None` 属**设计**（`Ch6 §C.2` 步骤⑤ 只记在根主张），非缺口。
+
 ---
 
 ## ③ 结果
@@ -205,11 +246,13 @@ claims: 5   claim_propagation: 0   companies: 2   tasks: 3   baselines: 1   reco
 - **②T-12**：`Claim.independent_evidence_count` 落表（可选，默认 `None`），真仓库 5 行真实数据仍合法，生成物一致。
 - **④G5**：`0` = 上限为 0（**不再静默**），`None` = 未设上限，二者不再混同；正反用例齐。
 - **⑥**：`origin_claim_id` 产出方建成；`T01` 的**系统层**现实形态（根在场 + 未标 origin 的转述）→ 独立佐证 **1**；(b) 真独立 **3**；(c) 无解时**残留如实登记**。
-- **测试**：`tests/evidence` **46 passed / exit 0**（本轮 +2）；`pre-commit` **全绿**。
-- **⑦`G-B10-07`**：`classify_and_record` **已幂等**（`run#2` 本模块增量 = 0；反向对照必写）；`run#1 = +5` 逐行解释清楚（1 行 step 1 重复版 + 4 行本模块首写）；**唯一残留 +1 系 step 1 既有重复版，由 `ws/idempotency` `aa8a3ee` 修**（叠加后 `run#2` 两文件皆 0，见 §②-8）。
+- **测试**：`tests/evidence` **48 passed / exit 0**（累计 +4）；`pre-commit` **全绿**。
+- **⑦`G-B10-07`**：`classify_and_record` **已幂等**（`run#2` 本模块增量 = 0；反向对照必写）；`run#1 = +5` 逐行解释清楚（1 行 step 1 重复版 + 4 行本模块首写）；**唯一残留 +1 系 step 1 既有重复版，由 `ws/idempotency` 修**（叠加后 `run#2` 两文件皆 0，见 §②-8）。
+- **⑧落库返回值**：`written_claim_ids` / `written_propagation_ids` 就绪（首轮非空 / 重跑皆空 / 真实变更必写）；**`produced` 语义可直接取用，不需第二条实现路径**（`G-06`）。
+- **§④-8 洞口**：**已闭合（实测）**，功劳属 `ws/idempotency`（`a29ec90`）。
 - **③G3 / ⑤G6**：落点在 `scripts/daily/**`，**已按主理人裁决（2026-09-16「归属随模块走」）移交 `ws/daily-fix`，本流未动该域**（见 §④）。
 
-**提交哈希**：首交付 `66422a88ac0b15ce9e19af6f09c2f66239214d42`（11 files, +1220/-21）；`G-B10-07` 硬化 = `9ba54a8`（4 files, +159/-9）。分支 `ws/evidence-fix`。
+**提交哈希**（分支 `ws/evidence-fix`）：首交付 `66422a88ac0b15ce9e19af6f09c2f66239214d42`（11 files, +1220/-21）；`G-B10-07` 硬化 = `9ba54a8`（4 files, +159/-9）；⑧ 落库返回值 = `16b791b`（4 files, +173/-17）。
 
 ---
 
@@ -217,12 +260,18 @@ claims: 5   claim_propagation: 0   companies: 2   tasks: 3   baselines: 1   reco
 
 1. **③G3、⑤G6 —— 已按主理人裁决（2026-09-16）移交 `ws/daily-fix`，本流未动该域**：二者落点分别是 `system/scripts/daily/coverage.py`（CV3 覆盖目标集）与 `system/scripts/daily/schedule.py`（YAML 时刻装载），均在任务书「**禁止改**」清单的 `scripts/daily/**` 内，且与 `ws/daily-fix` 并发 → 裁决「**归属随模块走**」。→ 本流**未动 `scripts/daily/**`**；文末补丁降级为**参考资料**（供 `ws/daily-fix` 取用）。
 2. **⑥ 的 (c) 情形未闭合（如实登记，不美化）**：当"根来源主张**不在场**"时，"真独立"（b）与"未标链的转述"（c）在 claim 字段上**同构** ⇒ 产出方**不臆断**，记为 `residual_groups`，该组仍可能计为 N 份。**这是判定层产物，残余未闭合**。要真正闭合需在**采集/标注层**为转述写入根来源信号（`root_source_id` / `origin_claim_id`）—— 该层不在本单范围。
-3. **⑥ 的真实链路接线（主理人职守，本流不碰 `scripts/orchestrate/**`）**：`classify_and_record` 当前**未被** `scripts/daily/**` / `scripts/orchestrate/**` 调用（全仓调用点仅测试）。主理人曾接线后又**撤回**（因测到非幂等），本单已修实（§②-8）。**接线就绪，但有一前置条件**：若在 `ws/idempotency`（step 1 行幂等键）**并入之前**接线，则 `run#2` 仍会看到 **+1**（唯一来源 = step 1 重复版，非本模块）——**届时请勿再判本模块非幂等**。建议 `ws/idempotency` 先行/并行并入。
+3. **⑥ 的真实链路接线（主理人职守，本流不碰 `scripts/orchestrate/**`）**：`classify_and_record` 现**未被** `scripts/daily/**` / `scripts/orchestrate/**` 调用（全仓调用点仅测试）。★ **两项前置条件均已满足**：① 本模块幂等已修实（§②-8）；② `ws/idempotency` 已并入 `main`（`a29ec90`），本模块合并于 `35758a7`。接线时 `StepOutcome.produced` 直接取 `summary.written_claim_ids` / `written_propagation_ids`（＝**本轮真正新写入**的对象引用，升序），**幂等命中**者归 `StepOutcome.skipped` 语义（`4f95c3d`）；本模块的判定**只此一处**（`G-06`），`chain_steps.py` **不得**重算"哪些是新的"（见 §②-9）。
 4. **`root_source_id` 的载体**：当前 `Claim` schema 无顶层 `root_source_id` 字段（`extra="forbid"`），故本单以 `impact_capability.root_source_id` 承载（与 `direct_knowledge` 同源落位，allowlist 取值口 `_declared_root_source`）。若需求方希望它是**顶层正式字段**，属**又一次契约变更**（超出本次 T-11/T-12 授权），请示下。
 5. **`rules/budget.yaml` 不存在**（`rules/` 0444）：G5 只改**边界语义**，未改参数来源；预算具体数值仍为 `tbd`（不阻塞）。
 6. **审计"真数据下 `classify_and_record` 全落存疑（4 根全 0）"** 与本单无关：那是 `direct_knowledge` 缺省（`unknown`）导致（`§F.3` 保守不计），非缺陷；本单未改该判定。
 7. **已知未测**：`tests/evidence` 之外未跑（`V-08`）。`schema/models.py` 为共享文件，理论上可能影响 `claim`/`decision`/`graph` 等批次；本单只**新增可选字段**（均有默认值），未改既有字段与语义，风险低。
-8. **`G-B10-07` 的残留边界（如实登记）**：本模块幂等**已成立**；`run_daily` 全链路 `run#2 = +1` 的**唯一来源是 step 1 的重复版**（`raw/inbox/` 常驻 + `guard/executor` 追加不判重，`Ch9 §3.5` 阶段②行幂等键缺位）。该缺陷**不在本单范围**（`scripts/guard/**`、`scripts/orchestrate/**` 均属「禁止改」），**已由既有分支 `ws/idempotency`（`aa8a3ee`，与 `main=960634d` 同基点）修复**。本单**只读**取用其两个文件在 `/tmp` 副本上验证"叠加后 `run#2` 两文件皆 0"（§②-8 D），**未做任何分支操作、未改其代码**。
+8. **`G-B10-07` 的残留边界（如实登记）**：本模块幂等**已成立**；`run_daily` 全链路 `run#2 = +1` 的**唯一来源是 step 1 的重复版**（`raw/inbox/` 常驻 + `guard/executor` 追加不判重，`Ch9 §3.5` 阶段②行幂等键缺位）。该缺陷**不在本单范围**（`scripts/guard/**`、`scripts/orchestrate/**` 均属「禁止改」），**已由 `ws/idempotency`（`aa8a3ee` → 并入 `main` `a29ec90`）修复**。本单**只读**取用其两个文件在 `/tmp` 副本上验证"叠加后 `run#2` 两文件皆 0"（§②-8 D），**未做任何分支操作、未改其代码**。
+   - ★ **"`as_of` 可能读到 None"这一取舍的更新（实测，非推理）**：先前登记"基线取最近非空值 ⇒ 幂等，代价是 `as_of` 读最新版本行可能读到 None（step 1 的丢字段版本是最新的）"。**该代价随 `ws/idempotency` 并入 `main`（`a29ec90`）已闭合** —— 实测（副本，`run_daily`+`classify_and_record` **连跑两次**后，按 `claim_id` 取 `recorded_seq` **最大**版本行）：
+     - 真数据 · **无** #38：`claim-inbox-…amd…`（**唯一**被 step 1 重复的 inbox 主张）最新行 `count=None` ⇒ **洞真实存在、可复现**；其余 3 条 `count=0`。
+     - 真数据 · **有** #38：4 条最新行 `count` **皆 = 0（非 None）** ⇒ **洞口已闭合**（claims wc-l 5→9，无 step 1 重复版）。
+     - 合成（`syn-root` + 3 转述，声明 `impact_capability.root_source_id`）· **有** #38：`syn-re1..3` 最新行 `origin=syn-root`（非 None）、`syn-root` 最新行 `count=1`。
+   - **结论（实测）**：**洞口已闭合，功劳属 `ws/idempotency`**。机理（亦已实测）：`record_claim_updates` 追加的新版本行经 `dict(rec)` 复制了 `source_id` / `quote_hash` ⇒ 也被 step 1 的 `(source_id, quote_hash)` 行幂等键认作"已存在" ⇒ 不再产生丢字段版本。
+   - **口径澄清（非缺口）**：`independent_evidence_count` 按 `Ch6 §C.2` 步骤⑤**只写在根主张**上 ⇒ **转述主张**该字段为 `None` 属**设计**（其应写字段是 `origin_claim_id`，实测非 None）；根主张/真数据 4 条根的最新行 `count` 均非 None。两端各自"应写出字段"皆落在最新版本行。
 
 ---
 

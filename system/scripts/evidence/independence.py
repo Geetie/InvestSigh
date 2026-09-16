@@ -47,6 +47,14 @@
 **根来源主张不在场 → 不臆断**（`residual_groups` 如实登记）：此情形下"真独立"与
 "未标链的转述"在 claim 字段上**同构**，不得强行并入（`R-04`：歧义不自行裁决）。
 
+## 落库返回值（供编排器 `StepOutcome.produced`；契约 `4f95c3d`）
+
+`classify_and_record` 的返回 `IndependenceSummary` 携带 `written_claim_ids` / `written_propagation_ids`
+= **本轮真正新写入**的对象引用（升序）；**幂等命中**（未写）者**不**计入 —— 对齐主线契约
+"`produced` = 本轮真正新写入，命中走 `skipped`，两者皆空才判 `G1-05` 空执行"。
+"某对象是否已存在/是否需要写"的判定**只在 `record_claim_updates` / `record_propagation` 内**
+（`G-06` 唯一真源）；调用方只读出参，**不**自行重算。
+
 ## 已知缺口（如实登记，`R-04`）
 
 - 人工覆盖（`manual_alias_override`）的**写入方**是 `dedup_override` 任务（非本模块自动判定）；
@@ -57,7 +65,7 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
@@ -112,6 +120,18 @@ class IndependenceSummary:
 
     notes: tuple[str, ...] = ()
     """非静默说明（空真源 / 缺字段走法）。"""
+
+    written_claim_ids: tuple[str, ...] = ()
+    """**本轮真正追加了 claim 版本行**的 `claim_id`（升序）。
+
+    ★ 供编排器 `StepOutcome.produced` 语义使用（契约见 `4f95c3d`）：
+      `produced` = **本轮真正新写入**的对象引用；**幂等命中**（未写）者**不**在此；
+      `produced` 与 `skipped` 皆空才判 `G1-05`「空执行」。
+    仅 `classify_and_record`（落库路径）填充；纯判定 `classify_independence` 恒为 `()`（不写库 ⇒ 无写入）。
+    """
+
+    written_propagation_ids: tuple[str, ...] = ()
+    """**本轮真正追加**的 `propagated_claim_id`（升序）。语义同 `written_claim_ids`（幂等命中不计）。"""
 
     @property
     def propagation_count(self) -> int:
@@ -499,6 +519,8 @@ def record_claim_updates(
     code_root: str | Path,
     plan: OriginAttribution,
     counts: Mapping[str, int],
+    *,
+    written_ids: list[str] | None = None,
 ) -> int:
     """把 `origin_claim_id`（`plan.links`）与 `independent_evidence_count`（`counts`）**追加**落库。
 
@@ -506,7 +528,10 @@ def record_claim_updates(
     - **幂等**：以"该 `claim_id` **最近记录到的非空值**"为基线（`_last_recorded_values`），
       值不变则**不**追加 —— 因此**上游再追加一版丢掉派生字段也不会触发重写**；
       重复跑 **0 新增**；
-    - 只对**最新版本**打补丁，返回本次**新增**行数。
+    - 只对**最新版本**打补丁，返回本次**新增**行数；
+    - `written_ids`（**可选出参**）：传入时**追加**本轮**真正写入**的 `claim_id`（**升序**）。
+      ★ "某 `claim_id` 是否已存在/是否需要写"的判定**只此一处**（`G-06` 唯一真源）：
+        调用方（`classify_and_record`）**不得**自行重算"哪些是新的"，只能读本出参。
     """
     from schema.models import Claim
     from schema.store import append_records, read_records
@@ -538,14 +563,25 @@ def record_claim_updates(
         updates.append(Claim.model_validate(new_row))
     if not updates:
         return 0
-    return append_records(code_root, _CLAIMS_STEM, updates)
+    written = append_records(code_root, _CLAIMS_STEM, updates)
+    if written_ids is not None:
+        # `updates` 由 `sorted(...)` 的 `cid` 顺序构建 ⇒ 天然升序。
+        written_ids.extend(str(c.claim_id) for c in updates)
+    return written
 
 
-def record_propagation(code_root: str | Path, summary: IndependenceSummary) -> int:
+def record_propagation(
+    code_root: str | Path,
+    summary: IndependenceSummary,
+    *,
+    written_ids: list[str] | None = None,
+) -> int:
     """把传播行**追加**落库（`schema.store.append_records`，**唯一**写入口）。
 
     **幂等**：已存在的 `propagated_claim_id` 不再重复追加（append-only 下防重复）。
     返回本次**新增**行数。
+    `written_ids`（**可选出参**）：传入时追加本轮**真正写入**的 `propagated_claim_id`（**升序**）；
+    "是否已存在"的判定同样**只此一处**（`G-06`）。
     """
     from schema.store import append_records, read_records
 
@@ -557,7 +593,10 @@ def record_propagation(code_root: str | Path, summary: IndependenceSummary) -> i
     fresh = [row for row in summary.propagation_rows if row.propagated_claim_id not in existing]
     if not fresh:
         return 0
-    return append_records(code_root, _PROPAGATION_STEM, fresh)
+    written = append_records(code_root, _PROPAGATION_STEM, fresh)
+    if written_ids is not None:
+        written_ids.extend(sorted(str(row.propagated_claim_id) for row in fresh))
+    return written
 
 
 def classify_and_record(code_root: str | Path) -> IndependenceSummary:
@@ -570,6 +609,11 @@ def classify_and_record(code_root: str | Path) -> IndependenceSummary:
 
     真源 `claims.jsonl` 的**既有行只读不改**（`Ch9 §3.4.2` 追加式不可变）—— 本函数只**追加新版本**；
     真源缺失 → `read_records` 返回空列表（`G-03`：空样本显式记 note，不冒充"已验证"）。
+
+    ★ 返回值补 `written_claim_ids` / `written_propagation_ids` —— **本轮真正新写入**的对象引用（升序），
+      供编排器 `StepOutcome.produced`（`4f95c3d`）直接取用；**幂等命中不计**（命中者属 `skipped` 语义）。
+      两 id 来自 `record_claim_updates` / `record_propagation` 的**出参**（"是否已存在"只在其内判定，
+      `G-06`：本函数**不**重算"哪些是新的"）。
     """
     from schema.store import read_records
 
@@ -577,6 +621,14 @@ def classify_and_record(code_root: str | Path) -> IndependenceSummary:
     plan = plan_origin_attribution(rows)
     effective = _apply_links(rows, plan.links)
     summary = classify_independence(effective)
-    record_claim_updates(code_root, plan, summary.independent_evidence_count)
-    record_propagation(code_root, summary)
-    return summary
+    written_claims: list[str] = []
+    written_props: list[str] = []
+    record_claim_updates(
+        code_root, plan, summary.independent_evidence_count, written_ids=written_claims
+    )
+    record_propagation(code_root, summary, written_ids=written_props)
+    return replace(
+        summary,
+        written_claim_ids=tuple(sorted(written_claims)),
+        written_propagation_ids=tuple(sorted(written_props)),
+    )
