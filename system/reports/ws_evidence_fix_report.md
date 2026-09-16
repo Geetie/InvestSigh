@@ -2,7 +2,7 @@
 
 > **工作树**：`/Users/gaza/Developer/InvestSigh/.worktrees/ws-evidence-fix` ｜ **分支**：`ws/evidence-fix` ｜ **基点**：`main = 960634d`
 > **DoD**：`system/reports/ws_evidence_fix_dod.md`（**先写**）
-> **本报告为「范围内交付 + ③⑤ 待裁决」的收口报告**：①T-11 ②T-12 ④G5 ⑥已交付并验证；**③G3 / ⑤G6 的落点在 `scripts/daily/**`（范围外）→ 已开工即上报，未擅自越界**（见 §④与文末附）。
+> **本报告为「范围内交付 + ③⑤ 按裁决移交」的收口报告**：①T-11 ②T-12 ④G5 ⑥已交付并验证；**③G3 / ⑤G6 的落点在 `scripts/daily/**`（范围外）→ 已开工即上报，主理人裁决「归属随模块走、移交 `ws/daily-fix`」，本流未动该域**（见 §④与文末附）。
 
 ---
 
@@ -138,7 +138,7 @@ claims: 5   claim_propagation: 0   companies: 2   tasks: 3   baselines: 1   reco
 - **④G5**：`0` = 上限为 0（**不再静默**），`None` = 未设上限，二者不再混同；正反用例齐。
 - **⑥**：`origin_claim_id` 产出方建成；`T01` 的**系统层**现实形态（根在场 + 未标 origin 的转述）→ 独立佐证 **1**；(b) 真独立 **3**；(c) 无解时**残留如实登记**。
 - **测试**：`tests/evidence` **44 passed / exit 0**；`pre-commit` **全绿**。
-- **③G3 / ⑤G6**：见 §④（**未交付**，落点在范围外，已上报裁决）。
+- **③G3 / ⑤G6**：落点在 `scripts/daily/**`，**已按主理人裁决（2026-09-16「归属随模块走」）移交 `ws/daily-fix`，本流未动该域**（见 §④）。
 
 **提交哈希**：`66422a88ac0b15ce9e19af6f09c2f66239214d42`（分支 `ws/evidence-fix`，11 files changed, 1220 insertions(+), 21 deletions(-)）。
 
@@ -146,7 +146,7 @@ claims: 5   claim_propagation: 0   companies: 2   tasks: 3   baselines: 1   reco
 
 ## ④ 诚实登记的残留 / 不确定项
 
-1. **③G3、⑤G6 未交付（范围外）**：二者的代码落点分别是 `system/scripts/daily/coverage.py`（CV3 覆盖目标集）与 `system/scripts/daily/schedule.py`（YAML 时刻装载），均在任务书「**禁止改**」清单的 `scripts/daily/**` 内，且 `ws/daily-fix` 工作树（分支 `ws/daily-fix`）可能同时在动该域。**开工即上报主理人请求裁决（A 改 / B 移交）；未获授权前不擅自越界**。文末附**就绪补丁**（分析 + 精确改法），一经许可可立即落地。
+1. **③G3、⑤G6 —— 已按主理人裁决（2026-09-16）移交 `ws/daily-fix`，本流未动该域**：二者落点分别是 `system/scripts/daily/coverage.py`（CV3 覆盖目标集）与 `system/scripts/daily/schedule.py`（YAML 时刻装载），均在任务书「**禁止改**」清单的 `scripts/daily/**` 内，且与 `ws/daily-fix` 并发 → 裁决「**归属随模块走**」。→ 本流**未动 `scripts/daily/**`**；文末补丁降级为**参考资料**（供 `ws/daily-fix` 取用）。
 2. **⑥ 的 (c) 情形未闭合（如实登记，不美化）**：当"根来源主张**不在场**"时，"真独立"（b）与"未标链的转述"（c）在 claim 字段上**同构** ⇒ 产出方**不臆断**，记为 `residual_groups`，该组仍可能计为 N 份。**这是判定层产物，残余未闭合**。要真正闭合需在**采集/标注层**为转述写入根来源信号（`root_source_id` / `origin_claim_id`）—— 该层不在本单范围。
 3. **⑥ 的真实链路接线**：`classify_and_record` 当前**未被** `scripts/daily/**` / `scripts/orchestrate/**` 调用（全仓调用点仅测试）。即"产出方"已建成并可独立运行，但**生产管线是否接线**不由本单决定；若需接线到 daily/orchestrate（范围外），报告主理人。
 4. **`root_source_id` 的载体**：当前 `Claim` schema 无顶层 `root_source_id` 字段（`extra="forbid"`），故本单以 `impact_capability.root_source_id` 承载（与 `direct_knowledge` 同源落位，allowlist 取值口 `_declared_root_source`）。若需求方希望它是**顶层正式字段**，属**又一次契约变更**（超出本次 T-11/T-12 授权），请示下。
@@ -156,9 +156,9 @@ claims: 5   claim_propagation: 0   companies: 2   tasks: 3   baselines: 1   reco
 
 ---
 
-## 附：③G3 / ⑤G6 的**就绪补丁**（待裁决；未落地）
+## 附：③G3 / ⑤G6 的**参考资料**（已移交 `ws/daily-fix`；本流未落地）
 
-> 以下均**未执行**（范围外）。仅记录分析结论，供主理人指派或授权后秒级落地。
+> 以下均**未执行**（范围外，已按裁决移交 `ws/daily-fix`）。仅记录分析结论，供 `ws/daily-fix` 取用。
 
 ### ③ G3 · CV3 覆盖目标集（`scripts/daily/coverage.py`）
 
