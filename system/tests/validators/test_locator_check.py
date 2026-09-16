@@ -86,6 +86,23 @@ def test_no_claims_passes_with_explicit_note(code_root: Path) -> None:
     assert "NO_CLAIMS" in proc.stdout
 
 
+def test_missing_claims_file_is_input_error(code_root: Path) -> None:
+    """**反向对照（`G-05`）**：真源 `facts/claims.jsonl` **缺失** → 非零退出，且输出可辨"缺失"。
+
+    ★ 与上一条（存在但 0 行 → `NO_CLAIMS` + `exit 0`）**成对**：文件缺失 = 结构性违例
+      （`Ch9 §3.3.3`：18 个 JSONL 不得增删改名），必须**响亮失败**，不得静默当"无被检对象"
+      （`G-03`）。判据为**退出码**（`2` = 输入异常，与"命中违例"的 `1` 区分）。
+    """
+    missing = code_root / "facts" / "claims.jsonl"
+    missing.unlink()
+    assert not missing.exists()
+    proc = run_gate(GUARD, code_root)
+    assert proc.returncode != 0, f"真源缺失竟放行（exit 0）——静默缺陷复发\n{proc.stdout}"
+    assert proc.returncode == 2, f"真源缺失应为输入异常 exit 2，实得 {proc.returncode}\n{proc.stdout}"
+    assert "缺失" in proc.stdout, f"输出未体现'缺失'语义\n{proc.stdout}"
+    assert "NO_CLAIMS" not in proc.stdout, f"缺失被误判成'空样本'\n{proc.stdout}"
+
+
 # ───────────────────────── 真跑通：真实采集链路落库的 claim ─────────────────────────
 
 

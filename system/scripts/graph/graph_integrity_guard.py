@@ -19,6 +19,9 @@ python system/scripts/graph/graph_integrity_guard.py [code_root]
 
 退出码（`CONVENTIONS.md §二 G-01`）：`0` 放行 / `1` 阻断 / `2` 输入异常，**不静默**。
 ★ 空样本必须显式记 `note`（`G-03`：不得把"无被检对象"当"已验证"）。
+★ 真源边表**缺失**（文件不存在）→ `FileNotFoundError` → `run_checker` 折算 `exit 2`：
+  `Ch9 §3.3.3` 规定 `facts/` 的 18 个 JSONL 不得增删改名，缺失即**结构性违例**，
+  与「存在但为空」**不同**（后者记 `NO_EDGE_DATA` note + `exit 0`）。
 """
 
 from __future__ import annotations
@@ -43,6 +46,17 @@ EDGE_FILE = "facts/dependency_edges.jsonl"
 
 def check(root: Path) -> CheckReport:
     report = CheckReport(checker="graph_integrity_guard")
+
+    # ★ 真源**缺失**（文件不存在）→ 响亮失败：`Ch9 §3.3.3` 规定 `facts/` 的 18 个 JSONL
+    #   不得增删改名，缺失即结构性违例，**不得**与「存在但为空」（`G-03` 真空成立）混同。
+    from schema.store import TRUTH_MISSING, truth_source_status
+
+    for stem in ("dependency_edges", "relations"):
+        if truth_source_status(root, stem) == TRUTH_MISSING:
+            raise FileNotFoundError(
+                f"facts/{stem}.jsonl 缺失 —— Ch9 §3.3.3 规定 facts/ 下 18 个 JSONL 不得增删改名，"
+                "文件缺失即结构性违例（与'存在但 0 行'不同；G-03：不得把'无被检对象'当'已验证'）"
+            )
 
     dep_edges = load_edges(root, "dependency_edges")
     rel_edges = load_edges(root, "relations")

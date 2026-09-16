@@ -107,6 +107,43 @@ def read_records(code_root: str | Path, stem: str) -> list[dict[str, Any]]:
     return out
 
 
+TRUTH_MISSING = "missing"
+TRUTH_EMPTY = "empty"
+TRUTH_PRESENT = "present"
+"""`truth_source_status` 的三个**穷尽且互斥**的取值（见该函数）。"""
+
+
+def truth_source_status(code_root: str | Path, stem: str) -> str:
+    """判定真源 JSONL 的三态：`"missing"` / `"empty"` / `"present"`。
+
+    ★ 为什么需要它（`CONVENTIONS.md §二 G-03`）：`read_records` 对**两种互不相同的
+      成因**都返回 `[]` —— ① 真源文件**根本不存在**；② 真源文件存在但**没有有效行**。
+      仅凭 `[]` 无法区分，于是调用方（尤其门禁 / 守卫）会把「无被检对象」当成
+      「已验证」—— 而这两件事在报告里长得一模一样，正是本项目最忌的**假信号**。
+
+    ★ 锚点（逐字引用 `Ch9 §3.3.3`）：`facts/` 下的 **18 个 JSONL 不得增删改名**
+      （`schema.models.JSONL_MODELS` 与之一一对应）。因此「真源文件**缺失**」**本身
+      就是结构性违例**，必须与「存在但为空」区分开。
+
+    三态定义（穷尽、互斥）：
+
+    - `"missing"` = 文件不存在（结构性违例，消费方应**响亮失败**）；
+    - `"empty"`   = 文件存在但**无有效行**（全空白 / 零字节；真空成立，消费方记 `note` 后放行）；
+    - `"present"` = 文件存在且有 **≥1 条**可解析行。
+
+    ★ **不改 `read_records` 的缺省语义**：该访问器被**全仓库**（`scripts/**` / `tests/**`）
+      依赖，把它对缺失的返回值从 `[]` 改成抛异常会以**无关原因**让大量既有测试变红
+      （本项目最忌的假信号）。故需要区分的调用方在本函数上**显式区分**。
+
+    未知 `stem` → 抛 `UnknownJsonlError`（经 `jsonl_path`，**不静默建新文件**）。
+    复用 `read_records` 判「有无有效行」——**不引入第二条解析路径**（`G-06` 唯一真源）。
+    """
+    path = jsonl_path(code_root, stem)
+    if not path.exists():
+        return TRUTH_MISSING
+    return TRUTH_PRESENT if read_records(code_root, stem) else TRUTH_EMPTY
+
+
 def read_models(code_root: str | Path, stem: str) -> list[BaseModel]:
     """读全部行并**逐条校验**为对象模型；任一行非法 → 抛异常。"""
     model = model_for(stem)
