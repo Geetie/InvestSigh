@@ -421,9 +421,16 @@ BATCHES: Mapping[str, Batch] = {
         #     而本文件 **17 例** ⇒ 任何既有片都会 > 上限 32 ⇒ 只能**新开一片**。
         #   ★ 超时 90s：按 13-F 给分片定的规则（实测 × 8 上沿、不低于 90s）；17 例量级与本片
         #     `injection-a`（27 例 / 6.85s 隔离）同阶 ⇒ 90s 起步，待 13-F 对照表重算。
-        "injection-g", "tests/injection/ 分片 G（反编造：引用溯源守卫）",
+        # ★ 二次调整（批次 13，主理人裁定「移片」而非「改上限」）：`injection-f` 现算
+        #   **33 例 > 上限 32**，唯一超限片 ⇒ 真红。把 `test_shard_coverage.py`（**6 例**）
+        #   由 F 移入本片 ⇒ F 27 / G 24，两片均 ≤32，总例数不变（205）。
+        #   ★ 移位**不改变任何删除量**：该文件**不建夹具**（它测的是分片绑定自身）；
+        #     它的成本是 `test_shard_case_counts_within_quota` 起的 **7 次 `--collect-only`**
+        #     子进程，实测合计 **1.72s** ⇒ 相对本片 300s 预算可忽略。
+        "injection-g", "tests/injection/ 分片 G（反编造 + 分片绑定）",
         _pytest(
             "tests/injection/test_quote_provenance.py",
+            "tests/injection/test_shard_coverage.py",   # ← 由 `injection-f` 移入（见上）
         ),
         # ★ 超时 90s → **300s**（主理人裁定）：与 `injection-a..f` **齐平**（同族一致性优先），
         #   并吸收一个**已复现**的宿主状态 —— 子进程若落回沙箱内，本片单次实测可达 **247s ≫ 90s**
@@ -431,11 +438,14 @@ BATCHES: Mapping[str, Batch] = {
         300.0, _exit_zero,
     ),
     "injection-f": Batch(
-        "injection-f", "tests/injection/ 分片 F（阶段闸门 + 接线守卫 + 分片绑定）",
+        # ★ `test_shard_coverage.py`（6 例）已移入 `injection-g` —— 本片曾 **33 例 > 上限 32**，
+        #   是主干当时**唯一**的超限真红。移片而非改上限的理由：改上限只是让 33 从红变绿，
+        #   **没有解决"下一例怎么办"**，而阈值本身已被观测到 `9999`/`99999` 两个值
+        #   ⇒ 不确定时取保守（上限的性质仍是**授权上限 + 实测可跑**，不是"已证明安全"）。
+        "injection-f", "tests/injection/ 分片 F（阶段闸门 + 接线守卫）",
         _pytest(
             "tests/injection/test_stage_gate.py",
             "tests/injection/test_wiring_guards.py",
-            "tests/injection/test_shard_coverage.py",
         ),
         300.0, _exit_zero,
     ),
