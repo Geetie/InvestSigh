@@ -555,6 +555,23 @@ python scripts/ops/run_all_gates.py . --timeout 30
 现口径"节存在即 `rules`"⇒ **子键缺失时仍报 `rules`**（note 点名缺件）。候选：(甲) 全部字段都来自文件才叫 `rules`；
 (乙) 保持现状。**不自行翻转**——第三轮已按裁定 ③-2 解释过一次，翻转等于反向改自己刚立的判据。
 
+| 修 | 内容 | 证据（改前 → 改后，违例数） |
+|---|---|---|
+| **修 7** `order_guard` 的 `§B.1` 多解判据**三处同族病** | ① 数**全部**行（不筛 `feasible`）⇒ 与 `solver.check` 同名判据**口径分裂**；② 硬编码 `count < 2` ⇒ 违反 `Ch11 §D.2`/`P-09`（且批 13 任务书**方案②明写要删掉常量 `2`**）；③ 缺 `solution_set_id` 的行 `continue` 掉 ⇒ **静默落在判据之外**。处置：只数 `feasible`、下限改读 `load_solution_set_display(root).min_count`（转发其 `design_default` note）、缺键 ⇒ **违例**且把被排除行数写进 note | ④ 1 可行+1 不可行（同集）：**0 → 1**；⑤ 有行缺 `solution_set_id`：**0 → 1**；⑥ 单解集 + 规则 `must=false`：**1 → 0**（旧内置参数不跟规则）；对造 单解集 + 真规则 `must=true`：**1 → 1**（不误伤） |
+| **修 8** `implied_ids` 黑名单**静默少 id** | 原稿 `if row.get("implied_id")` 推导黑名单 ⇒ **缺 `implied_id` 的行被静默排除**，该判据对它们**没有管**；而 `solver.check` 对同类行**响亮报** `IMPLIED-ROW-INCOMPLETE` ⇒ 又一处口径分裂。★ 处置时撞到**熟悉的坑**：违例若放在 `if not (baselines and implied_ids): return` **之后**，`baselines` 为空时会被**早退吞掉**（与 D-1 同形）⇒ **放在早退之前**，并用**刻意不写 `baselines`** 的用例锁住位置 | ⑦ 有行缺 `implied_id`（且无 baselines）：**0 → 1** |
+
+**★ 第四轮全量复核（零删除口径）**：为免"新的绿、老的黄"无人知，把上面那套"不跑 pytest 命令、但**执行测试函数本体**"的手法
+**跑满 `tests/pricelayer/**` 全部 8 个模块**，并把 `parametrize` 的参数组**逐个展开**（否则会漏成 `skip`）：
+**通过 196 / 失败 0**（`exit=0`；对象 = `ws/ch5-pricelayer` @ `89e2d15` + 工作区改动，取样 `2026-09-16T15:38:23Z`；原始输出见报告 §② **V-1k**）。
+命中 `G-60`（`SAFE_DELETE_BULK_CONFIRM_REQUIRED {"count":100003,"threshold":99999}`）⇒ 夹具根**全改到 `/tmp` 且一次都不删**；
+**这是绕开、不是绕过**（配额作用在 pytest 的 session 终结算，本方式不经那条路径）：**没改 `conftest`、没加环境变量、没动 `--no-report`**。
+★ 该列**仍不是"批次通过"**（无收集/无 fixture 终结器）；正式读数以 `verify.py --batch pricelayer` 为准，**待窗口关闭后复跑**。
+
+**★ 新登记第 2 条（报告 §④-9）**：修 7 是**收窄**（数全部行 → 只数 `feasible`）、修 8 是**把静默通过改成红**。
+二者都会让**存量脏数据**从"静默绿"变"红"。**依据**是 `Ch5 §B.1` + `schema.models.ImpliedRequirement` 两字段**必填** +
+与 `solver.check` **对齐口径** ⇒ 属**补齐口径分裂**，非新增更严标准；**未对存量真源做任何写入**。
+若正式批次出现该红，应读作**真源缺字段（上游 bug）**，不是本模块缺陷。
+
 
 ---
 

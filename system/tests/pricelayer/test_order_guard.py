@@ -312,3 +312,107 @@ def test_reverse_control_cli_passes_when_no_backfill(
     proc = run_script("scripts/pricelayer/order_guard.py", scratch, "--no-report")
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "RESULT: PASS" in proc.stdout
+
+
+# ── 第四轮订正：① 只数**可行**解 ② 下限**读规则** ③ 缺 `solution_set_id` **不再静默跳过** ──
+
+
+def test_infeasible_rows_do_not_count_toward_multi_solution(
+    scratch: Path, write_jsonl, run_script
+) -> None:
+    """★ 反例①：同解集里 1 行 `feasible=true` + 1 行 `feasible=false` ⇒ 仍**单解** ⇒ exit 1。
+
+    旧实现数**全部**行 ⇒ 把"1 组可行解 + 1 组不可行"算成 2 组 ⇒ **漏报**；
+    且与 `solver.check` 的同名判据（只数 `feasible`）**口径冲突** —— 同一不变式不能两个口径。
+    """
+    write_jsonl(
+        scratch,
+        "implied_requirements",
+        [
+            {"implied_id": "IMP-001", "solution_set_id": "SET-1", "feasible": True},
+            {"implied_id": "IMP-002", "solution_set_id": "SET-1", "feasible": False},
+        ],
+    )
+    proc = run_script("scripts/pricelayer/order_guard.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "只有 1 组**可行**解" in proc.stdout
+    assert "IMPLIED_INFEASIBLE_ROWS" in proc.stdout, "被排除的行必须**计数可见**（不静默）"
+
+
+def test_row_missing_solution_set_id_is_flagged(
+    scratch: Path, write_jsonl, run_script
+) -> None:
+    """★ 反例③：有行**缺必填 `solution_set_id`** ⇒ exit 1（旧实现 `continue` 静默跳过）。
+
+    `schema.models.ImpliedRequirement.solution_set_id` 是**必填**字段（无默认值）⇒
+    缺它 = 脏数据，且那些行**落在多解不变式之外**（判据对它们**没管**）。
+    """
+    write_jsonl(
+        scratch,
+        "implied_requirements",
+        [
+            {"implied_id": "IMP-001", "solution_set_id": "SET-1", "feasible": True},
+            {"implied_id": "IMP-002", "solution_set_id": "SET-1", "feasible": True},
+            {"implied_id": "IMP-003", "feasible": True},          # ← 缺必填键
+        ],
+    )
+    proc = run_script("scripts/pricelayer/order_guard.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "缺必填 `solution_set_id`" in proc.stdout
+
+
+def test_multi_solution_lower_bound_follows_the_rule_key(
+    scratch: Path, real_rules, write_jsonl, run_script
+) -> None:
+    """★ 反例②（行为绑定）：下限**读规则** —— `must_show_multiple: false` ⇒ 下限降为 1 ⇒ 单解集**不再红**。
+
+    这是 `Ch5 §B.1`「必须展示多组解」的**机械下限**在 `rules/` 里的唯一出处
+    （`rules/valuation-methods.yaml::solution_set_display.must_show_multiple`）。
+    旧实现硬编码 `count < 2` ⇒ 规则改了**代码不动**（`Ch11 §D.2` / `P-09`：
+    「参数只能住 `rules/`，代码不得内置」；批 13 任务书方案②**也**明确要求删掉常量 `2`）。
+    """
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml")
+    write_jsonl(
+        scratch,
+        "implied_requirements",
+        [{"implied_id": "IMP-001", "solution_set_id": "SET-1", "feasible": True}],
+    )
+    # 真值（`must_show_multiple: true`）⇒ 下限 2 ⇒ 单解集是违例
+    proc = run_script("scripts/pricelayer/order_guard.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "下限 2" in proc.stdout
+
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["solution_set_display"]["must_show_multiple"] = False
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+
+    # 规则改 ⇒ 行为必须跟着改：下限 1 ⇒ 同一份数据**放行**
+    proc = run_script("scripts/pricelayer/order_guard.py", scratch, "--no-report")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "RESULT: PASS" in proc.stdout
+
+
+def test_row_missing_implied_id_is_flagged_even_without_baselines(
+    scratch: Path, write_jsonl, run_script
+) -> None:
+    """★ 修 8：缺必填 `implied_id` 的行不得被**静默排除**出"反解 id 黑名单"。
+
+    ★ 同时锁住**早退吞违例**这个形状：本用例**刻意不写 `baselines`** ⇒ 会走
+      `if not (baselines and implied_ids): return` 分支；若把该违例放在早退之后，
+      它就被**静默吞掉**（与 `valuation.check` 的 D-1 是同一形状的坑）。
+    """
+    write_jsonl(
+        scratch,
+        "implied_requirements",
+        [
+            {"implied_id": "IMP-001", "solution_set_id": "SET-1", "feasible": True},
+            {"implied_id": "IMP-002", "solution_set_id": "SET-1", "feasible": True},
+            {"solution_set_id": "SET-1", "feasible": True},          # ← 缺必填 implied_id
+        ],
+    )
+    proc = run_script("scripts/pricelayer/order_guard.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "缺必填 `implied_id`" in proc.stdout
