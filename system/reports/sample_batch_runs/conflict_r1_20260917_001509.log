@@ -1,0 +1,7 @@
+✓ [conflict] tests/conflict/（P-03/P-05/P-07 schema）  exit=0  0.59s/30s  exit=0
+------------------------------------------------------------------------------
+......                                                                   [100%]
+6 passed in 0.18s
+------------------------------------------------------------------------------
+证据留档: reports/verify_conflict_latest.log
+[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":100003,"threshold":99999,"scope":"turn","targets":["/Users/gaza/Developer/InvestSigh/.worktrees/ws-real-collect-2/system/reports/verify_conflict_2026-09-17_001007.log"],"targetCount":1}
