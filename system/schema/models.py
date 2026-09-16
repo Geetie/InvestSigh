@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
@@ -544,7 +544,7 @@ class Source(TimeMixin):
     health: str = TBD                                 # 健康状态（供降级判定）
 
 
-class ClaimStatus(str, Enum):
+class ClaimStatus(StrEnum):
     """主张五态（`Ch6 §E.1` 状态机，逐字）。
 
     ★ **初始态由设计写死为 `pending_verification`** —— `Ch6 §E` 状态机首行：
@@ -552,8 +552,12 @@ class ClaimStatus(str, Enum):
       初版把它写成自由字符串 `"active"`，而 **`active` 根本不在五态内**，
       于是**真实链路写出的 claim 带着违约状态**（与我修过的"五类时间全为 None"
       同类：**只有真跑一次才暴露**）。
-      改用**封闭枚举**（`R-06`：可穷尽）—— pydantic 直接拒绝越界值，
-      此类缺陷无法再静默复发。
+
+    ★ 基类必须是 **`StrEnum`**（而非 `(str, Enum)`）：
+      后者下 `str(ClaimStatus.pending_verification)` 返回 **`'ClaimStatus.pending_verification'`**
+      而不是五态值 —— 任何 `str(status)` 都会被误判（`ws/claim` 工作流实测踩到：
+      状态机把每次合法迁移都判成 `UnknownClaimStatus`）。
+      `StrEnum` 使 `str(member) == member.value`，**两种写法都对**，陷阱从类型层面消除。
     """
 
     pending_verification = "pending_verification"
