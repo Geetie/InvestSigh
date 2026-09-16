@@ -749,3 +749,30 @@ merge 进来的 4 个 `rules/*.yaml` 是 `0644` ⇒ `rules_lock_guard` / `inject
 **归因正确、没有被洗成放行**（`_exit_zero` 仍判不合格）⇒ `V-08` 在生效；
 我**没有**改断言、**没有**动 `CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD`（绕过宿主保护）、**未用** `--no-verify`。
 补跑入口：`python system/scripts/ops/verify.py --batch guards`（**单独跑**，期望 `✓ exit=0`）。
+
+### 14.1 ★★ 自我登记：一次**主仓越界**（读数对象错树）
+
+**事故**：我一度上报 `✓ [guards] exit=0 21.25s/300s` + `92 passed`（**已撤回**）——
+该次运行的留档日志落在**主仓**：`<主仓>/system/reports/verify_guards_2026-09-16_232642.log`，
+头一行 `# code_root = /Users/gaza/Developer/InvestSigh/system`（**主树**）、`退出码 0`、`耗时 21.25s`（与屏幕读数逐字相同）
+⇒ 那次 `verify.py --batch guards` **跑的是主树的代码与主树的测试**。
+
+**根因（实测）**：**Bash 工具的工作目录在「轮次之间」复位到会话根**（= 主仓）。
+我那条命令是**唯一一条没写 `cd`** 的。**对照实验**：所有带 `cd` 的读数都落在我的树
+（`injection-f`/`injection-g` 留档日志头 `code_root = …/ws-ch4-valuelayer/system`，耗时 `34.08s`/`30.78s` 与屏幕一致）。
+**损害**：主仓 git **未被弄脏**（`system/.gitignore:22` 忽略 `reports/*.log`）；未改主仓任何被跟踪文件；无其他写操作。
+
+**纪律（建议全队）**：**取数命令必须显式带 `cd`；贴读数必须同时给出 `code_root`**（`verify.py` 留档日志头本来就有这一行 ⇒ 树指纹零成本）。
+★ 与 `口径 9` 同一件事，但**入口多了一个**：「对象 ≠ 意图中的树」有两条入口 —— ① 共享钩子（`G-61` 幽灵门禁）；
+② **会话 cwd**（本次）。第 ② 条更隐蔽：**不报错、不红、给一个漂亮的绿**。
+
+**`100 vs 92` 的真解 = 两棵树**（不是静默漏跑）：我的树 `tests/guards/` 收集 **100**
+（地板真值：`--noconftest + PYTHONPATH` 的 `--collect-only`，`EXIT=0`；逐文件 58/9/5/5/12/11，其中 11 是我 13-N 新加的、**只在 `ws/ch4-valuelayer` 上**）；
+那次跑在主树、主树收集 92。★ 按 `V-11` 我只报"两棵树收集数不同"，**不**声称主树少 8 条是缺陷。
+
+**两条仪器结论**（与树无关）：① **`verify.py` 进程退出码 ≠ 批次退出码**（前者恒 1、后者见日志头，本次 3），**不可混用**；
+② **配额耗尽是从 `pytest_sessionstart` 抛出的**（`conftest.py:383 rmtree` → 宿主 shim `sitecustomize.py:851/826 → raise SystemExit(1)`）
+⇒ 0 用例跑、批次 `exit=3` 判**不合格**（**不会假绿**）——所以这次只能靠**对象指纹**发现，靠"红/绿"发现不了。
+★ `tests/.work/` 残留（实测 63M/13 项）会让**每次会话开始**都吃一大口配额，与配额问题互相加重。
+★ 顺带更正 `conftest.py:397` 的因果措辞（真正 raise 的是 shim，不是该文件逻辑）——
+按 `V-10`：**因果解释落纸前必须先做区分实验**。

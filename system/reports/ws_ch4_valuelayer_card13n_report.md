@@ -576,6 +576,8 @@ $ pre-commit（`7c38466` 的提交钩子）
 
 ### 6.4 ★ 未取得的一项验收：`guards` 批（**配额**，不是失败）
 
+★★ **本节写于"误跑主树拿到一个绿"之前；那个绿是错的（对象错树），已撤回 —— 真解与自我登记见 §七。**
+
 本轮前段已连跑 f(27 例) + g(24 例) + `guards` 批(98 例) 等**建夹具**用例，
 **宿主单轮删除配额在第 100 例附近耗尽**；此后复跑两次都是：
 
@@ -601,3 +603,101 @@ python system/scripts/ops/verify.py --batch guards          # 期望 ✓ exit=0
    这条能把"⑥ 类可留"的边界从**报告散文**升级为**机器判据**。**是否做请主理人裁。**
 2. `test_shard_coverage.py` 的两个常量**值**本身仍是"某次观测"（`9999` / `273`）：只加了注释、**没改值**
    （改值要重新实测，属另一个尺寸的改动）。
+
+---
+
+## 七、★ 自我登记：一次**主仓越界**（读数对象错树）+ 由此得到的两条仪器纪律
+
+> 按主理人 `V-10 / V-11`（grep 类证据口径定稿）与本项目「主仓越界要自我登记」的惯例（`#87`），
+> 把这次事故与它的**区分实验**如实落盘。**事故是"读数"，不是"改动"**。
+
+### 7.1 事故
+
+我向上报了一句 `✓ [guards] exit=0 21.25s/300s` + `92 passed`（本报告 §6.4 曾据此把 guards 批记为"绿"）——
+**那是错的**：该次运行的留档日志落在**主仓**：
+
+```
+/Users/gaza/Developer/InvestSigh/system/reports/verify_guards_2026-09-16_232642.log
+# code_root = /Users/gaza/Developer/InvestSigh/system      ← **主树**，不是我的工作树
+# 耗时 21.25s ｜ 超时上限 300s ｜ 退出码 0
+```
+
+⇒ 那次 `verify.py --batch guards` **跑的是主树的代码与主树的测试**。我工作树的
+`reports/verify_guards_latest.log` 当时仍是上一轮的 `退出码 3`。
+
+**根因（实测，非推测）**：**Bash 工具的工作目录在「轮次之间」复位到会话根**
+（= `/Users/gaza/Developer/InvestSigh` = **主仓**）。我那条命令是**唯一一条没写 `cd`** 的：
+
+```bash
+# 我实际跑过的（无 cd）——落在主仓
+{ $PY system/scripts/ops/verify.py --batch guards; echo "EXIT=$?"; } > /tmp/… 2>&1
+```
+
+**对照实验（同一轮内逐条查对象指纹）**：**所有带 `cd` 的读数都落在我的树** ——
+
+```
+injection-f  # code_root = /Users/gaza/Developer/InvestSigh/.worktrees/ws-ch4-valuelayer/system ｜ 34.08s ｜ 退出码 0
+injection-g  # code_root = /Users/gaza/Developer/InvestSigh/.worktrees/ws-ch4-valuelayer/system ｜ 30.78s ｜ 退出码 0
+```
+两片的耗时与屏幕读数**逐字一致** ⇒ 它们是**同一棵树**上的读数。
+
+### 7.2 损害评估（只读核对）
+
+| 项 | 结论 |
+|---|---|
+| 主仓 git 状态 | **未被弄脏**：误写的 `system/reports/verify_*.log` 命中 `system/.gitignore:22`（`reports/*.log`）；`git -C <主仓> status --porcelain` 只有他人的改动 |
+| 主仓被跟踪文件 | **未改**任何一处 |
+| 主仓/其他工作树的写操作 | **无**（除上述由工具产生的 ignore 日志） |
+| 备注 | 主仓 `reports/` 里另有一份 `…_232625.log`（`15.79s`）**不是我的** —— 另有其人在主仓跑过 |
+
+### 7.3 ★ 纪律（建议全队）：**读数的树指纹**
+
+⇒ **所有取数命令必须显式带 `cd`；贴读数时必须同时给出 `code_root`。**
+`verify.py` 的留档日志头**本来就有** `# code_root = …` 这一行 ⇒ 用它当**读数的树指纹**，**成本为零**。
+★ 这与 `口径 9`（读数要带树 + SHA）是同一件事，只是**入口多了一个**：
+**"对象 ≠ 意图中的树"至少有两条入口** —— ① 共享钩子（`G-61` 幽灵门禁：跑主树的 `pre-commit.sh`）；
+② **会话 cwd**（本次）。第 ② 条更隐蔽：它**不报错、不红、给一个漂亮的绿**。
+
+### 7.4 ★ `100 vs 92` 之谜的真解：**两棵树**，不是静默漏跑
+
+我先看到同一批先后是 `100` 与 `92`，怀疑"绿着但覆盖变窄"。按 `V-10` 取**地板真值**：
+
+```
+# 对象 = 我的工作树；仪器 = 项目解释器 + pytest（--noconftest + PYTHONPATH，与 test_shard_coverage 的现算同一手法）
+$ cd .worktrees/ws-ch4-valuelayer/system
+$ PYTHONPATH="$PWD/tests" python -m pytest tests/guards/ --collect-only -q -p no:cacheprovider --noconftest
+100 tests collected in 0.07s                                    EXIT=0
+   58  tests/guards/test_exit_code_contract.py     ← 从 run_all_gates.GATES **现派生**（我现算 len(GATES)=27）
+    9  tests/guards/test_rule_key_alignment.py
+    5  tests/guards/test_scenario_tag_binding.py
+    5  tests/guards/test_session_lock.py
+   12  tests/guards/test_verification_policy.py
+   11  tests/guards/test_verify_prose_binding.py   ← 13-N 新增（**只在 `ws/ch4-valuelayer` 上**）
+```
+
+⇒ **我的树 = 100**；那次跑在**主树**上、主树收集 **92**。差 8 = **树的内容差**，**不是丢失**。
+★ 按 `V-11`（举证半径 = 结论半径）我**不**声称"主树少 8 条是缺陷" —— 我没有主树逐文件的地板真值，
+只报"两棵树收集数不同"。
+
+### 7.5 两条**仪器**结论（与树无关）
+
+1. **`verify.py` 的进程退出码 ≠ 批次的退出码**：批次不合格时 verify.py 自己 `exit=1`，
+   而批次的真实码在留档日志头（本次 `退出码 3`）。两个数**不可混用**（口径 21 的姊妹）。
+2. **配额耗尽是从 `pytest_sessionstart` 抛出的**（不是从夹具 teardown）：
+   `conftest.py:383 shutil.rmtree` → 宿主 shim
+   `sitecustomize.py:851 _check_bulk_delete_guard` → `:826 _exit_bulk_guard_control` → `raise SystemExit(1)`
+   → `INTERNALERROR` ⇒ **0 个用例跑**。
+   ⇒ **好消息**：`_exit_zero` 仍判**不合格**并写明配额归因（**不会假绿**）——这也是为什么这次事故
+   只能靠**对象指纹**发现，而不会靠"红了/绿了"发现。
+   ★ **`tests/.work/` 的残留（本次实测 63M / 13 项）会让每次会话开始都吃一大口配额**，与配额问题互相加重。
+   ★ 顺带更正 `conftest.py:397` 那段注释的**因果**：那里说"刻意不 raise，一旦 raise 整批 1s 全红"，
+   但**真正 raise 的是 `rmtree` 背后的 shim**，不是该文件的逻辑 —— 按 `V-10` 第 6 条，
+   **因果解释落纸前必须先做区分实验**（我正是在这里踩到的：先信了那句因果，才没第一时间去查"是不是跑错树了"）。
+
+### 7.6 本次验收的**未取得项**（与本报告 §6.4 合看）
+
+`guards` 批**在我这棵树上仍未取得绿**：本轮先误跑主树 92 例、又做了两次失败的 `--collect-only` 尝试
+（其中一次触发 63M 的 `rmtree`）⇒ 配额耗尽（`count: 100244`），补跑为
+`exit=3 0.43s/300s **宿主单轮删除配额耗尽**`，留档日志头 `code_root = …/ws-ch4-valuelayer/system ｜ 退出码 3 ｜ 判定: 不合格`。
+⇒ **需在一个新轮次里、只跑这一条命令**（显式 `cd`，并回贴 `code_root`）。
+★ 全程未改断言、未动 `CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD`、未用 `--no-verify`。
