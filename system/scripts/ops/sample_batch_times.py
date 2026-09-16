@@ -395,6 +395,18 @@ def _quota_state() -> dict[str, int] | str:
     return {"used": used, "threshold": threshold, "remaining": threshold - used}
 
 
+def _quota_count() -> tuple[int | None, str]:
+    """只需"当前 request 的删除计数"时的薄包装 —— 返回 `(值, 原因)`。
+
+    ★ 读不到时**值 `None` 且原因非空**（不静默返回 `0` —— `0` 会被读成"没删过"）。
+    用途：卡 `#83` 新增格「`G-60` 是否真消失」在**同一条命令**前后各读一次，看计数是否累积。
+    """
+    st = _quota_state()
+    if isinstance(st, str):
+        return None, st
+    return st["used"], ""
+
+
 def _read_log_header(root: Path, name: str) -> tuple[float, float, int] | str:
     """从 `verify.py` 的日志头部取 `(elapsed, timeout, 退出码)`。
 
@@ -433,6 +445,10 @@ def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str)
         started = dt.datetime.now().astimezone()
         # ★ 每次都现取（而不是每格一次）：配置是**被测对象**的一部分，取一次就假设它不变。
         env_now = _env_profile()
+        # ★★ 新增格「`G-60` 是否真消失」（主理人签发）：**同一命令**的 `count` 前后各读一次。
+        #    只读、不过管道、零夹具 —— 但★ 该读数**不可复现**（见 `_quota_state`）⇒ 只能当旁证，
+        #    硬判据仍是"输出里有没有 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`"。
+        count_before = _quota_count()
         proc = subprocess.run(
             [sys.executable, "scripts/ops/verify.py", "--batch", name],
             cwd=str(root), capture_output=True, text=True, check=False,
@@ -440,6 +456,7 @@ def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str)
         verify_exit = proc.returncode          # ★ 不经管道（口径 22）
         blob = proc.stdout + proc.stderr
         quota = (QUOTA_MARKER in blob) or (QUOTA_PHRASE in blob)
+        count_after = _quota_count()
         timed_out = (TIMEOUT_MARKER in blob) or (verify_exit == TIMEOUT_EXIT)
         input_error = "INPUT-ERROR" in blob
         # ★ `_read_log_header` 取不到时返回**原因字符串**（不是 None）⇒ 这里显式分流，
@@ -485,6 +502,11 @@ def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str)
                 header is not None and elapsed is not None and abs(header[0] - elapsed) > 0.005
             ),
             "quota_polluted": quota,
+            # ★★ 「`G-60` 是否真消失」格的逐行数据（同一个 request 的删除计数前后各一次）。
+            #    `None` = 读不到，**原因在 `quota_count_note` 里**（不静默）。
+            "quota_count_before": count_before[0],
+            "quota_count_after": count_after[0],
+            "quota_count_note": count_before[1] or count_after[1],
             "quota_preflight": preflight,
             "timeout_hit": timed_out,
             "input_error": input_error,
@@ -538,7 +560,65 @@ def _render(rows: list[dict], stop_reason: str) -> str:
     if prof != "E=0(生产口径)":
         lines.append("★★ **本表不是生产/门禁口径的读数** ⇒ **不得据以给 `Batch.timeout` 定值**"
                      "（只能当「守卫开」的对照；守卫开时夹具 teardown 实测慢约 30×）。")
+    # ★ 新增格与读数**同框**：否则"G-60 已消失"会变成一句脱离数据的印象（V-10）。
+    lines.extend(_render_g60(_g60_verdict(rows)))
     return "\n".join(lines)
+
+
+def _g60_verdict(rows: list[dict]) -> dict:
+    """卡 `#83` **新增格**：**`G-60` 是否真消失**（主理人签发的那一格）。
+
+    命题（我提出、主理人**接受为"预期"而非"已证明"**）：`3653c7c` 后每个派生子进程都被
+    `_child_env()` 置 `E=0` ⇒ 夹具 teardown 不再 spawn 宿主 node CLI ⇒
+    删除配额**不再累积到阈值** ⇒ 原有的集体 `E` 症状不应再出现。
+
+    ★★ 判据分**两层**（机制层已证 / 结果层待测），结论强度分**三档** ——
+    缺"是否携带信息"这一档，就会把"没测到"读成"不存在"（`V-10` 第 3 条：无真值的格子不许进结论）：
+
+    | 档 | 条件 | 允许写的结论 |
+    |---|---|---|
+    | **A** | 出现 ≥1 次症状（`SAFE_DELETE_BULK_CONFIRM_REQUIRED` / verify.py 的"配额耗尽"） | **`G-60` 复现** |
+    | **B** | 0 次症状 **且** 期间计数**已越过阈值** | **有力支持"已消失"**（同一宿主、已越阈仍无症状） |
+    | **C** | 0 次症状 **但** 计数**未接近阈值**（或计数全读不到） | ★★ **无信息** —— **不得**写"已消失" |
+
+    ★ `count` 本身**不可复现**（见 `_quota_state`）⇒ 它只用于**分档**，**不用于**给出"删了多少次"的定量结论；
+    硬证据仍是**症状串是否出现**（同一命令、同一次运行内的直接观测）。
+    """
+    n = len(rows)
+    symptom = sum(1 for r in rows if r["quota_polluted"])
+    counts = [c for r in rows for c in (r["quota_count_before"], r["quota_count_after"]) if c is not None]
+    st = _quota_state()
+    threshold = None if isinstance(st, str) else st["threshold"]
+    max_count = max(counts) if counts else None
+    crossed = None if (max_count is None or threshold is None) else (max_count >= threshold)
+    if symptom:
+        verdict, why = "A", "出现症状 ⇒ `G-60` **复现**（命题被证伪）"
+    elif crossed:
+        verdict, why = "B", "0 次症状且计数**已越过阈值** ⇒ **有力支持「已消失」**"
+    else:
+        verdict, why = "C", ("★ **无信息** —— 0 次症状，但计数**未接近阈值**"
+                             "（或计数读不到）⇒ 本轮的「没出现」**不能**证明「已消失」"
+                             "（`V-10` 第 3 条）。要出结论须**加大负载**（更多格/更多次）后重测。")
+    return {
+        "runs": n,
+        "symptom_seen": symptom,
+        "counts": counts,
+        "threshold": threshold,
+        "max_count": max_count,
+        "crossed_threshold": crossed,
+        "verdict": verdict,
+        "why": why,
+    }
+
+
+def _render_g60(v: dict) -> list[str]:
+    """把 `_g60_verdict` 的结果渲染成几行（与读数同框）。"""
+    out = ["", "### 新增格 · `G-60` 是否真消失（判据分档见 `_g60_verdict`）", "",
+           f"- 本轮运行次数 **{v['runs']}** ｜ 出现 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` 次数 **{v['symptom_seen']}**",
+           f"- 删除计数读数（**不可复现**，只用于分档）：`{v['counts']}` ｜ 阈值 `{v['threshold']}` ｜"
+           f" 最大值 `{v['max_count']}` ｜ 是否越阈 `{v['crossed_threshold']}`",
+           f"- **判定档 = {v['verdict']}** —— {v['why']}"]
+    return out
 
 
 def _print_plan(cells: tuple[Cell, ...], repeat: int) -> None:
@@ -709,7 +789,10 @@ def main(argv: list[str] | None = None) -> int:
             break
 
     if args.json:
-        print(json.dumps({"rows": all_rows, "stop_reason": stop_reason}, ensure_ascii=False, indent=2))
+        print(json.dumps({"rows": all_rows,
+                          "g60": _g60_verdict(all_rows) if all_rows else None,
+                          "stop_reason": stop_reason},
+                         ensure_ascii=False, indent=2))
     else:
         print(_render(all_rows, stop_reason))
     # 退出码（`G-01`）：一轮都没开跑（预检拒绝）⇒ `2`（输入/环境异常，不是"测出问题"）；
