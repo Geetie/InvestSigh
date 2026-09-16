@@ -502,3 +502,68 @@ def test_reverse_control_cli_passes_with_resolvable_basis(
     )
     proc = run_script("scripts/pricelayer/scenario_guard.py", scratch, "--no-report")
     assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
+# ── 主理人裁定 ③-3：**回落值 == 真文件里的值**（防"规则改了、回落没改"）──
+
+
+def test_rule_domain_drift_from_code_fallback_is_flagged(scratch: Path, real_rules, run_script) -> None:
+    """★ 判据⑥：`scenario_method_status_domain` 改了而代码回落值未改 → CLI **exit 1**。"""
+    import yaml
+
+    real_rules(scratch, "scenario.yaml")
+    path = scratch / "rules" / "scenario.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["scenario_method_status_domain"] = ["pending", "neutral"]
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/scenario_guard.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "SCENARIO-RULE-BINDING" in proc.stdout
+    assert "scenario_method_status_domain" in proc.stdout
+
+
+def test_rule_blocking_when_drift_from_code_fallback_is_flagged(
+    scratch: Path, real_rules, run_script
+) -> None:
+    """★ 判据⑦：`scenario_method_blocking.when` 改了而 `DESIGN_BLOCKING_WHEN` 未改 → exit 1。"""
+    import yaml
+
+    real_rules(scratch, "scenario.yaml")
+    path = scratch / "rules" / "scenario.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["scenario_method_blocking"]["when"] = "scenario_method_status == neutral"
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/scenario_guard.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "SCENARIO-RULE-BINDING" in proc.stdout
+    assert "scenario_method_blocking" in proc.stdout
+
+
+def test_rule_record_method_version_drift_is_flagged(
+    scratch: Path, real_rules, run_script
+) -> None:
+    """★ 判据⑦：`record_method_version` 改假而 `DESIGN_RECORD_METHOD_VERSION` 为真 → exit 1（`§E.4`）。"""
+    import yaml
+
+    real_rules(scratch, "scenario.yaml")
+    path = scratch / "rules" / "scenario.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["scenario_method_promotion"]["record_method_version"] = False
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/scenario_guard.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "SCENARIO-RULE-BINDING" in proc.stdout
+    assert "record_method_version" in proc.stdout
+
+
+def test_design_status_default_is_deliberately_not_bound() -> None:
+    """★ 反向自证：`DEFAULT_SCENARIO_METHOD_STATUS` **不得**被绑到文件的 `scenario_method_status`。
+
+    二者**不是同一事实** —— 前者是"尚未转正时的默认值"，后者是**当前状态**
+    （转正后合法地变成 `neutral`）。若把它也纳入绑定，正常转正后就会**假红**。
+    本用例把这条"刻意不绑"的选择固化成可执行的说明。
+    """
+    from scripts.pricelayer.scenario_guard import DEFAULT_SCENARIO_METHOD_STATUS
+
+    assert DEFAULT_SCENARIO_METHOD_STATUS == "pending"
+    assert "pending" in DESIGN_SCENARIO_METHOD_STATUSES, "默认值必须落在设计取值域内"

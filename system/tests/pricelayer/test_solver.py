@@ -383,3 +383,52 @@ def test_cli_flags_display_count_drift(scratch: Path, real_rules, run_script) ->
     proc = run_script("scripts/pricelayer/solver.py", scratch, "--no-report")
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "SOLVER-RULE-BINDING" in proc.stdout
+
+
+# ── 主理人裁定 ③：`design_default` 必须带 note + 回落值必须绑定（防"规则改了、回落没改"）──
+
+
+def test_display_fallback_records_source_and_note(scratch: Path) -> None:
+    """★ 裁定 ③-1/③-2：缺文件 ⇒ `design_default`，且 note 必须写明**缺的是哪个文件**。"""
+    display = load_solution_set_display(scratch)          # scratch 里没有 rules/
+    assert display.value_source == "design_default"
+    assert display.notes, "design_default 必须打 note（否则单独特调看不出'缺键'）"
+    assert "valuation-methods.yaml" in display.notes[0]
+    assert (display.default_count, display.max_count) == (DEFAULT_DISPLAY_CAP, MAX_DISPLAY_CAP)
+    assert display.must_show_multiple is True
+
+
+def test_display_real_rules_records_rules_source_without_note(scratch: Path, real_rules) -> None:
+    """对照：真文件齐备 ⇒ `rules` 且 **零 note**（不把"读到真值"也标成回落）。"""
+    real_rules(scratch, "valuation-methods.yaml")
+    display = load_solution_set_display(scratch)
+    assert display.value_source == "rules"
+    assert display.notes == ()
+
+
+def test_cli_flags_must_show_multiple_drift(scratch: Path, real_rules, run_script) -> None:
+    """★ 裁定 ③-3：`must_show_multiple` 被改而代码回落值未改 → CLI **exit 1**。
+
+    这条是此前**漏掉**的一项绑定（只绑了 `default_count`/`max_count`）——
+    `must_show_multiple` 决定多解下限（`min_count` 的派生源），漏绑就等于
+    "把'必须多组解'这条设计不变量交给规则文件单方面决定"。
+    """
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["solution_set_display"]["must_show_multiple"] = False
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    proc = run_script("scripts/pricelayer/solver.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "SOLVER-RULE-BINDING" in proc.stdout
+    assert "must_show_multiple" in proc.stdout
+
+
+def test_cli_reports_display_source_when_rules_absent(scratch: Path, run_script) -> None:
+    """★ 裁定 ③-2 的**出口面**：规则文件缺 ⇒ note 必须**出现在 report 里**（不只活在对象上）。"""
+    proc = run_script("scripts/pricelayer/solver.py", scratch, "--no-report")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "NO_SOLUTION_SET_DISPLAY" in proc.stdout
+    assert "design_default" in proc.stdout or "display_value_source: 0" in proc.stdout

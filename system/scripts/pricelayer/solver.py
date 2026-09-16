@@ -89,6 +89,14 @@ MAX_DISPLAY_CAP = 5
 ★ 真值取自 `solution_set_display.max_count`（现为 `5`）；同上。
 """
 
+DESIGN_MUST_SHOW_MULTIPLE = True
+"""`Ch5 §B.1` 逐字："欠定方程 ⇒ 展示**多组**解" —— `True` 即"必须多组"。
+
+★ 真值取自 `solution_set_display.must_show_multiple`（现为 `true`）；
+  本常量仅作规则文件/该键缺失时的**设计逐字回落**，并由 `_rule_binding_violations`
+  核"代码回落值 == 文件真值"（否则"规则改了、回落没改"不会被发现）。
+"""
+
 DEFAULT_MIN_SOLUTIONS = 2
 """多解**数值下界**（"多"的机械化）。
 
@@ -115,7 +123,14 @@ RULE_BOUND_ENTRIES: tuple[tuple[str, str], ...] = (
 
 @dataclass(frozen=True)
 class SolutionSetDisplay:
-    """`rules/valuation-methods.yaml::solution_set_display` 的解析结果（**带来源标注**）。"""
+    """`rules/valuation-methods.yaml::solution_set_display` 的解析结果（**带来源标注**）。
+
+    - `value_source`：`"rules"` = 取自规则文件；`"design_default"` = 文件/键缺失，取
+      **设计逐字值**（`DEFAULT_DISPLAY_CAP` / `MAX_DISPLAY_CAP` / `DESIGN_MUST_SHOW_MULTIPLE`）。
+    - `notes`：**`value_source == "design_default"` 时必非空** —— 逐条写明**缺的是什么**，
+      使"不走门禁的调用方"也能看到"值其实不是从规则读到的"（主理人裁定 ③-2：
+      `design_default` 必须打 note，否则就是静默降级）。
+    """
 
     default_count: int
     max_count: int
@@ -123,6 +138,7 @@ class SolutionSetDisplay:
     selection: str = ""
     overflow: str = ""
     value_source: str = "design_default"
+    notes: tuple[str, ...] = ()
 
     @property
     def min_count(self) -> int:
@@ -133,41 +149,51 @@ class SolutionSetDisplay:
 def load_solution_set_display(root: str | Path | None = None) -> SolutionSetDisplay:
     """读 `solution_set_display`（`Ch5 §I.2` / `§J.3` / B18）—— **唯一读口**。
 
-    - 文件/键缺失 → 回落设计逐字值（`3` / `5` / `must_show_multiple=True`）并标 `value_source="design_default"`。
+    - 文件/键缺失 → 回落**设计逐字值**（B18 `3` / `5` + `Ch5 §B.1` 的"必须多组"）并标
+      `value_source="design_default"` **且记一条写明缺失对象的 note**（主理人裁定 ③-1/③-2：
+      回落值必须能在设计里逐字找到出处，且不得静默）。
     - `default_count > max_count` 或非正整数 → `PriceLayerError`（**响亮失败**，不静默夹紧）。
     """
     from scripts._common import _cached_yaml  # `P-02`
 
-    if root is None:
+    def _fallback(reason: str) -> SolutionSetDisplay:
         return SolutionSetDisplay(
             default_count=DEFAULT_DISPLAY_CAP,
             max_count=MAX_DISPLAY_CAP,
-            must_show_multiple=True,
+            must_show_multiple=DESIGN_MUST_SHOW_MULTIPLE,
+            value_source="design_default",
+            notes=(
+                f"NO_SOLUTION_SET_DISPLAY: {reason} —— 回落设计逐字值 "
+                f"default_count={DEFAULT_DISPLAY_CAP}（B18）/ max_count={MAX_DISPLAY_CAP}（B18）/ "
+                f"must_show_multiple={DESIGN_MUST_SHOW_MULTIPLE}（Ch5 §B.1）（非'已核'）",
+            ),
         )
+
+    if root is None:
+        return _fallback("未给 code_root")
     path = Path(root) / VALUATION_METHODS_YAML
     if not path.exists():
-        return SolutionSetDisplay(
-            default_count=DEFAULT_DISPLAY_CAP,
-            max_count=MAX_DISPLAY_CAP,
-            must_show_multiple=True,
-        )
+        return _fallback(f"{VALUATION_METHODS_YAML} 不存在")
     doc = _cached_yaml(path) or {}
     node = doc.get(RULE_KEY_SOLUTION_SET_DISPLAY)
     if not isinstance(node, Mapping):
-        return SolutionSetDisplay(
-            default_count=DEFAULT_DISPLAY_CAP,
-            max_count=MAX_DISPLAY_CAP,
-            must_show_multiple=True,
-        )
+        return _fallback(f"{VALUATION_METHODS_YAML} 缺/非法键 {RULE_KEY_SOLUTION_SET_DISPLAY!r}")
     default_count = int(node.get(RULE_KEY_DEFAULT_COUNT) or DEFAULT_DISPLAY_CAP)
     max_count = int(node.get(RULE_KEY_MAX_COUNT) or MAX_DISPLAY_CAP)
-    must_show_multiple = bool(node.get(RULE_KEY_MUST_SHOW_MULTIPLE, True))
+    must_show_multiple = bool(node.get(RULE_KEY_MUST_SHOW_MULTIPLE, DESIGN_MUST_SHOW_MULTIPLE))
     if default_count < 1 or max_count < 1 or default_count > max_count:
         raise PriceLayerError(
             f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY} 取值非法："
             f"default_count={default_count} / max_count={max_count} "
             "（须为正整数且 default_count <= max_count；不静默夹紧）"
         )
+    notes: list[str] = []
+    for key in (RULE_KEY_DEFAULT_COUNT, RULE_KEY_MAX_COUNT, RULE_KEY_MUST_SHOW_MULTIPLE):
+        if key not in node:
+            notes.append(
+                f"NO_DISPLAY_KEY: {VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
+                f"{key} 缺失 —— 该字段取设计逐字回落值（非'已核'）"
+            )
     return SolutionSetDisplay(
         default_count=default_count,
         max_count=max_count,
@@ -175,6 +201,7 @@ def load_solution_set_display(root: str | Path | None = None) -> SolutionSetDisp
         selection=str(node.get("selection") or ""),
         overflow=str(node.get("overflow") or ""),
         value_source="rules",
+        notes=tuple(notes),
     )
 
 
@@ -431,7 +458,14 @@ def solve_implied_requirements(
     if current_price <= 0:
         raise SolverError(f"{security_id}: 当前价格非正（{current_price}），反解无定义")
     display = display or SolutionSetDisplay(
-        default_count=DEFAULT_DISPLAY_CAP, max_count=MAX_DISPLAY_CAP, must_show_multiple=True
+        default_count=DEFAULT_DISPLAY_CAP,
+        max_count=MAX_DISPLAY_CAP,
+        must_show_multiple=DESIGN_MUST_SHOW_MULTIPLE,
+        value_source="design_default",
+        notes=(
+            "NO_SOLUTION_SET_DISPLAY: 调用方未传 display —— 回落设计逐字值"
+            f"（B18 {DEFAULT_DISPLAY_CAP}/{MAX_DISPLAY_CAP}、Ch5 §B.1 多解）（非'已核'）",
+        ),
     )
     cap = display.default_count if display_cap is None else display_cap
     if not 1 <= cap <= display.max_count:
@@ -595,6 +629,10 @@ def check(root: str | Path) -> Any:
     report.scanned["rule_binding_checks"] = len(RULE_BOUND_ENTRIES)
     display = load_solution_set_display(root_path)
     report.scanned["min_solution_count"] = display.min_count
+    report.scanned["display_value_source"] = 1 if display.value_source == "rules" else 0
+    # `design_default` 的 note 必须**真的上报**（主理人裁定 ③-2）：否则只读 report 的调用方
+    # 永远看不到"展示上限其实不是从规则读到的"。
+    report.notes.extend(display.notes)
     report.scanned["display_default_count"] = display.default_count
     report.scanned["display_max_count"] = display.max_count
     for text in _rule_binding_violations(root_path):
@@ -647,8 +685,10 @@ def _rule_binding_violations(root: Path) -> list[str]:
     |---|---|---|
     | ① | 本模块读取的每个顶层键**真实存在** | `Ch11 §D.2`（参数只住 `rules/`） |
     | ② | `solution_set_display.default_count` / `max_count` 与代码默认值一致 | B18 / `§J.3` |
-    | ③ | `assumption_grid.solver_ref` 指向**本模块**（改名即违例） | `§B.3` / `§I.2` |
+    | ③ | `solution_set_display.must_show_multiple` 与代码回落值一致 | `Ch5 §B.1`（"必须多组"） |
+    | ④ | `assumption_grid.solver_ref` 指向**本模块**（改名即违例） | `§B.3` / `§I.2` |
 
+    ★ ②③ 即主理人裁定 ③-3：**断言"回落值 == 真文件里的值"** ⇒ 让"规则改了、回落没改"变红。
     ★ 规则文件不存在 → 返回空（另有 note 面，**不**当已核）。
     """
     from scripts._common import _cached_yaml
@@ -681,6 +721,20 @@ def _rule_binding_violations(root: Path) -> list[str]:
                 f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
                 f"{RULE_KEY_MAX_COUNT}={declared_max} 与代码硬上限 "
                 f"{MAX_DISPLAY_CAP} 不一致（B18）"
+            )
+        declared_multi = node.get(RULE_KEY_MUST_SHOW_MULTIPLE)
+        if declared_multi is not None and bool(declared_multi) != DESIGN_MUST_SHOW_MULTIPLE:
+            violations.append(
+                f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
+                f"{RULE_KEY_MUST_SHOW_MULTIPLE}={declared_multi} 与代码回落值 "
+                f"{DESIGN_MUST_SHOW_MULTIPLE} 不一致（Ch5 §B.1：欠定方程必须展示多组解）"
+                " —— 回落值未跟随规则，属声明与实现脱节（Ch11 §D.2）"
+            )
+        elif declared_multi is None:
+            violations.append(
+                f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
+                f"{RULE_KEY_MUST_SHOW_MULTIPLE} 缺失 —— 多解下限将退化为设计回落值 "
+                f"{DESIGN_MUST_SHOW_MULTIPLE}（非'已核'；下限由该语义键派生）"
             )
 
     grid = doc.get(RULE_KEY_ASSUMPTION_GRID)

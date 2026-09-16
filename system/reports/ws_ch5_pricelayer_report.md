@@ -95,6 +95,23 @@
 2. **倒填禁令（`§D` 四规则 + `§B.5`）**：`order_guard.assert_baseline_source_ok` 对 `source ∈ {implied_solution, implied_requirements}` 抛 `OrderViolation`；CLI 第二判据是**运行时效果**断言 —— 取真源里**真实存在**的 `implied_id` 集合，再看 `baselines` 的估值输入面（`formula_ref` / `forecast_assumptions` / `valuation_params` / `driver_model[].assumptions`）里**是否真的出现这些 id**；写入侧 `assert_write_target_allowed` 只放行 `implied_requirements` / `gap`。
 3. **概率默认 `null`（`§E`/§D.6/B11）**：`scenario_guard.PROBABILITY_DEFAULT is None`，`ScenarioEstimate.probability` 缺省即 `None`；`assert_probability_has_basis(None)` 直接放行、非 `None` 必须有可解析依据。★ 本轮把"**默认 `null`**"这一条也纳入机器绑定：`SCENARIO-RULE-BINDING` 断言真文件 `probability.default is None` 且 `must_be_null_50_50` 为假 —— **规则文件若偷偷改成 0.5，门禁当场红**。
 
+### 1-4 ★ 主理人裁定 ③ 的落地：口径保持现状 + **三条约束**（第三轮）
+
+主理人裁定：**不**把本流统一到 `valuelayer::_rules.py` 的"读口即抛错"，**保持**"读口宽松 + 门禁响亮"
+（理由：`/tmp/ch5_demo_rules.py` 这类**无完整工程树**的路径正是它在服务的；且两者最终等价 —— 都有人**响亮地**管）。
+但**加三条约束**，本轮已全部落地并可执行验证：
+
+| 约束（逐字） | 落地 | 证据 |
+|---|---|---|
+| ① 回落值必须是**设计逐字值**，docstring **标明设计节号** | 新增/补齐命名常量：`DESIGN_MUST_SHOW_MULTIPLE`（`Ch5 §B.1`）、`DESIGN_RECORD_METHOD_VERSION`（`Ch5 §E.4`）、`DESIGN_KEEP_ORIGINAL_JUDGMENT_TIME`（`Ch5 §F.5`/`T08`）；`DEFAULT_DISPLAY_CAP`/`MAX_DISPLAY_CAP`（B18）、`DEFAULT_METHOD_CLASS`/`DEFAULT_UNREGISTERED_MARK`（`Ch5 §D.1`）、`ABNORMAL_DROP_1D/3D`（B2）、`DESIGN_SCENARIO_METHOD_STATUSES`/`DESIGN_BLOCKING_WHEN`（`Ch5 §E.4`）**逐个带出处**；不再有裸字面量回落 | docstring 与常量一一对应（`grep -E '^DESIGN_|^DEFAULT_' scripts/pricelayer/*.py`） |
+| ② 必须输出 `value_source ∈ {rules, design_default}`，且 `design_default` 时**必打一条 note** | 四个读口全部具备该字段；**缺文件 / 缺键 / 子键缺**三种成因各出**不同 note**（点明缺的是哪个文件/哪个键）。★ 补了两处**真实缺陷**：<br>· `valuation.check` 把读口放在 `if not baselines: return` **之后** ⇒ 空样本时 note 被**静默吞掉**（已前移到早退之前，并加回归锁用例）<br>· `scenario_guard` 的 `root is None` 与 `promotion.record_method_version` 缺省是**无 note 的静默默认**（已补 `NO_SCENARIO_ROOT` / `NO_PROMOTION_KEY`）<br>且 `solver.check` / `daily_explain.check` / `valuation.check` 均把 `notes` **上报进 report**（不只活在对象上），并加 `display_value_source` / `recheck_value_source` / `unregistered_fallback_value_source` 读数 | 见 §② V-1d |
+| ③ `*-RULE-BINDING` 必须断言**"回落值 == 真文件里的值"** | 新增 6 条绑定：`scenario` 判据⑥（取值域）/⑦（`when` + `record_method_version`）、`solver` 判据③（`must_show_multiple` —— **此前漏绑**）、`daily` 判据③（`keep_original_judgment_time`，由"单向断言真"改为**双向漂移**断言）、`valuation`（把"读不到值"与"值不一致"**分开**，不再让缺键被回落值掩盖） | 见 §② V-1e（真值 0 违例 + 6 个反例各 1 违例） |
+| ★ **刻意不绑的一项**（诚实登记） | `DEFAULT_SCENARIO_METHOD_STATUS` **不得**绑到文件的 `scenario_method_status` —— 前者是"尚未转正时的默认值"，后者是**当前状态**（转正后合法变 `neutral`），**不是同一事实**；绑了会在正常转正后**假红**。出处由 docstring 承担，另有 `test_design_status_default_is_deliberately_not_bound` 把该选择固化成可执行说明 | 同测试 |
+
+★ 另修一处**夹具层的隐患**：`real_rules` 夹具现在统一把**副本** `chmod 0644`（真文件仍 0444）——
+  此前"宿主是否保留只读位"这一环境差异会让注入用例**有时写得进、有时 PermissionError**（本会话实测到过）。
+  真文件仍由 `test_tests_never_write_real_rules_files` 的 SHA256 前后对比把关。
+
 ---
 
 ## ② 怎么验证的（原样命令 + 原样输出 + 退出码）
@@ -183,7 +200,6 @@ DEMO_EXIT=0
 - `test_flat_keys_still_take_precedence_over_coverage_profile`：行内有 `modeled_coverage=1.0`、内层是旧值 `0.10` → **exit 0**（行内**优先**，与设计字面一致）。
 
 ### V-1c ★ 规则↔代码绑定演示（**真 `rules/` 只读副本**，代码不动 ⇒ 必须被拦）
-
 脚本在 `/tmp/ch5_demo_rules.py`（**不落仓库**）：把真 `rules/*.yaml` 拷进临时根，**只改副本**再跑守卫 CLI。
 
 ```sh
@@ -204,6 +220,76 @@ RULES_DEMO_EXIT=0
 ```
 → **4/4 均为「反例 exit=1 + 对照 exit=0」**，`RULES_DEMO_EXIT=0`。**此即修 1 / 修 2 的可执行反例**：
 真规则与代码不一致时**当场红**，而不是静默绿。
+
+### V-1d ★ 裁定 ② 的证据：`value_source` + note（**不建夹具、不删文件**的直连探针，`G-60` 窗口内亦安全）
+
+```sh
+$ python - <<'PY'    # sys.path=system；tmp 根只 mkdir，不作 teardown 删除
+── 缺文件（应 design_default + note）──
+solver / 空根        value_source=design_default  notes=1
+      · NO_SOLUTION_SET_DISPLAY: rules/valuation-methods.yaml 不存在 —— 回落设计逐字值 default_count=3（B18）/ max_count=5（B18）/ must_show_multiple=True（Ch5 §B.1）（非'已核'）
+daily  / 空根        value_source=design_default  notes=1
+      · NO_FORCED_RECHECK: rules/review.yaml 不存在 —— 回落设计逐字值 单日 -0.07 / 三日累计 -0.12（B2）、保留原判断时间 True（Ch5 §F.5 / T08）（非'已核'）
+valuation / 空根     value_source=design_default  notes=1
+      · NO_UNREGISTERED_FALLBACK: rules/valuation-methods.yaml 不存在 —— 回落设计逐字值 method_class='generic' / mark='unregistered'（Ch5 §D.1 末句）（非'已核'）
+
+── 真 rules/（应 rules + 0 note）──
+solver / 真文件      value_source=rules           notes=0
+daily  / 真文件      value_source=rules           notes=0
+valuation / 真文件   value_source=rules           notes=0
+scenario policy      value_source=rules           notes=0
+```
+
+**出口面（note 必须进 report，不只活在对象上）**：
+
+```sh
+$ python scripts/pricelayer/solver.py /tmp/ch5-norules --no-report   ; echo exit=$?
+  scanned display_value_source: 0
+  note: NO_SOLUTION_SET_DISPLAY: …（非'已核'）
+RESULT: PASS（0 violations）            exit=0
+
+$ python scripts/pricelayer/daily_explain.py /tmp/ch5-norules --no-report ; echo exit=$?
+  scanned recheck_value_source: 0
+  note: NO_FORCED_RECHECK: …（非'已核'）
+RESULT: PASS（0 violations）            exit=0
+
+$ python scripts/pricelayer/valuation.py /tmp/ch5-norules --no-report   ; echo exit=$?
+  scanned unregistered_fallback_value_source: 0
+  note: NO_VALUATION_METHODS_RULE: rules/valuation-methods.yaml 不存在 —— 方法注册判据③不可判定…
+  note: NO_UNREGISTERED_FALLBACK: …（非'已核'）
+RESULT: PASS（0 violations）            exit=0
+```
+→ 真仓库根上三者均为 `*_value_source: 1`（值确实来自规则）。
+★ 这里暴露并修掉一个**真实缺陷**：`valuation.check` 原先把读口放在 `if not baselines: return report` **之后**
+⇒ **空样本时 note 被静默吞掉**（"值来自回落"在出口面完全不可见）。已前移到早退之前，并加回归锁用例
+`test_cli_reports_fallback_source_even_without_baselines`。
+
+### V-1e ★ 裁定 ③ 的证据：**"回落值 == 真文件里的值"**（对照 0 违例 + 6 个反例各 1 违例）
+
+```sh
+$ python - <<'PY'    # 逐项改**真 rules/ 的副本**，再直接调该模块的 _rule_binding_violations
+═══ 对照：真文件（应 0 违例）═══
+  [scenario 真值]   0 violation(s)
+  [solver 真值]     0 violation(s)
+  [daily 真值]      0 violation(s)
+  [valuation 真值]  0 violation(s)
+
+═══ ⑥ scenario: 取值域被改 ═══
+  [domain 少一项]   1 violation(s)
+      · rules/scenario.yaml:: scenario_method_status_domain=['pending','neutral'] 与代码回落值 ['pending','neutral','probability_weighted'] 不一致…
+═══ ⑦ scenario: when / record_method_version 被改 ═══
+  [when 改了]       1 violation(s)
+      · rules/scenario.yaml:: scenario_method_blocking.when='scenario_method_status == neutral' 与代码回落值… 不一致
+  [record=false]    1 violation(s)
+      · rules/scenario.yaml:: scenario_method_promotion.record_method_version=False 与代码回落值 True 不一致（Ch5 §E.4：转正后须记 method_version）
+═══ ③ solver: must_show_multiple 被改（**此前漏绑**）═══
+  [must_show_multiple=false]  1 violation(s)
+      · rules/valuation-methods.yaml:: solution_set_display.must_show_multiple=False 与代码回落值 True 不一致（Ch5 §B.1：欠定方程必须展示多组解）
+═══ ③ daily: keep_original_judgment_time 被改 ═══
+  [keep=false]      1 violation(s)
+      · rules/review.yaml:: forced_recheck.on_hit.keep_original_judgment_time=False 与代码回落值 True 不一致 —— `T08`…
+```
+→ **4 个对照 0 违例 + 6 个反例各 1 违例**。每一条都有对应的 pytest 用例（`exit 1` + `*-RULE-BINDING` 码面断言）。
 
 ### V-2 六门禁在**真仓库真源**上运行（`code_root = system`）
 

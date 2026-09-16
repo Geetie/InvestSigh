@@ -392,20 +392,60 @@ def test_real_rules_routing_matches_team_lead_measured_values(scratch: Path, rea
 def test_real_rules_unregistered_fallback_matches_code_defaults(
     scratch: Path, real_rules
 ) -> None:
-    """★ 未注册回落口径**读**真文件，且与代码默认值一致（`Ch5 §D.1` 末句 / `Ch11 §D.2`）。"""
+    """★ 未注册回落口径**读**真文件，且与代码默认值一致（`Ch5 §D.1` 末句 / `Ch11 §D.2`）。
+
+    ★ 主理人裁定 ③-2：`value_source == "rules"`（读到真值）＋ `notes` 为空（无回落）。
+    """
     from scripts.pricelayer.valuation import DEFAULT_UNREGISTERED_MARK, load_unregistered_fallback
 
     real_rules(scratch, "valuation-methods.yaml")
-    fallback, mark = load_unregistered_fallback(scratch)
-    assert fallback == "generic" == DEFAULT_METHOD_CLASS
-    assert mark == "unregistered" == DEFAULT_UNREGISTERED_MARK
+    spec = load_unregistered_fallback(scratch)
+    assert spec.method_class == "generic" == DEFAULT_METHOD_CLASS
+    assert spec.mark == "unregistered" == DEFAULT_UNREGISTERED_MARK
+    assert spec.value_source == "rules"
+    assert spec.notes == ()
+
+
+def test_unregistered_fallback_fallback_records_source_and_note(scratch: Path) -> None:
+    """★ 裁定 ③-1/③-2：缺文件 ⇒ `design_default` **且必带 note**（写明缺的是哪个文件）。"""
+    from scripts.pricelayer.valuation import (
+        DEFAULT_METHOD_CLASS,
+        DEFAULT_UNREGISTERED_MARK,
+        load_unregistered_fallback,
+    )
+
+    spec = load_unregistered_fallback(scratch)          # scratch 里没有 rules/
+    assert spec.value_source == "design_default"
+    assert spec.notes, "design_default 必须打 note（否则单独特调看不出'缺键'）"
+    assert "valuation-methods.yaml" in spec.notes[0]
+    assert spec.method_class == DEFAULT_METHOD_CLASS
+    assert spec.mark == DEFAULT_UNREGISTERED_MARK
+
+
+def test_unregistered_fallback_partial_key_records_note(scratch: Path, real_rules) -> None:
+    """★ 裁定 ③-2：键在但子键缺 ⇒ `value_source` 仍 `rules` **且** note 点名缺失子键。"""
+    import yaml
+
+    from scripts.pricelayer.valuation import load_unregistered_fallback
+
+    real_rules(scratch, "valuation-methods.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["unregistered_fallback"] = {"mark": "unregistered"}
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+
+    spec = load_unregistered_fallback(scratch)
+    assert spec.value_source == "rules"
+    assert any("method_class" in n for n in spec.notes), spec.notes
+    assert spec.method_class == "generic", "缺失子键取设计逐字回落值"
 
 
 def test_real_rules_route_method_on_real_values(scratch: Path, real_rules) -> None:
     """在**真路由表**上：已注册 `model_class` 取到真方法类；未注册走真回落口径。"""
     real_rules(scratch, "valuation-methods.yaml")
     routing = load_method_routing(scratch)
-    fallback, mark = load_unregistered_fallback(scratch)
+    spec = load_unregistered_fallback(scratch)
+    fallback, mark = spec.method_class, spec.mark
 
     hw = route_method("hardware", routing, fallback_method_class=fallback, fallback_mark=mark)
     assert hw.registered is True
@@ -474,3 +514,21 @@ def test_reverse_control_cli_passes_on_real_rules_file(
     proc = run_script("scripts/pricelayer/valuation.py", scratch, "--no-report")
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "RESULT: PASS" in proc.stdout
+
+
+def test_cli_reports_fallback_source_even_without_baselines(scratch: Path, run_script) -> None:
+    """★ 裁定 ③-2 的**出口面** + 防"早退吞 note"：`facts/baselines.jsonl` 为空**也必须**
+    在 report 里看到"未注册回落口径来自设计回落、不是规则"。
+
+    ★ 这条是**真实缺陷的回归锁**：首版把 `load_unregistered_fallback` 放在
+      `if not baselines: return report` **之后** ⇒ 没数据时该 note 永不出现，
+      "值来自回落"这件事在出口面被静默吞掉（正是 `G-03` / 静默降级同族）。
+    """
+    path = scratch / "facts" / "baselines.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("", encoding="utf-8")            # 空样本
+    proc = run_script("scripts/pricelayer/valuation.py", scratch, "--no-report")
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "unregistered_fallback_value_source: 0" in proc.stdout
+    assert "NO_UNREGISTERED_FALLBACK" in proc.stdout
+    assert "NO_BASELINE_ROWS" in proc.stdout, "早退 note 仍须在（两者不可互相顶掉）"
