@@ -2223,3 +2223,79 @@ $ git branch --contains 8aa7862                                  → 含 ws/ch5-
 2. `base` 究竟是「恒定的桶体量」还是「本回合累计成功删除量」—— **本次数据不足以判定**；
    但**两种模型对"逐文件能否抬高总量"都答「否」**（第四段第 1 条与模型无关）⇒ **结论不受影响**，机制描述仍待钉。
 3. 我**没有**引用他作废的那三条"成功"读数；**未使用任何绕过手段**。
+
+### §17.12 ★ 更正 §17.9 的**合并对象**（我把它写成了早 40 秒的那个 commit）+ 「`main..branch` 不能判合并」的方法论
+
+**一、我的错：§17.9 写的"`main` = `53de9a3`"不是那次合并的对象**
+
+硬证（命令 + 输出，不是推断）：
+```
+$ git rev-list --parents -n1 da8254e
+da8254e… 681f696… ea0ceae0dbef33b85596deaebbb0e419574b2234
+                          ↑ 第二父 = 我那次 merge 真正并进来的 main tip
+$ git show -s --format='%h %ci %s' 53de9a3 ea0ceae
+53de9a3  2026-09-16 22:40:09  merge ws/step56-skipped（口径 11 补合）
+ea0ceae  2026-09-16 22:40:49  merge ws/verify-shard（口径 11 补合）—— …
+$ git merge-base --is-ancestor 53de9a3 ea0ceae  → YES（53de9a3 更早）
+```
+⇒ **`53de9a3`(22:40:09) → `ea0ceae`(22:40:49)**，而我那次合并的对象是**后者**。
+
+**根因（口径 10 的典型违反，且是"同类第 N 例"）**：`53de9a3` 是我在**本会话开头**读到的
+主仓 `HEAD -> main`；我在写 §17.9 时把它当成了"**合并时的** main"，而**合并发生时 main 已前进到 `ea0ceae`**。
+⇒ **"较早时刻的读数" ≠ "操作发生时的对象"** —— 这与 team-lead 在 `28e1eff` 里自我更正的
+「广播写的时刻未核」**同族**（他也在册）。
+★ 另一个可乘之机：本仓同时存在 `refs/remotes/tmp/main = 53de9a3` ⇒
+**报"`main` 在哪"必须写 ref 全名 + 取值时刻**，否则同名 ref 会互相冒充（这条我加进自己的检查清单）。
+
+**影响面（说清哪些结论会变、哪些不变）**：
+- **变**：§17.9 里"我合进来的 main 头"这个**标签**，应为 **`ea0ceae`**；
+- **不变**（这些都以 `da8254e` 这个提交本身为准，与标签无关）：幽灵门禁闭合、
+  `f5dbc6f..53de9a3` 那 8 个提交的区间、`git stash`/`pop` 后的逐字 blob 比对、
+  合并零冲突（`ort`，**11 files changed, +1234/−107**）、`system/rules/*.yaml` 仍 `0444`。
+
+**二、本轮又一次合并（把我这棵树推到最新）**：`1e1a197`，两父 = `fc76c23`（我）+ `261f8c9`（`main`）
+```
+ system/reports/batch13_taskbook.md                | 140 +++++
+ system/reports/phase1_gap_register.md             | 121 +++++
+ system/reports/ws_audit_quota11_recheck_report.md | 246 ++++++（新文件）
+ system/reports/ws_independent_audit_batch11.md    |  10 +
+ system/scripts/ops/verify.py                      |  21 +
+ 5 files changed, 538 insertions(+)
+```
+复验：我的两个 blob **逐字不变**（报告 `b719c585e7b4…`（2225 行）、测试 `d7977a94f7c9…`）、
+工作区与提交一致、`system/rules/*.yaml` 仍 `-r--r--r--`、`git status` 干净。
+
+**三、★ 方法论更正：`git diff main..branch` 判不出"合并会不会回退 main"**
+
+`ws-step56-skipped` 在卡 `#82` 里用 `git diff --numstat main..ws/ch2-rules` 判我的分支是"陈旧形态"，
+并据此说我的分支"**要删掉 `main` 已有的内容**"（`taskbook 0/77`、`gap_register 0/55`、`audit_batch11 0/4`）。
+**这条对我的分支是假阳性**，原因在基准：
+
+| 命令 | 含义 | 能不能判"合并会做什么" |
+|---|---|---|
+| `git diff main..branch` | **tip-to-tip**：两个末端快照的差 | ❌ **不能** —— 它**不携带 merge-base 语义** |
+| `git diff $(git merge-base main branch)..branch` | 我方**相对共同祖先**改了什么 | ✅ 能（这才决定合并的"我方改动面"） |
+| `git merge-tree --write-tree branch main` | 干跑，给出结果树/冲突 | ✅ 能（最直接） |
+
+**实测反证（同一件事的两种读法，符号相反）**：
+- 他的读法：`main..ws/ch2-rules` ⇒ `taskbook` **`0 +, 77 −`**（像"我要删 77 行"）；
+- 真实的合并（上面 `1e1a197` 的 diffstat）⇒ `taskbook` **`+140`**（**纯加**，一行不删）。
+⇒ 我的分支相对 merge-base 只改了**两个文件**（`git diff --name-status $(git merge-base HEAD main) HEAD`
+⇒ `M` 报告、`M` 测试文件，**仅此两项**）⇒ **合并只会带上我的改动，不会回退 `main` 的任何内容**。
+★ 这与 team-lead 已入册的「`口径 11` 扩展之二：**禁用三点 `main...branch`**」**同源** ——
+两点号 `main..branch` 与三点号 `main...branch` **都不**表达 merge-base 语义；
+**只有显式写出 merge-base（或 `merge-tree` 干跑）才算证据**。
+
+**四、边界（如实）**
+1. 我**没有**去核 `ws/fixture-cost` 那条"口径 11 第 2 形态"是否也是假阳性 —— 那要用正确命令重算、
+   且**不属我单内**。我只报"**方法要换**"，**不下**它成立与否的判词。
+2. `ws-step56-skipped` 引用的时点是 `main@28e1eff`，而 `main` 现已到 `261f8c9` ⇒ 他那些数字**按 `口径 10` 也已过期**
+   （我这次实测的 tip-to-tip 是 `taskbook 0/140`、`gap_register 0/55`、`audit_batch11 0/10`）。
+3. 他提醒的两条**我采纳**：`git merge main` 现在能过门禁（实测第二次合并同样零冲突）；
+   若合并把 `rules/*.yaml` 带回 `0644` 就 `chmod 444`（本次**未**发生：合并面不含 `system/rules/**`）。
+   ★ 他附的 zsh 提醒（`*.yml` 混进 glob ⇒ `no matches found` ⇒ **整条 chmod 静默不执行**）与 team-lead 的 `723321d` 同源，我已在 §17.9 第 ④ 条踩过同类（`&&` 短路）。
+
+**五、本单内容已被主干采纳（收获，非我功）**：`main` 上
+`f819bab`（采纳 merge-tree 干跑手法 + 更正 `76a2d5b`→`76ec851` + 精确化逐文件删除的作用域）、
+`261f8c9`（★ 撤回「逐文件删除」方向 + 三条验收判据 + `targetCount` 语义）、
+`28e1eff`（`口径 11` 扩展之三 + `口径 16`）、`3e644a2`（`G-61` 第二种形态）—— 即 §17.9/§17.10/§17.11 的结论已落主干。
