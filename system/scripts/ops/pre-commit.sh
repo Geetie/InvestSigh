@@ -14,7 +14,9 @@
 #   本文件里凡"**无法确定被检对象/无法进入被检树**"的前置失败一律 `exit 2` ——
 #   它们不是"你改坏了"，而是"**判据与对象不同源**"（缺 `G-61`）。
 #   卡 13-O 已把 `run_gate` 的"门禁脚本不在被检树"改成 `2`；本卡（`#96`）补齐
-#   **根解析**这一族（三处），使**同一次提交里的输入错误只有一个码**。
+#   **"根/环境不明"这一族共五处**（三处根解析 + `cd` 进不去被检树 + 解释器不可用），
+#   使**同一次提交里的输入错误只有一个码**。★ 后两处是主理人在 `#96` 裁定里扩的范围：
+#   "半清空不是收口" —— 只改三处会让本卡要消除的缺陷**只消除一半**。
 #   ★ 调用点已枚举（`#96`）：① `.git/hooks/pre-commit` 薄壳（`exec sh`；git 只区分"零/非零"，
 #     **不解释 1 与 2 的区别**）② 人工 `sh system/scripts/ops/pre-commit.sh`
 #     ③ `tests/guards/*` 两条测试 ④ `install_hooks.sh --check`（只读内容、不看退出码）。
@@ -47,7 +49,15 @@ if [ -z "$REPO_ROOT" ]; then
   echo "  ★ 处置：本文件预期由仓库内的 git 钩子或手工 'sh system/scripts/ops/pre-commit.sh' 调用。" >&2
   exit 2
 fi
-cd "$REPO_ROOT" || exit 1
+# ★ 分类（`G-01`）：`cd` 进不去被检树 ⇒ **输入错误**（`exit 2`），不是违规。
+#   实测（2026-09-16，本树 HEAD=f014222）：`git` 给出一个不存在的根时，旧版只打 shell 的
+#   `cd: … No such file or directory` 然后 `exit 1` ⇒ 提交者被告知"你改坏了"，而根因是环境/输入。
+cd "$REPO_ROOT" || {
+  echo "pre-commit [INPUT-ERROR] 无法进入仓库根：cd '${REPO_ROOT}' 失败" >&2
+  echo "  ★ 这是**输入错误**（exit=2），**不是**违规：被检树进不去，与你的改动无关。" >&2
+  echo "  ★ 处置：检查该路径是否存在/可进入（cwd=${PWD}），或本文件的调用方是否传了错误的环境。" >&2
+  exit 2
+}
 
 # ★ 自检：根算错时**响亮失败**，不要让它退化成"所有门都扫不到对象而通过"。
 #   这正是本项目反复对抗的形态：**没有可检对象 ≠ 已验证**（`G-03`）。
@@ -71,9 +81,31 @@ if [ -z "$PY" ]; then
     if command -v "$cand" >/dev/null 2>&1; then PY="$cand"; break; fi
   done
 fi
+# ★ 分类（`G-01`）：**环境里没有可用解释器** ⇒ 输入错误（`exit 2`），不是违规。
 if [ -z "$PY" ]; then
-  echo "pre-commit: 找不到可用的 python" >&2
-  exit 1
+  echo "pre-commit [INPUT-ERROR] 找不到可用的 python（WORKBUDDY_PY 未设，三个候选都不在 PATH / 不存在）" >&2
+  echo "  ★ 这是**输入错误**（exit=2），**不是**违规 —— 环境缺解释器，与你的改动无关。" >&2
+  echo "  ★ 处置：export WORKBUDDY_PY=<解释器绝对路径>；或清空它让它回落到候选/python3。" >&2
+  exit 2
+fi
+# ★★ 解释器还必须**真的可用**（`#96` 扩的两处之一）。放过它会怎样 —— **实测**（2026-09-16，
+#   本树 HEAD=f014222，`WORKBUDDY_PY=/nonexistent/python`）：
+#       pre-commit → append_only_guard
+#       pre-commit.sh: line 131: /nonexistent/python: No such file or directory
+#       …（共 14 次）…
+#       pre-commit ✗ rule_key_alignment_guard 阻断（exit=127）
+#       pre-commit: 有门禁阻断，提交被拒。        ⇒ rc=1
+#   ⇒ **14 道门禁一道都没跑**，却全部被报成「阻断」= 把"环境错了"伪装成"你改坏了 14 道门禁"。
+#     这与 `G-61`（`rc=2` 被报成阻断）是**同一族的第四种形态**，且**假指责面积最大**（14 条）。
+#   ★ 判据用 `command -v` **或** `-x`：裸名（如 `python3`）只有前者成立，绝对路径两者皆可
+#     —— 单用 `-x` 会把"在 PATH 上的 python3"误判成不可用（实测过）。
+if ! command -v "$PY" >/dev/null 2>&1 && [ ! -x "$PY" ]; then
+  echo "pre-commit [INPUT-ERROR] 解释器不可用：'${PY}'（既不在 PATH，也不是可执行文件）" >&2
+  echo "  ★ 这是**输入错误**（exit=2），**不是**违规：环境里的解释器不可用，与你的改动无关。" >&2
+  echo "  ★ 若放过它（实测）：14 道门禁**一道都没跑**，却全部被报成「阻断（exit=127）」" >&2
+  echo "    ⇒ 把「环境错了」伪装成「你改坏了 14 道门禁」（与 G-61 同族，rc=127 形态）。" >&2
+  echo "  ★ 处置：export WORKBUDDY_PY=<可用解释器路径>；或清空它让它回落到候选/python3。" >&2
+  exit 2
 fi
 
 CODE_ROOT="$REPO_ROOT/system"
