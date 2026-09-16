@@ -1,0 +1,121 @@
+# rules/metric-sets.yaml —— 指标集注册表（**候选**，尚未安装进 `rules/`）
+#
+# 权威出处：`04_公司价值研究与深度标准/02_实现方案.md §C.1`（可配置的指标集定义 `rules/metric-sets.yaml`）
+#           `§C.2`（混合公司防指标串味的程序约束）/ `§C.3`（三类是否穷举 → 扩展机制）
+#           `§C.4`（指标 → 财务科目 → 每股指标 三层映射）
+#           `§B.1`（转化链路分段模型）/ `§B.2`（每段证据要求）
+# 落位复核：`00_交付施工图.md` §3.1 第 123 行 / §6 第 252 行（配置 · 阶段② · 出处 `Ch4 §C`）
+#
+# ★ 本文件是**候选**（`system/registry/rule-candidates/`）：`rules/**` 是 0444 + SHA256 锁
+#   （`Ch9 §3.10 J9` / 纪律 9-10），**模型对 `rules/` 无写权**。
+#   安装 = 主理人执行 `chmod -R u+w system/rules` → 复制本文件 → `python system/scripts/ops/lock_rules.py` 重锁。
+#
+# ★ 逐字转写纪律：每个键都能指回**设计节号 + 原文片段**；设计未给值 ⇒ `tbd` + `basis`；
+#   设计没写的键**不新增**。逐键对照表见 `system/reports/ws_ch2_rules_report.md`。
+#
+# ★ 单一真源纪律（`Ch11 §D.2`）：本文件所载值**均不属** `rules/freeze.yaml` 的 11 项待冻结参数，
+#   故如实落值，**无 `param_ref` 指针**（对照表已逐项核过）。
+#
+# ★ 命名张力（已登记，不擅自归一）：`§C.1` 行文用 `business.model_class` 作路由键，
+#   而 `§B.1` 的 `business` schema 块与 `04_.../01_需求拆解.md §4` 阶段①必填写 `business_type`；
+#   代码侧 `system/schema/models.py::Business` 已取 `business_type`（本文件仍照 `§C.1` 逐字用 `model_class`
+#   作**指标集侧**字段名，二者是同一概念的两侧写法，不在此新增第三个名字）。
+#
+# 只读（安装后）：0444 + SHA256。
+
+version: 1
+spec_anchor: "Ch4 §C.1"
+install_target: "rules/metric-sets.yaml"
+install_note: "由主理人安装到 rules/metric-sets.yaml 并跑 system/scripts/ops/lock_rules.py 重锁"
+
+# ── 路由（`§C.1` / `§C.3`）────────────────────────────────────────────────
+routing:
+  key: model_class                          # §C.1：「`business.model_class` 为路由键」
+  binding_field: business.metric_set_id      # §C.1：「`businesses.metric_set_id` 绑定」
+  metric_owner_field: business_id            # §C.1：「**`business_id → indicator_set` 绑定**：指标**挂在 `business_id`（非 `company_id`）**」
+  fallback_metric_set_id: MS-GENERIC         # §C.3：「未注册类型 | 归入 `MS-GENERIC` 并显式标注 `unregistered_model_class=true`」
+  fallback_marks_unregistered_model_class: true   # §C.3 逐字：显式标注 `unregistered_model_class=true`
+
+# ── 指标集注册表（`§C.1` 的 yaml 块逐条转写）──────────────────────────────
+metric_sets:
+  - metric_set_id: MS-HW-6STAGE
+    model_class: hardware
+    currency: n/a
+    stages: [order, production_schedule, shipment, acceptance, revenue, collection]
+    metrics: tbd
+    linked_accounts: [revenue, cogs, capex, inventory, receivables]
+    basis:
+      metrics: "§C.1 原文只给 item 字段模板 `{name, unit, source_class, linked_account}`（见本文件尾 `metric_item_fields`），**未给具体指标清单** ⇒ 待需求方/研究员拍板"
+      linked_accounts: "§C.1 原文 `[revenue, cogs, capex, inventory, receivables, ...]` —— 尾部 `...` 表示**科目集合开放**，此处只落原文点名的 5 项，不补第 6 项"
+
+  - metric_set_id: MS-CLOUD-5STAGE
+    model_class: cloud
+    currency: tbd
+    stages: [contract, energized, online, utilization, billing]
+    metrics: tbd
+    linked_accounts: tbd
+    basis:
+      currency: "§C.1 原文该条以 `...` 省略（结构同 MS-HW-6STAGE），**设计未给值**"
+      metrics: "同上：§C.1 该条 `...` 省略，设计未给具体指标清单"
+      linked_accounts: "同上：§C.1 该条 `...` 省略，设计未给科目清单"
+
+  - metric_set_id: MS-SW-5STAGE
+    model_class: software
+    currency: tbd
+    stages: [usage, paid, renewal, retention, upsell]
+    metrics: tbd
+    linked_accounts: tbd
+    basis:
+      currency: "§C.1 原文该条以 `...` 省略（结构同 MS-HW-6STAGE），**设计未给值**"
+      metrics: "同上：§C.1 该条 `...` 省略，设计未给具体指标清单"
+      linked_accounts: "同上：§C.1 该条 `...` 省略，设计未给科目清单"
+
+  - metric_set_id: MS-GENERIC
+    model_class: generic
+    currency: tbd
+    stages: tbd
+    metrics: tbd
+    linked_accounts: tbd
+    basis:
+      "*": "§C.3 只写「未注册类型 | 归入 `MS-GENERIC` 并显式标注 `unregistered_model_class=true`」——**未给字段值**（条目本身由 §C.3 逐字转写，`metric_set_id`/`model_class` 两个 token 是原文所给）"
+
+# ── 指标 item 模板（`§C.1` 原文 `metrics: [{name, unit, source_class, linked_account}]`）──
+metric_item_fields: [name, unit, source_class, linked_account]
+
+# ── 绑定校验（`§C.2`）────────────────────────────────────────────────────
+binding_guard:
+  guard: scripts/valuelayer/route_guard.py        # §C.2 代码块路径逐字
+  entry: validate_binding                          # §C.2 函数名逐字
+  rule_model_class_mismatch: raise MetricSetMismatch   # §C.2：「if business.model_class != metric_set.model_class … raise MetricSetMismatch」
+  rule_metric_owner_must_be_own_business: true     # §C.2：「for m in metric_set.metrics: assert m.owner_business_id == business.business_id」
+  cross_business_reference: forbidden              # §C.2：「指标只能写本业务分部科目，禁止跨业务引用」
+  rollup: scripts/valuelayer/rollup.py             # §C.2：「分部财务**在分部层完成后合并**」；rollup「只做分部→公司层加总，不做跨业务语义混用」
+
+# ── 扩展机制（`§C.3`）────────────────────────────────────────────────────
+extension_policy:
+  new_model_class_requires_code_change: false      # §C.3：「新增第 4 类（广告/代工/游戏内购…）| **只改 `rules/metric-sets.yaml`**（注册新 `metric_set` + 路由）| **否**（注册表驱动）」
+  unregistered_type_action: "归入 `MS-GENERIC` 并显式标注 `unregistered_model_class=true`"   # §C.3 逐字
+
+# ── 转化链路分段（`§B.1`：通用四段，按商业模式实例化）──────────────────────
+#   注：本节的**段名**与上面 `stages` 是同一批 token（§B.1 与 §C.1 复用），列此以便对照；
+#   通用四段逐字 = 「**获取 → 交付 → 使用 → 变现**」。
+conversion_chain_generic_stages: [获取, 交付, 使用, 变现]                    # §B.1 逐字：「**获取 → 交付 → 使用 → 变现**」
+conversion_chain_per_model_class:
+  hardware: "订单→排产/出货→验收→收入/回款"       # §B.1 逐字
+  cloud: "签约→通电/上线→利用率→收费"             # §B.1 逐字
+  software: "使用→付费→续约/留存→增购"            # §B.1 逐字
+
+# ── 每段证据要求（`§B.1` / `§B.2`）────────────────────────────────────────
+segment_evidence:
+  field: segment.pending_evidence                 # §B.1 逐字：「否则该段标"待补证"（`segment.pending_evidence=true`）」
+  evidence_field: segment.evidence                # §B.1 逐字：「每段必有 `evidence`（`claim_id[]`，接第六章）」
+  blocks_business_modeling: false                 # §B.2 逐字：「**不阻止**业务建模」
+  blocks_financial_link: true                     # §B.2 逐字：「但**阻止**该段进入财务连接（C）」
+
+# ── 三层映射（`§C.4`：指标 → 财务科目 → 每股指标）────────────────────────
+financial_link:
+  field: driver.financial_link                    # §C.4：「落 `facts/drivers.jsonl` 的 `financial_link`」
+  accounts: [revenue_segment, gross_margin, opex, capex, working_capital]   # §C.4 原文 `accounts: [revenue_segment, gross_margin, opex, capex, working_capital, ...]`（尾部 `...` = 开放）
+  per_share_metric: [eps, fcf_per_share, value_per_share]                         # §C.4 原文 `per_share_metric: eps | fcf_per_share | value_per_share`
+  formula_ref: "<DerivedValue ref>"               # §C.4 逐字：「`formula_ref: <DerivedValue ref>`  # 走 `scripts/compute/`」
+  cross_section_consistency_checker: scripts/valuelayer/completeness.py   # §C.4：「**跨节引用一致性**由 G 的形式校验器检查（驱动必须出现在财务连接里）」
