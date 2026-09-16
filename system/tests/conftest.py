@@ -213,8 +213,24 @@ def pristine_code_root() -> Path:
     return target
 
 
-_SESSION_LOCK = WORK_DIR / ".session.lock"
-"""夹具工作目录的**排他会话锁**（缺口 `G-RC-10` 的机器绑定）。"""
+_SESSION_LOCK = SYSTEM_ROOT / "tests" / ".pytest-session.lock"
+"""**排他会话锁**（缺口 `G-RC-10` 的机器绑定）。
+
+## ★ 为什么锁**不能**放在 `WORK_DIR`（`tests/.work/`）里面 —— 实测缺陷
+
+本锁的第一版放在 `WORK_DIR / ".session.lock"`，**互斥根本没生效**。根因是一条自相矛盾：
+`pytest_sessionstart` 的动作序列是「**先取锁 → 再 `_clear_work_dir(loud=True)`**」，
+而 `_clear_work_dir` 清空的正是 `WORK_DIR` 的**子项** ⇒ **我们自己把自己的锁删掉了**。
+⇒ 第二个会话随后可以照常取锁进入 ⇒ 锁形同虚设，而它给人的"已经排他了"是**假信心**
+（比没有锁更危险：没有人会再去人工确认）。
+
+**自证**：锁自带的 `test_lock_rejects_live_concurrent_session` 一直是红的 ——
+也就是说，**这个缺陷是被它自己的测试抓到的**（这正是"注入测试必须配反向对照"的价值）。
+
+⇒ 修法：锁放在 `WORK_DIR` **之外**（`system/tests/.pytest-session.lock`），
+使它**不可能**被 `_clear_work_dir` 波及。`.gitignore` 已忽略 `system/tests/.work/`，
+但**不**忽略本文件 ⇒ 需在 `.gitignore` 单独忽略（见该文件对应条目）。
+"""
 
 
 def _pid_alive(pid: int) -> bool:
