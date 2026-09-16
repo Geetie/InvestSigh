@@ -2,8 +2,13 @@
 
 把"外部文本"编排成一条受控链路：
 
-    raw 落盘（措施①载体） → 角色标注（措施①prompt） → 主张化（措施④，claim_nature 必填）
-        → 全过程**不调用**工具（措施③）→ 组装 prompt 数据段
+    raw 落盘（措施①载体） → 角色标注（措施①prompt） → **行幂等判定**（`Ch9 §3.5` 阶段②）
+        → 主张化（措施④，claim_nature 必填）→ 全过程**不调用**工具（措施③）→ 组装 prompt 数据段
+
+★ **行幂等**（本模块的写路径强制，此前只在 `scripts/ingest/real_collector.py` 内部成立）：
+  闸门键逐字取 `Ch9 §3.5` 阶段② = `(source_id, quote_hash)`；命中（同源同 `quote_hash`
+  的 claim 已入库）→ **跳过追加**，返回 `status="skipped"` + `note="DUPLICATE_CLAIM_SKIPPED"`
+  ——调用方**看得见**（`G-03`）。这是"重跑同日不重复落库"（`Ch9 §N9.2-11`）在**真实写口**上的落实。
 
 ★ 本模块**不解析**文本内容，故"外部文本无法改变规则内核 / 无法触发工具"是**结构性**的。
 
@@ -34,7 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from schema.store import append_records
+from schema.store import append_records, read_records
 
 from .annotate import AnnotatedData, annotate_as_data, assemble_prompt_context
 from .claims import build_claim
@@ -62,6 +67,7 @@ __all__ = [
     "STATUS_OK",
     "STATUS_DEGRADED",
     "STATUS_BLOCKED",
+    "STATUS_SKIPPED",
     "NOTE_EMPTY_EXTERNAL_TEXT",
     "NOTE_DECODE_DEGRADED",
     "NOTE_UNKNOWN_KIND",
@@ -71,6 +77,7 @@ __all__ = [
     "NOTE_SOURCE_UNREADABLE",
     "NOTE_RAW_PATH_REJECTED",
     "NOTE_MISSING_PAYLOAD_FIELDS",
+    "NOTE_DUPLICATE_CLAIM",
     "IngestResult",
     "process_external_text",
     "process_raw_file",
@@ -80,6 +87,14 @@ __all__ = [
 STATUS_OK = "ok"
 STATUS_DEGRADED = "degraded"
 STATUS_BLOCKED = "blocked"
+STATUS_SKIPPED = "skipped"
+"""**行幂等命中**：同源同 `quote_hash` 的 claim 已入库 → 跳过追加（`Ch9 §3.5` 阶段②）。
+
+★ 这是对既有状态域（`ok` / `degraded` / `blocked`）的**纯新增**取值，用于**新增的**幂等分支；
+  既有三态在**原有输入上的取值与语义逐字不变**（返回字段集合亦不变），故 `process_raw_file` /
+  `process_external_text` 的既有语义、异常契约不受影响。
+★ 显式取值（而非把命中折进 `ok`）是 `G-03` 的要求：调用方必须**看得见**"这是跳过、不是写入"。
+"""
 
 NOTE_EMPTY_EXTERNAL_TEXT = "EMPTY_EXTERNAL_TEXT"
 NOTE_DECODE_DEGRADED = "DECODE_DEGRADED"
@@ -90,6 +105,8 @@ NOTE_SOURCE_MISSING = "SOURCE_MISSING"
 NOTE_SOURCE_UNREADABLE = "SOURCE_UNREADABLE"
 NOTE_RAW_PATH_REJECTED = "RAW_PATH_REJECTED"
 NOTE_MISSING_PAYLOAD_FIELDS = "MISSING_PAYLOAD_FIELDS"
+NOTE_DUPLICATE_CLAIM = "DUPLICATE_CLAIM_SKIPPED"
+"""幂等命中的**显式** note（`G-03` / `R-03`：跳过必须带 note 前缀，不得静默）。"""
 
 
 @dataclass
@@ -120,6 +137,31 @@ def _derive_raw_name(source_id: str, raw_name: str | None, text: str) -> str:
     return safe
 
 
+def _existing_claim_keys(root: Path) -> set[tuple[str, str]]:
+    """已入库 claim 的**行幂等键**集合：`(source_id, quote_hash)`（`Ch9 §3.5` 阶段②逐字）。
+
+    > 「| ② 核验 | 原始物 | `claims`（含定位、主张性质）+ `claim_propagation` | (`source_id`,
+    >   `quote_hash`) | 无法定位 → 保留待核验任务 | ① |」——`Ch9 §3.5`
+
+    ★ **单遍**（`P-01`）：只读一次 `facts/claims.jsonl`，一次遍历建集合，调用方以 `in` 判定
+      —— 不做"对每一行再全表扫描"的 O(n²)。大表下 O(n) 建集合 + O(1) 命中，可用。
+    ★ **复用既有范式，不新造语义**：与 `scripts/ingest/real_collector.py::_existing_claim_ids`
+      （已入库 `claim_id` 集合）和 `scripts/graph/propagate.py::_idempotency_keys`
+      （已入库 `idempotency_key` 集合）是**同一写法**（读全表一次 → 集合 → `in`）。
+      ↔ 差异仅在**键的组成**：设计把阶段②的键逐字定为 `(source_id, quote_hash)`，
+      故此处按**二元组**建键（比 `claim_id` 的 `quote_hash[:12]` 截断更强，无截断碰撞面）。
+    ★ 缺 `source_id` 或 `quote_hash` 的行**不参与**建键（不以空串冒充有效键）。
+
+    本函数是**唯一**的 claim 行幂等键读取口（`G-06` 唯一真源）：`process_external_text` 只经此判定，
+      不另建第二条读取/比对路径。
+    """
+    return {
+        (str(row["source_id"]), str(row["quote_hash"]))
+        for row in read_records(root, "claims")
+        if row.get("source_id") and row.get("quote_hash")
+    }
+
+
 def process_external_text(
     root: str | Path,
     text: str,
@@ -144,12 +186,17 @@ def process_external_text(
     有序步骤：
       1) `store_raw(root, raw_name, text)` → 文本**只**进 `raw/`（不进 `rules/`）；
       2) `annotate_as_data(text, source_ref=raw_ref, locator)` → 角色标注；
-      3) `build_claim(...)` → `append_records(root, "claims", [claim])`（pydantic 校验兜底）；
-      4) 全过程**不调用** `request_tool`；`tool_calls` 取自本次 `tool_call_ledger`。
+      3) **行幂等判定**（`Ch9 §3.5` 阶段②，键 = `(source_id, quote_hash)`）：命中 → `skipped`；
+      4) `build_claim(...)` → `append_records(root, "claims", [claim])`（pydantic 校验兜底）；
+      5) 全过程**不调用** `request_tool`；`tool_calls` 取自本次 `tool_call_ledger`。
 
     ★ 空文本 → `status="degraded"` + `note="EMPTY_EXTERNAL_TEXT"`（**不得**当 PASS=已验证）。
     ★ 越界名（`ValueError`）→ `status="blocked"` + note（不崩溃）。
-    ★ `persist=False` → 不落 `claims.jsonl`，`claim_id` 仍返回（用于纯标注/预演）。
+    ★ **行幂等命中**（同源同 `quote_hash` 的 claim 已入库）→ **跳过追加**，
+      `status="skipped"` + `note="DUPLICATE_CLAIM_SKIPPED"` + 原 `claim_id`（`G-03`：不得静默；
+      重跑同日不重复落库，`Ch9 §N9.2-11`）。**只**在 `persist=True` 时判定。
+    ★ `persist=False` → 不落 `claims.jsonl`，`claim_id` 仍返回（用于纯标注/预演）；
+      此路径**不做**幂等判定（本就不追加，既有"返回 `ok` + `claim_id`"语义不变）。
     ★ system_time 三元组（`first_seen_at` / `analyzed_at` / `recorded_seq`）为**必填无默认**
       —— 本层不产生 `now()`（数据路径不得 import `datetime`），须由调用方传入（`Ch9 §2.2`）；
       缺省 / None → `build_claim` 运行期断言**响亮失败**（不静默落库）。
@@ -190,6 +237,23 @@ def process_external_text(
 
         quote_hash = _derive_quote_hash(text)
         claim_id = f"claim-{source_id}-{quote_hash[:12]}"
+
+        # ── 行幂等键（`Ch9 §3.5` 阶段② 逐字：`(source_id, quote_hash)`）──────────────────
+        # 同源同 quote_hash 的 claim 已入库 → **跳过追加**（返回 `skipped`，不静默，`G-03`）。
+        # ★ 只在 `persist=True` 判定：`persist=False` 是"纯标注/预演"（本就不追加），
+        #   其既有语义（返回 claim_id、不写库）逐字不变。
+        # ★ 单遍建集合 + `in` 判定（`P-01`），范式与 `real_collector._existing_claim_ids` 同源。
+        if persist and (source_id, quote_hash) in _existing_claim_keys(root_path):
+            return IngestResult(
+                raw_ref=raw_ref,
+                claim_id=claim_id,
+                annotated=annotated,
+                prompt_context=prompt_context,
+                tool_calls=ledger.tool_calls,
+                status=STATUS_SKIPPED,
+                note=NOTE_DUPLICATE_CLAIM,
+            )
+
         claim = build_claim(
             claim_id=claim_id,
             source_id=source_id,
