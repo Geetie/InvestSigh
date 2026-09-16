@@ -473,6 +473,28 @@ def _apply_links(
     return out
 
 
+def _last_recorded_values(rows: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    """每个 `claim_id` **最近一次记录到的非空值**（按 `recorded_seq` 升序遍历，后者覆盖前者）。
+
+    ★ 为什么要"最近记录值"而不是"最新版本的值"（实测踩到，`G-B10-07`）：
+      上游步骤（如 `Pipeline.run_daily` 的 step 1）会**内容不变地再追加一版** claim，
+      而那一版**不带派生的 `origin_claim_id` / `independent_evidence_count`**（写回 `None`）。
+      若只看"最新版本"，派生字段会被这版"抹掉"，本函数便**每次重写一遍** ⇒ 非幂等。
+      正确基线是"该 `claim_id` 上**曾经记录到**的值"：只要它 == 本次计算值，就**无需再写**。
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for row in sorted(rows, key=lambda r: int(r.get("recorded_seq") or 0)):
+        cid = str(row.get("claim_id") or "")
+        if not cid:
+            continue
+        slot = out.setdefault(cid, {})
+        for field in ("origin_claim_id", "independent_evidence_count"):
+            value = row.get(field)
+            if value is not None:
+                slot[field] = value
+    return out
+
+
 def record_claim_updates(
     code_root: str | Path,
     plan: OriginAttribution,
@@ -481,7 +503,9 @@ def record_claim_updates(
     """把 `origin_claim_id`（`plan.links`）与 `independent_evidence_count`（`counts`）**追加**落库。
 
     - 写入方式 = **追加新版本行**（`recorded_seq` 递增），**不改历史行**（`Ch9 §3.4.2` 追加式不可变）；
-    - **幂等**：最新版本已具备同值时**不**再追加（重复跑 0 新增）；
+    - **幂等**：以"该 `claim_id` **最近记录到的非空值**"为基线（`_last_recorded_values`），
+      值不变则**不**追加 —— 因此**上游再追加一版丢掉派生字段也不会触发重写**；
+      重复跑 **0 新增**；
     - 只对**最新版本**打补丁，返回本次**新增**行数。
     """
     from schema.models import Claim
@@ -491,6 +515,7 @@ def record_claim_updates(
     if not rows:
         return 0
     latest = {str(r.get("claim_id")): r for r in _latest_by_claim_id(rows)}
+    recorded = _last_recorded_values(rows)
     seq = max((int(r.get("recorded_seq") or 0) for r in rows), default=0)
 
     updates: list[Any] = []
@@ -498,10 +523,11 @@ def record_claim_updates(
         rec = latest.get(cid)
         if rec is None:
             continue
+        prior = recorded.get(cid, {})
         patch: dict[str, Any] = {}
-        if cid in plan.links and not rec.get("origin_claim_id"):
+        if cid in plan.links and prior.get("origin_claim_id") != plan.links[cid]:
             patch["origin_claim_id"] = plan.links[cid]
-        if cid in counts and rec.get("independent_evidence_count") != counts[cid]:
+        if cid in counts and prior.get("independent_evidence_count") != counts[cid]:
             patch["independent_evidence_count"] = counts[cid]
         if not patch:
             continue

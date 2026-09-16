@@ -165,6 +165,53 @@ def test_producer_is_idempotent_and_append_only(code_root: Path) -> None:
     assert len(read_records(code_root, "claim_propagation")) == prop_after_first, "重跑不得重复落传播行"
 
 
+def test_reappend_dropping_derived_field_does_not_trigger_rewrite(code_root: Path) -> None:
+    """★ `G-B10-07` 幂等硬化：上游**内容不变地再追加一版**且**不带派生字段** ⇒ 产出方**不得重写**。
+
+    这正是 `Pipeline.run_daily` step 1 的行为（实测：每跑 +1 版、派生字段回 `None`）。
+    若基线取"最新版本的值"，派生字段被这版抹掉 ⇒ 每次重写 ⇒ 非幂等（team-lead 实测复现）。
+    硬化后基线取"该 `claim_id` **最近记录到的非空值**" ⇒ 值不变即 0 新增。
+    """
+    claims = [_claim("root", source_id=_ANON_MESSAGE)] + [
+        _claim(f"re{i}", source_id=f"article-{i}", capability_root=_ANON_MESSAGE) for i in range(1, 4)
+    ]
+    append_records(code_root, "claims", claims)
+    classify_and_record(code_root)                      # 首次：写入 count / origin
+    n1 = len(read_records(code_root, "claims"))
+
+    # 模拟上游：内容不变、追加一版，但**不带**派生字段（recorded_seq 更大）
+    base = dict(_latest(code_root)["root"])
+    base.pop("independent_evidence_count", None)
+    base.pop("origin_claim_id", None)
+    base["recorded_seq"] = 100
+    append_records(code_root, "claims", [base])
+    n2 = len(read_records(code_root, "claims"))
+    assert n2 == n1 + 1, "前提：上游确实追加了一版"
+
+    assert classify_and_record(code_root) is not None
+    assert len(read_records(code_root, "claims")) == n2, (
+        "上游丢派生字段不得触发重写（否则非幂等，G-B10-07）"
+    )
+
+
+def test_new_claim_still_gets_count_reverse_control(code_root: Path) -> None:
+    """★ 反向对照（`G-05` 成对）：**真正的新主张**出现 ⇒ 产出方**必须**为其写入计数（不是"一律不写"）。"""
+    claims = [_claim("root", source_id=_ANON_MESSAGE)]
+    append_records(code_root, "claims", claims)
+    classify_and_record(code_root)
+    n1 = len(read_records(code_root, "claims"))
+
+    # 一条**全新** claim_id（此前从未有过计数）→ 必须被写入其计数
+    append_records(code_root, "claims", [_claim("late", source_id="late-src")])
+    n2 = len(read_records(code_root, "claims"))
+    assert n2 == n1 + 1
+
+    classify_and_record(code_root)
+    latest = _latest(code_root)
+    assert len(read_records(code_root, "claims")) == n2 + 1, "新主张必须被写入计数（证不欠写）"
+    assert latest["late"]["independent_evidence_count"] == 1, "新独立根：计数 = 1"
+
+
 # ───────────────────────────── (b) 3 条真独立 ⇒ 3 ─────────────────────────────
 
 
