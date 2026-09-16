@@ -1324,3 +1324,84 @@ $ sed -n '98,103p' system/registry/criterion_counterexamples.yaml
 | `verify.py` / `test_criterion_effectiveness.py` 冲突：**一个已解、一个未解** | 已上报 13-A |
 
 ⇒ **`#69` 保持 `in_progress`**：13-A 面**首次有被测对象**（工作区态），但**尚未提交**；本节所有结论**须在 commit 后按 hash 重跑一次**（`§13` 已给出全部可复跑命令）。
+
+---
+
+## §14 13-A 面 ②（新增键 / rules 消费面）与 ③（硬编码）—— **只读静态核，未跑其单测**（`V-05`/`V-08`）
+
+> 快照同 §13：**工作区态**（`main..ws/ch4-valuelayer` 零领先提交），`R8-1`/`R8-2` 之外的部分。**未改任何被审文件。**
+
+### §14.1 ② `rules/` 消费面：**唯一读口 + 只引用 2 件已安装件** ✅ 好
+
+```
+$ ls -1 system/scripts/valuelayer/
+__init__.py  _rules.py  completeness.py  growth_quality.py  moat_guard.py  rollup.py  route_guard.py  state_machine.py
+
+$ grep -rnE 'rules/|_cached_yaml|_rules\.' system/scripts/valuelayer/*.py | grep -v 注释
+system/scripts/valuelayer/_rules.py:32   from scripts._common import _cached_yaml          ← 走 P-02 的缓存读口
+system/scripts/valuelayer/_rules.py:34   BASELINE_RELPATH = "rules/baseline.yaml"
+system/scripts/valuelayer/_rules.py:35   METRIC_SETS_RELPATH = "rules/metric-sets.yaml"
+（其余模块**一律**经 `_rules.*`，无第二处 `_cached_yaml`、无第二处路径字面量）
+```
+| 事实 | 判词 |
+|---|---|
+| **只有 `_rules.py` 读 `rules/`**（其余 7 个模块全走它） | ✅ **好**（`G-06` 唯一读口，且 `P-02` 走 `_cached_yaml`） |
+| 只引用 **2 件**：`rules/baseline.yaml` + `rules/metric-sets.yaml`，**都是已安装件** | ✅ **好**（无引用未安装件 / 无自造路径） |
+| 无自造键：所有读取键都在已安装件里（`thresholds.*` / `metric_sets` / `routing.fallback_metric_set_id`） | ✅ **好** |
+
+**★ `tbd` 的处理我判 ✅ 好（且它自己给了"为什么必须处理"，是本轮我看到的最锋利的一段推理）**：
+```
+route_guard.py:140-146
+  """转成字符串元组；`None` / **`tbd`** / 空 ⇒ `()`（=「未声明」，不是"声明了一个叫 tbd 的值"）。
+     ★ 为什么必须显式处理 `tbd`：13-R 转写 `rules/metric-sets.yaml` 时，设计**没给值**的字段如实写了 `tbd`
+       （如 `MS-GENERIC` 的 `stages: tbd`、`MS-CLOUD-5STAGE` 的 `linked_accounts: tbd`）。
+       若照字符串处理，`stages: tbd` 会变成**一个名为 `tbd` 的段名** ⇒ 真实转化链的段名全被判成
+       "不在注册表里" ⇒ 假红；（`metrics: tbd` 更会逐**字符**迭代而直接抛异常）。
+       故 `tbd` 一律读作「**未声明**」，由各检查按 `G-03` 记"不可核"。"""
+```
+⇒ 这是把"`tbd` 是占位符不是值"**落成了代码**，而不是靠注释自律。
+
+### §14.2 ③ 硬编码：4 个新模块**没有硬编码阈值**；两道边界个案我都给了"为什么不是违规"
+
+扫描口径：在 `rollup.py` / `moat_guard.py` / `state_machine.py` / `route_guard.py` 里找 `[2-9]` 及以上的数字字面量（去掉注释/docstring 后）⇒ **命中全部落在 docstring、异常消息与设计引文里**，**无一处是阈值**。
+
+| 候选 | 情形 | 判词 + 为什么 |
+|---|---|---|
+| `moat_guard.py:19` `and len(kinds) >= 2` | **设计逐字**：`04_公司价值研究与深度标准/02_实现方案.md:311` 的 `§F.2` 代码块原文就是 `and len(kinds) >= 2   # 需证据组合（≥2 类）` | ✅ **不是违规**（`R8-3` 的判据是"**值住哪由谁定**"：此处**设计自己把值写在伪码里**，且**没有**要求"参数化到 rules" ⇒ 转写它就等于照设计落值。★ 注意反例：`baseline.yaml` 的阈值设计**明写**"占位 + 参数化 `rules/baseline.yaml`"，所以那一类才必须进 rules —— **同样一个"2"，两种判词，差别在设计的指派**） |
+| `growth_quality.py:247-252` 上限 | `limit = cfg.get("max_primary_drivers_per_business")`；`None` ⇒ `MissingRuleInput("…代码不内置默认值")`；`cfg` = `_rules.baseline_cfg(root)` = **`thresholds` 分组** | ✅ **好**（上限只从 rules 读、缺键响亮失败、**深度正确** —— 这正是 `R8-1` 的第二层） |
+| `route_guard.py:475-482` 兜底 id | `fallback_id = str(_rules.metric_set_routing(root).get("fallback_metric_set_id") or "")`，再与 `_rules.GENERIC_METRIC_SET_ID` 比对，不一致即报错 | ✅ **好**（真源在 rules，代码常量只作**一致性对照**，不一致就响） |
+
+### §14.3 ★ 一条**同一族的新观察**（我判"待裁定"，不下缺陷判词）—— `metric-sets.yaml` 的多数分组**全仓零消费者**
+
+`rules/metric-sets.yaml` 有 **11 个**顶层键。我逐键数了消费者（`scripts/valuelayer/` + **全仓**）：
+```
+分组（顶层键）                       13-A 内提及次数   全仓 scripts/tests 提及
+metric_sets                                 有（route_guard:193）      有
+routing.fallback_metric_set_id              有（route_guard:475）      有
+financial_link                                   6                     ——
+unregistered_model_class                         7                     ——
+binding_guard                                    0          ★ (exit=1) 零
+metric_item_fields                               0          ★ 零
+segment_evidence                                 0          ★ 零
+conversion_chain_per_model_class                 0          ★ 零
+conversion_chain_generic_stages                  0          ★ 零
+extension_policy                                 0          ★ 零
+routing.key / binding_field / metric_owner_field 0          ★ 零
+```
+★ 我**不判"缺陷"**，理由有二（这就是我承诺的"不是一刀切"）：
+1. `binding_guard` / `segment_evidence` / `conversion_chain_*` 的键名是**转写自设计节号**的（`metric-sets.yaml:79` 标 `§C.2`、`:103` 标 `§B.1`/`§B.2`、`:88` 标 `§C.3`、`:76` 标 `§C.1`），**不是**代码自造；设计给了这些**声明**，是否要求"运行时读"**设计没写**。
+2. `binding_guard` 的两条 `rule_*` 恰好是 **13-A 的 `rollup.py` 真正实现的规则**（跨业务直接引用 / `model_class` 不符）⇒ 更可能是"**声明面 + 门禁核**"的用法，而不是"valuelayer 运行时读"。
+⇒ 但它属于**我已报过的同一族**（`§12.2(b)`：`solution_set_display` "装了没人读"；`§12.3`：`scenario_tags` 零绑定）：**装了 ≠ 有人读**。
+⇒ **待你裁定/立卡**（我不擅动 `rules/`）：这些分组要么 ① 明确"**由门禁核**（哪一道）"并给出该门禁，要么 ② 明确"**首版不消费**"并登记（`G-03`：未消费 ≠ 已交付）。★ 顺带自曝：**这 4 件 rules 是 13-R（我）转写的** —— 所以这条观察**也是对我自己产出物的复查**，不是只挑别人的。
+
+### §14.4 §14 汇总
+
+| 项 | 判词 |
+|---|---|
+| `rules/` 唯一读口（只有 `_rules.py`）+ 走 `_cached_yaml`（`P-02`） | ✅ **好** |
+| 只引用 2 件**已安装**规则文件、**无自造键** | ✅ **好** |
+| `tbd` 一律读作"未声明"并记 `G-03`（含段名不会变成 `"tbd"` 的假红论证） | ✅ **好** |
+| 4 个新模块**无硬编码阈值** | ✅ **好** |
+| `len(kinds) >= 2`（设计伪码逐字） | ✅ **不是违规**（判据是"设计有没有指派参数化"） |
+| `metric-sets.yaml` 的 6–7 个分组**全仓零消费者** | ⚠ **待裁定**（不判缺陷；同族第三次） |
+| 未核部分 | 4 个新模块**未跑其单测**（避 `V-05`/`V-08` 配额）；结论仅覆盖静态读取链和数字扫描 |
