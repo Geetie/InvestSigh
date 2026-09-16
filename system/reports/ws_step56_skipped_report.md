@@ -2,7 +2,7 @@
 
 - **分支**：`ws/step56-skipped`（基 `main` = `2a8ca32`）
 - **工作树**：`/Users/gaza/Developer/InvestSigh/.worktrees/ws-step56-skipped`
-- **commit**：`5d0557c`（生产代码 + 测试；本报告随下一提交入库）
+- **commit**：`5d0557c`（生产代码 + 测试）、`84f20f0`（本报告）
 - **门禁**：`pre-commit` 11 道**全绿**（在 `git commit` 钩子内自动跑）；`run_all_gates.py --timeout 30` → `exit=1`，
   唯一红灯是 `traceback.py`（**既存**，见 §4.1，已用"修复前后逐字节对照"证明与本次改动无关）
 
@@ -232,7 +232,7 @@ GATES_EXIT=1
 $ git status --short
 （本单全部改动与本报告均已提交后：无任何输出 —— 未新增/修改/删除 facts/、derived/、state.json）
 $ git log --oneline -2
-<report-commit> docs(ws/step56-skipped): G-44 交付报告（本文件）
+84f20f0 docs(ws/step56-skipped): `G-44` 交付报告（本文件）
 5d0557c fix(compute/decision): step 5/6 幂等重跑如实上报 skipped —— 收 `G-44`
 ```
 
