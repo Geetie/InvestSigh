@@ -213,6 +213,95 @@ def pristine_code_root() -> Path:
     return target
 
 
+_SESSION_LOCK = WORK_DIR / ".session.lock"
+"""夹具工作目录的**排他会话锁**（缺口 `G-RC-10` 的机器绑定）。"""
+
+
+def _pid_alive(pid: int) -> bool:
+    """该 PID 是否仍存活（用于判定锁是否**陈旧**）。"""
+    import os
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True      # 进程存在但无权限发信号 → 保守视为存活
+    except OSError:
+        return True      # 其余 OSError 一律保守视为存活（宁可误报占用，不可误判空闲）
+    return True
+
+
+def _acquire_session_lock() -> None:
+    """取**排他会话锁**；已被**活着的**会话占用 → **响亮失败**。
+
+    ## ★ 为什么必须加（缺口 `G-RC-10`，实测踩到）
+
+    `pytest_sessionstart` 会调用 `_clear_work_dir()` —— 它**清空整个 `WORK_DIR`**。
+    若**同一个工作树**里同时有两个 pytest 会话，**后启动的那个**会把先启动者
+    **正在使用的夹具副本删掉** ⇒ 症状是"副本里应有的文件凭空消失"，
+    且**随机落在不同用例上**（实测 `tests/guards` 三跑三样，全是 `FileNotFoundError`、位置漂移）。
+    这正是 `CONVENTIONS.md::V-05` 明文禁止的情形。
+
+    ## 为什么这里**要**响亮失败，而 `_clear_work_dir` 里**只告警不中断**
+
+    两者取舍相反，是因为**性质不同**，不是自相矛盾：
+    - `_clear_work_dir` 那条针对**良性且自愈**的配额残留（重启一次就好）——
+      把它升级成"整批 1s 全红"比静默更坏，故只告警并继续；
+    - **本条针对的是会污染结论的并发冲突**：它**不会自愈**，且**必然产出假红**。
+      继续跑 = 制造一批"看起来像守卫坏了"的假缺陷 —— 而本项目的**假缺陷已经淹没过真违规**
+      好几次（`G-RC-03`、`G7`、`G9-1`、以及 `G-RC-10` 本身）。
+      ⇒ 必须**立刻停**，并给出**可行动**的处置（等它结束 / 换一个 worktree）。
+
+    ## 陈旧锁自愈
+
+    锁文件记 PID；若该 PID 已不存在（会话被 kill / 崩溃），视为**陈旧**并接管 ——
+    **不得**因为一次崩溃就永久锁死本工作树。
+    ★ 跨 worktree **不冲突**：每个 worktree 各有自己的 `system/tests/.work`。
+    """
+    import os
+
+    WORK_DIR.mkdir(parents=True, exist_ok=True)
+    if _SESSION_LOCK.exists():
+        try:
+            holder = int(_SESSION_LOCK.read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            holder = -1
+        if holder == os.getpid():
+            # ★ **同进程重复取锁 = 幂等**（实测踩到，务必保留）：
+            #   `pytest_sessionstart` 在**同一个进程**里可能被触发不止一次
+            #   （实测一次 `pytest <fileA> <fileB>` 就触发了两次）。若不做这个短路，
+            #   第二次会把自己**刚写的**锁当成"别人的"而**拒绝启动自己** ——
+            #   报错里 pid 与当前进程相同，极易被误读成"环境里真有别的会话"。
+            return
+        if holder > 0 and _pid_alive(holder):
+            # ★ 用 `pytest.exit` 而**不是** `raise`：后者会走成 `INTERNALERROR` + 堆栈，
+            #   读者容易误判成"pytest 自己坏了"；而真实语义是"**你把两个会话叠在一起了**"。
+            #   `returncode=4` 与既有的 0/1/2/3/124 全不冲突，便于在批次输出里一眼认出。
+            pytest.exit(
+                f"[V-05] 本工作树已有 pytest 会话在跑（pid={holder}），"
+                f"它正在用 {WORK_DIR}。\n"
+                "  继续会让**两个会话互删对方的夹具副本** ⇒ 随机假红，且看起来像『守卫坏了』。\n"
+                "  处置：① 等它结束；② 或把本次验证放到**另一个 git worktree**"
+                "（每个 worktree 有自己的 `system/tests/.work`，互不冲突）。\n"
+                "  依据：`CONVENTIONS.md::V-05`（两个 pytest 会话禁止并发）· 缺口 `G-RC-10`。",
+                returncode=4,
+            )
+        # 陈旧锁：持有者已不存在或文件损坏 → 接管（不得永久锁死）
+    _SESSION_LOCK.write_text(str(os.getpid()), encoding="utf-8")
+
+
+def _release_session_lock() -> None:
+    """释放会话锁（**仅当仍是自己持有**时才删，避免误删接管者的锁）。"""
+    import os
+
+    try:
+        if _SESSION_LOCK.read_text(encoding="utf-8").strip() == str(os.getpid()):
+            _SESSION_LOCK.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def _clear_work_dir(*, loud: bool) -> None:
     """清空夹具工作目录（**逐子项删**，且按需**响亮失败**）。
 
@@ -228,11 +317,15 @@ def _clear_work_dir(*, loud: bool) -> None:
     if not WORK_DIR.exists():
         return
     for child in list(WORK_DIR.iterdir()):
+        # ★ 会话锁**不在此清空之列**：它正是"本工作树有人在跑"的凭证，
+        #   删掉它就等于把自己刚取的锁清掉（`G-RC-10` 的机器绑定会立刻失效）。
+        if child == _SESSION_LOCK:
+            continue
         if child.is_dir() and not child.is_symlink():
             shutil.rmtree(child, ignore_errors=True)
         else:
             child.unlink(missing_ok=True)
-    leftover = list(WORK_DIR.iterdir())
+    leftover = [p for p in WORK_DIR.iterdir() if p != _SESSION_LOCK]
     if not leftover:
         return
     msg = (
@@ -258,12 +351,18 @@ def _clear_work_dir(*, loud: bool) -> None:
 #   残留的夹具副本会被 git 当源码提交（实测曾积累 53 个目录）。
 #   故在 session 起止各清一次 —— **临时目录绝不允许进入仓库**。
 def pytest_sessionstart(session: pytest.Session) -> None:
+    # ★ **顺序不能反**（`G-RC-10`）：先取锁，再清目录。
+    #   反过来的话，我们会在"确认本工作树无人"**之前**就把别人的夹具删掉 ——
+    #   而那正是这条锁要防的事。
+    _acquire_session_lock()
     _clear_work_dir(loud=True)
     _warn_if_fs_brokered()
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     _clear_work_dir(loud=False)
+    # 清完再放锁（放锁后别的会话才能进来清目录）。
+    _release_session_lock()
 
 
 def _warn_if_fs_brokered() -> None:
