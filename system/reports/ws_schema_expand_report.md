@@ -659,3 +659,209 @@ cd /tmp && rm -rf probe && mkdir probe && cd probe && \
 > 注：跑 pytest 前建议 `export CODEBUDDY_SAFE_DELETE_SANDBOX=0 CODEBUDDY_BROKERED_FS_HOOK_ENABLED=0`
 > （`scripts/ops/verify.py::_child_env` 的既定做法）：宿主 FS 垫片会把夹具的 `copytree` brokered 到宿主进程，
 > 实测在某个点阻塞。
+
+---
+
+## 六、会话中断续做（第二轮）——**独立复核 + 让位登记**
+
+> 本节只写 §2.2.1/§2.3 **没有**的内容。凡 §2.2.1 已结论的（13 批 700 条、`run_all_gates` 23/24、
+> `schema_sync_guard` objects 22），本节只做**不同方法的独立印证**，不重述。
+
+### 6.1 本轮唯一的代码改动：`19379c7` 去掉**重复 import**
+
+上一轮**并发写入者整文件覆盖** `models.py` 时，我补回的编辑与该文件里残留的同一行 import
+叠成了两行 `from .stems import JSONL_STEMS`（第 61、63 行），并已随 `83ff463` 提交。
+功能无影响（Python 幂等），但属明确冗余。本提交只删这一行（含其附带的空行，保持 PEP8 两空行）。
+
+★ **没有任何机器绑定能拦它**：实测 `run_all_gates.py` 的 24 项里**没有 lint / pyflakes 项**
+（`GATES` 元组全为项目自写检查器）⇒ F811「重复 import」不会被任何门禁报出。
+本轮是靠**人工复核**发现的 —— 登记为 `G-8`（见 §6.7）。
+
+### 6.2 独立复核 §2.2.1：**换一种方法**，结论逐条一致
+
+§2.2.1 的方法是 `git archive HEAD` → `/tmp` 导出副本。我这一轮用的是**另一种**方法，
+两条路径独立 ⇒ 结论互不依赖：
+
+```bash
+# ① 隔离 venv（不改用户环境；本轮实测该解释器里 pytest 已不存在，见 §6.5 注）
+python3 -m venv /tmp/wsse-venv
+/tmp/wsse-venv/bin/pip install -r system/requirements.txt
+python3 -m venv /tmp/wsse-venv && /tmp/wsse-venv/bin/python -m pip list | grep -iE 'pydantic|pytest|yaml|jsonschema'
+#   jsonschema 4.26.0 / pydantic 2.13.5 / pytest 9.1.1 / PyYAML 6.0.3  ← 与 requirements.txt 逐字一致
+
+# ② **真 git** 隔离树（关键：`git archive` 导出**没有 `.git`**，见 §6.3）
+git -C /Users/gaza/Developer/InvestSigh worktree add --detach /tmp/wsse-git 19379c7
+sh /tmp/wsse-git/system/scripts/ops/bootstrap_worktree.sh      # ← 必做，见 §6.3
+```
+
+| 批次 | 隔离树（本轮） | §2.2.1（对方方法） |
+|---|---|---|
+| unit | 70 passed in 1.28s | 70 passed |
+| conflict | 6 passed in 0.13s | 6 passed |
+| guards | 56 passed in 3.68s | 56 passed |
+| injection | 169 passed in 40.02s（首跑 55.09s） | 169 passed |
+| compute | 95 passed in 1.56s | 95 passed |
+| graph | 38 passed in 2.04s | 38 passed |
+| validators | 21 passed in 2.30s | 21 passed |
+| claim | 24 passed in 2.77s | 24 passed |
+| decision | 93 passed in 2.24s | 93 passed |
+| transmit | 29 passed in 2.05s | 29 passed |
+| evidence | 48 passed in 4.54s | 48 passed |
+| daily | 43 passed in 5.17s | 43 passed |
+| ch11 | 8 passed in 0.13s | 8 passed |
+| **合计** | **700，0 失败 0 error** | **700，0 失败 0 error** |
+
+```
+$ /tmp/wsse-venv/bin/python scripts/ops/run_all_gates.py --timeout 30   # 隔离树
+  非零计数                               1
+  （exit=0 共 23 项；唯一 exit=1 = traceback.py，见 G-2）
+```
+
+### 6.3 ★ 方法层新发现：**全新检出树上的必然假红**（复核者必读）
+
+在 `git worktree add` 检出的树上直接跑门禁，会先看到 **2 项与代码完全无关的假红**：
+
+```
+rules_lock_guard.py    exit=1   （10 条）[FATAL] 纪律 9 @ rules/*.yaml — 权限为 0o644，应为 0o444
+injection_guard.py     exit=1   （同上 10 条）
+```
+
+**根因**：`rules/` 的 `0444` 是**只读位**，而 **git 只跟踪可执行位、不跟踪只读位**
+⇒ 任何 `git worktree add` / 新 clone 检出出来的 `rules/*.yaml` 一律 `0644`。
+我的**真 worktree** 里它们是正确的 `-r--r--r--`（对照实测），所以这个假红**只在全新树上出现**。
+
+**我先查再判，没有登记成缺口**：项目**已有**专用脚本 `system/scripts/ops/bootstrap_worktree.sh`，
+其文件头注释逐字记录了这个伪影与"天天误报的门禁一定会被关掉（`CONVENTIONS.md §二 G-01`）"
+的处置理由。`sh scripts/ops/bootstrap_worktree.sh` 跑完两条守卫立即转 `PASS`，
+且脚本自身声明"只改权限位 ⇒ `git status`/`git diff` 一律为空"（实测确为空）。
+
+> ⇒ **对后续复核者的操作要求**：在任何**全新检出**（`git clone` / `git worktree add`）的树上
+> 跑门禁前**必须先跑 `bootstrap_worktree.sh`**，否则会把 2 条环境假红误读成实现缺陷。
+
+同一条理由也解释了 §6.2 为什么**不能**用 `git archive` 副本跑 git 依赖批次：
+`git archive` 不含 `.git`，`append_only_guard` 的 `git rev-parse --show-toplevel` 直接
+`rc=128 fatal: not a git repository` ⇒ 守卫 `exit=2`（实测）。**必须用真 git 树**。
+
+### 6.4 §2.3 的补充：**两处清单"一起改"也拦得住**（探针 3）
+
+§2.3 的探针 1/2 只证明了**单边漂移**被拦。只做这两条时，存在一个未检验的洞：
+**若 `stems.py` 与 `JSONL_MODELS` 同时增删同一张表**（"两边一起漂"），
+`set(JSONL_MODELS) == set(JSONL_STEMS)` 仍然成立 ⇒ 会不会**静默通过**？
+
+**探针 3（本轮补测）** —— 两边同时追加第 23 项 `probe_bogus_stem`：
+
+```
+$ /tmp/wsse-venv/bin/python -c "import schema.models"
+  File ".../schema/models.py", line 1910, in <module>
+    assert len(JSONL_STEMS) == 22, (
+AssertionError: facts/ 必须恰好 22 个 JSONL（需求方 2026-09-16 裁定：18 → 22，见 `T-13` 备选②），实为 23
+exit=1
+```
+
+⇒ **拦住的是 `len == 22` 冻结断言**。这条断言不是装饰：**删掉它，"两边一起漂"就会静默通过**。
+
+**顺带实测并判定"无需改动"**（避免过度设计）：`22` 这个字面量在代码区**只有两处刻意放置** ——
+`schema/models.py:1909`（实现侧冻结）与 `tests/unit/test_contracts.py:55`
+（**测试侧独立写下的设计契约**）。后者是"声明↔实现"对拍的另一半，**属项目认可模式，不是双真源**，
+故**保留**（`R-15 ③` 管的是"一个概念一个字段名"，不禁止"实现与测试各自独立声明后对拍"）。
+`schema_sync_guard` 的 `objects` / `registry_stems` 实测均为 22 且**从被检 root 的注册表现取**
+（源码 `:104 registry = build.__globals__["JSONL_MODELS"]`、`:139 set(objects) != set(registry)`，
+无字面表数）。
+
+### 6.5 真 worktree 红项：**根因链**与 §2.2.1 的删除配额相互印证
+
+§2.2.1 记录了宿主删除配额报错（`SAFE_DELETE_BULK_CONFIRM_REQUIRED`）。我这边观测到的是
+**同一条链的下游症状**，补全因果，避免后来人再把它当成实现缺陷：
+
+| 步 | 观测 |
+|---|---|
+| 1 | 宿主删除配额耗尽 ⇒ 夹具根目录**清不掉**；conftest 打印**它自带的**告警：「夹具工作目录未能清空（残留 1 项，例如 `['test_real_ingest_then_support-ada906b2']`）」 |
+| 2 | 残留目录存在 ⇒ 后续用例 `shutil.copytree` 的目标路径 ENOENT（`schema/store.py:87 FileNotFoundError`） |
+| 3 | 表现为 `tests/unit`、`tests/guards` **各 1 红**，并伴随**耗时暴涨** |
+
+**决定性证据（同代码、同时刻、两个环境）**：
+
+| 批次 | 真 worktree（被污染） | 隔离树（同 HEAD） |
+|---|---|---|
+| `tests/unit` | **60.55s**，1 failed | **2.22s**，70 passed |
+| `tests/guards` | **68.57s**，1 failed（copytree 目标 ENOENT） | **4.78s**，56 passed |
+
+- 残留目录名 `test_real_ingest_then_support-…` **不是我的用例**（§四 `G-4` 的第二个写入者仍在活跃）。
+- 把那个失败用例**单独**在真 worktree 里复跑：**4 passed / 20.22s** ⇒ **非确定性**。
+- ⇒ **与代码无关**；结论一律以隔离树为准。
+
+> 旁注（环境漂移，如实登记）：上一会话能跑通 pytest 的那个解释器
+> （`~/.workbuddy/binaries/python/versions/3.13.12`），本轮 `python3 -m pip list` 里
+> **只剩 `pydantic`/`pydantic_core`**，`pytest` 与 `jsonschema` 均**已不存在**。
+> 我**没有**去改用户环境，而是建了 `/tmp` 隔离 venv 按 `requirements.txt` 复现 ——
+> 实测装出的四个版本与清单**逐字一致** ⇒ 该清单**可复现**（本轮实测，非声明）。
+
+### 6.6 ★ 我**放弃** `#58`（`G-44`）—— 因为队友已在做同一件事，继续即制造**第二套幂等判据**
+
+`#58`（让 `scripts/compute/step.py` 与 `scripts/decision/step.py` 在幂等重跑时如实上报
+`StepOutcome.skipped`）我认领后已做完只读调查并写了 `compute/store.py` 的未提交改动。开工前
+按纪律先查了仓库现状，结果是**必须停手**：
+
+1. 队友 `ws-step56-skipped`（`.worktrees/ws-step56-skipped`，分支 `ws/step56-skipped`）
+   **正在做同一件事**，其未提交改动覆盖**同一批文件**：`compute/{driver,step,store}.py`、
+   `decision/{rules,run_decide,step}.py`、三个测试文件，外加新测试
+   `tests/injection/test_step56_skipped_wiring.py` 与探针目录 `tests/.probe-step56/`。
+2. 且其 `store.py` 的做法与我的改动**同构**：
+   `AppendOutcome(written, skipped)` dataclass + `append_derived_value_ids_detailed` 作唯一判据 +
+   `append_derived_value_ids` 降为"只取写入侧"的视图。
+   我的变体多一条"同批重复键计入 `skipped`"的穷尽性规则；而对方用
+   **互斥归一**（同一 `derived_id` 既写到新键又命中旧键时**以写入为准**，剔除出 `skipped`，
+   从而断言 `written ∩ skipped = ∅`）覆盖了同一不变量，且其选择（"本轮确实写了"是更强的事实）更保守。
+
+**判定与处置**：
+
+- 若我继续落地，仓库里会出现**同一个幂等判据的两份实现** ⇒ 直接违反 **`G-06` 唯一真源**
+  （本项目最贵的一类缺陷），且两份实现"总有一天会不一致"。
+- 故：把未提交改动**完整保存**到 `/tmp/ws_schema_expand_store_variant.diff`（109 行，已生成），
+  然后 `git checkout -- system/scripts/compute/store.py` **回退**，
+  使 `ws/schema-expand` **只含扩表交付**（`git status --short` 复核实为空）。
+- 该 diff 作为**参考输入**交给 `ws-step56-skipped`，**由它决定是否吸收**（不作要求）；
+  `#58` 的 owner 移交。
+- 我**没有**发明第三套，也**没有**为了保住自己的工作量而留下重复实现。
+
+### 6.7 本轮新增缺口登记
+
+#### G-8 ⚠️ 门禁**没有 lint 项** ⇒ 纯静态冗余（如 F811 重复 import）无任何机器绑定可拦
+
+- 实测：`scripts/ops/run_all_gates.py::GATES`（24 项）与 `scripts/ops/pre-commit.sh`（11 项）
+  **全部是项目自写检查器**，**无** pyflakes / ruff / flake8 类静态检查。
+- 后果：§6.1 的重复 import 一路进了 `83ff463`，**没有任何门禁报过**。
+- **我没有自行实施**（会引入外部依赖，属环境/工具链决策，超出扩表范围，且需与
+  `requirements.txt` 的"只声明、真源在 `PROGRESS.md`"约定一起改）。**建议由 team-lead 裁定**：
+  在 `GATES` 增一项 pyflakes（写进 `requirements.txt` 作 dev-only 依赖）。
+- 注意：这**不**动摇"声明↔实现必须机器绑定"的铁律 —— 它只是指出**当前绑定集合不覆盖静态冗余**这一类。
+
+#### G-9 本 worktree 的**并发写入者**本轮仍在写（补强 §四 `G-4`）
+
+- 新证据（本轮）：真 worktree 内出现**不属于我的用例**残留目录
+  `test_real_ingest_then_support-ada906b2`（§6.5）；同一分支上出现**我未做的提交**
+  `a3f68b1`（author `Geetie <23301010041@m.fudan.edu.cn>`，`20:47:44`）。
+- ⇒ 本报告所有"绿"的结论**只对提交 `a3f68b1` 这个快照成立**。
+- 我的对策不变：**改动后立即复核内容与 hash**；权威验证一律在**与工作树零共享**的隔离树上做。
+
+### 6.8 本轮复现方式（复核者可直接照抄）
+
+```bash
+# ① 隔离 venv（不污染用户环境）
+python3 -m venv /tmp/wsse-venv
+/tmp/wsse-venv/bin/pip install -q -r /Users/gaza/Developer/InvestSigh/.worktrees/ws-schema-expand/system/requirements.txt
+
+# ② 真 git 隔离树（★ 不能用 git archive：没有 .git，append_only_guard 必 exit=2）
+git -C /Users/gaza/Developer/InvestSigh worktree add --detach /tmp/wsse-git 19379c7
+sh /tmp/wsse-git/system/scripts/ops/bootstrap_worktree.sh   # ★ 必做：复原 rules/ 的 0444
+
+# ③ 门禁 + 逐批（一次一批，V-01）
+cd /tmp/wsse-git/system && export CODEBUDDY_SAFE_DELETE_SANDBOX=0 CODEBUDDY_BROKERED_FS_HOOK_ENABLED=0
+/tmp/wsse-venv/bin/python scripts/ops/run_all_gates.py --timeout 30     # 期望：非零计数 1（仅 traceback.py）
+for d in unit conflict guards injection compute graph validators claim decision transmit evidence daily; do
+  /tmp/wsse-venv/bin/python -m pytest tests/$d -q -p no:cacheprovider; done
+/tmp/wsse-venv/bin/python -m pytest tests/test_ch11_invariants.py -q -p no:cacheprovider
+
+# ④ 收尾（隔离树用完即删）
+git -C /Users/gaza/Developer/InvestSigh worktree remove --force /tmp/wsse-git
+```
