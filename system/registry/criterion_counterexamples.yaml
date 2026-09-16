@@ -1,0 +1,146 @@
+# registry/criterion_counterexamples.yaml —— **判据反例登记表**（缺口 `G9`）
+#
+# 权威出处：`CONVENTIONS.md` 铁律（「声明」与「实现」必须有机器绑定）+ `R-06`（判据须可判定 + 穷尽）
+#           + `G-03`（无被检对象 ≠ 已验证）
+#
+# ## 本表要解决的缺口
+#
+# `scripts/delivery/stage_gate.py` 的 `criterion("<stage>", "<id>", v)` 是**机器绑定**：
+# `bound_criteria()` 用 AST 抽出函数体内的字面量，`assert_criteria_implemented()` 据此
+# 把"YAML 声明为 automated"与"函数体真的绑了"做机器比对。
+#
+# ★ 但绑定只证明「**接了**」，不证明「**真的在查**」。独立审计实测（本表建立时的复现）：
+#   把 `cv = coverage_check(root)` 换成空 `CheckReport` → `scanned daily_run.criteria_bound: 4`
+#   **不变**，而不达标数据（`research_depth='bogus_depth'`）下门禁 `exit=0`（变绿）。
+#
+# ## 义务（由 `scripts/checks/criterion_effectiveness_guard.py` 强制）
+#
+# 1. **每一项已绑定（bound）的 automated 判据，必须在本表有一条登记** ——
+#    新绑一条判据却不登记 → 门禁 FATAL（`exit 1`）。这是本表的**唯一存在理由**。
+# 2. 登记里不得出现**未绑定/未声明**的判据（防"预登记"绕过第 1 条）。
+# 3. 每条登记指向的测试必须**真的存在**（用 AST 扫 `tests/**` 收集 `def test_*` 比对），
+#    且**测试函数名必须含判据 id**（防把登记改指向一个与本判据无关的、恒过的用例）。
+#
+# ## kind 的两种取值
+#
+# - `counterexample`：存在**不合规输入**，使该阶段门禁对该输入 `exit != 0`，
+#   且输出里出现 `blocked_hint`（该判据**专属**的拦截标记）。测试同时断言：
+#   合规输入下该 hint **不出现**（证明这条反例不是靠别的判据"顺带变红"）。
+# - `ineffective`：**实测无判别力** —— 找不到任何不合规输入能让该**方面**
+#   改变门禁的违例集合。此时必须给出 `reason`，且测试必须**断言"
+#   不合规输入下的违例集合与合规输入完全相同"**。
+#
+# ★ 同一判据**可以同时**有这两种条目（`(stage, criterion_id, kind)` 三元组唯一）：
+#   前者证明"所绑定的那个检查会拦"，后者证明"其字面语义的某个方面没被守"。
+#   本表的 `expansion::review_append_only` 就是这种形态。
+#
+#   ★ 为什么 `ineffective` 不是"改一行数据就绕过"的口子：那条探针测试若判据其实有判别力
+#     **当场就红**。所以"谎报 ineffective"要付出写一个必然失败的测试的代价，
+#     而不是一行数据编辑（项目铁律 5）。
+#   ★ `ineffective` 的条目会被门禁**逐条计入 note 并计数**（`G-03`：不得静默）。
+#
+# ## 只读
+# 本文件可写（`registry/**` 可写）；`rules/**` 才是 0444。
+
+version: 1
+spec_anchor: "CONVENTIONS.md（铁律：声明↔实现机器绑定）/ R-06 / G-03 / G-06"
+stage_gate: "scripts/delivery/stage_gate.py"
+guard: "scripts/checks/criterion_effectiveness_guard.py"
+
+counterexamples:
+  # ───────────────────────────── 阶段① prep ─────────────────────────────
+  - stage: prep
+    criterion_id: four_deliverables
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_prep_four_deliverables_blocks_on_missing_class
+    blocked_hint: "交付物项数应为 4"
+    note: "把 registry/prep_deliverables.yaml 的 deliverables 由 4 项削到 3 项 → 阶段① exit 1；合规输入下该字样不出现"
+
+  - stage: prep
+    criterion_id: rule_vs_impl_split
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_prep_rule_vs_impl_split_blocks_on_collapsed_layers
+    blocked_hint: "confirmed_rules 为空"
+    note: "把「已确认规则」层清空（只剩建议实现方式层）→ 两层不再显式区分 → 阶段① exit 1"
+
+  - stage: prep
+    criterion_id: caliber_tbd_placeholder
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_prep_caliber_tbd_placeholder_blocks_on_frozen_without_fields
+    blocked_hint: "frozen 但缺"
+    note: "把 rules/freeze.yaml 的 p01 由 freeze_status=tbd 改成 frozen 且不给 confirmed_by/confirmed_at/version → 切换非原子 → 阶段① exit 1"
+
+  - stage: prep
+    criterion_id: no_paid_required
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_prep_no_paid_required_blocks_on_paid_in_required
+    blocked_hint: "首版启动条件含付费订阅"
+    note: "把 registry/launch_criteria.yaml 的 required[0].requires_paid_subscription 置 True（红线二）→ 阶段① exit 1"
+
+  # ─────────────────────────── 阶段② nvidia_sample ───────────────────────────
+  - stage: nvidia_sample
+    criterion_id: six_step_chain_complete
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_nvidia_sample_six_step_chain_complete_blocks_on_missing_depth
+    blocked_hint: "六项深度缺"
+    note: "写一条缺 driver_model 的 baseline（前置产物齐备，阶段不再 BLOCKED）→ 六项深度不足 → 阶段② exit 1"
+
+  - stage: nvidia_sample
+    criterion_id: derivation_reviewable
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_nvidia_sample_derivation_reviewable_blocks_on_missing_computation
+    blocked_hint: "四要素"
+    note: "写一条四要素（适用项）不全的建议（缺 derived/ 计算底稿）→ traceback 覆盖率 < 1.0 → 阶段② exit 1"
+
+  # ──────────────────────────── 阶段③ core_chain ────────────────────────────
+  - stage: core_chain
+    criterion_id: multi_company_transmission
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_core_chain_multi_company_transmission_blocks_on_single_company
+    blocked_hint: "关系图公司数"
+    note: "关系图只涉及 1 家公司（自环边）→ 构不成多公司传导 → 阶段③ exit 1"
+
+  # ───────────────────────────── 阶段④ daily_run ─────────────────────────────
+  - stage: daily_run
+    criterion_id: timing_replayable
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_daily_run_timing_replayable_blocks_on_missing_run_date
+    blocked_hint: "缺 run_date"
+    note: "把 check_record.run_date 删掉 → 时点不可核 → 阶段④ exit 1；★ 该用例同时断言合规输入下阶段④ **exit 0**（判别力来自判据本身，不是别的判据顺带变红）"
+
+  - stage: daily_run
+    criterion_id: degrade_keeps_last_valid
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_daily_run_degrade_keeps_last_valid_blocks_on_dropped_ref
+    blocked_hint: "失败但未保留 last_valid_result_ref"
+    note: "「先正常完成持有产出、后失败且丢引用」→ 引用本该在却被置空 → 阶段④ exit 1（首日豁免不适用）"
+
+  - stage: daily_run
+    criterion_id: coverage_verifiable
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_daily_run_coverage_verifiable_blocks_on_illegal_depth
+    blocked_hint: "CV2"
+    note: "写一条 research_depth='bogus_depth' 的 company（不在四态内）→ 覆盖深度不可核 → 阶段④ exit 1。★ 该用例另有 `test_daily_run_coverage_verifiable_counterexample_is_load_bearing`：把副本里 coverage_check 换成空 CheckReport 后，**同一条反例即失效（exit 0）** —— 证明这条反例正好钉在审计所指的那个检查上"
+
+  # ───────────────────────────── 阶段⑤ expansion ────────────────────────────
+  - stage: expansion
+    criterion_id: review_append_only
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_expansion_review_append_only_blocks_on_missing_layer
+    blocked_hint: "三层复盘缺层"
+    note: "只给 research_quality + forecast_quality 两层复盘记录 → 缺 investment_result 层 → 阶段⑤ exit 1。
+      本条证明的是「该 id 所绑定的检查（三层复盘齐备）**有判别力**」。"
+
+  - stage: expansion
+    criterion_id: review_append_only
+    kind: ineffective
+    test: tests/injection/test_criterion_effectiveness.py::test_expansion_review_append_only_semantics_have_no_discriminating_check
+    reason: "该 id 的**字面语义**（delivery.yaml：append-only，(success, failure, pending) ⊆ 记录集，禁选择性删除）没有任何检查：AST 实测该 id 在代码区只出现 1 次（stage_gate.py:606 的 criterion() 声明本身）。门禁唯一与复盘相关的判别轴是 eval_layer **取值集合**，故『含失败记录』与『失败记录被选择性删除』两种输入给出**完全相同**的违例集合"
+    note: "★ 语义错位（缺口 G9-2）：id 声明的是 append-only，绑定的却是「三层齐备」。本条是**可执行证据**：一旦有人实现 append-only 检查，该探针测试当场变红，强制更新本登记与报告。"
+
+  - stage: daily_run
+    criterion_id: task_state_auditable
+    kind: ineffective
+    test: tests/injection/test_criterion_effectiveness.py::test_daily_run_task_state_auditable_has_no_discriminating_check
+    reason: "除 registry/delivery.yaml 的声明与 stage_gate 的 criterion() 声明之外，全仓库无任何检查（AST 实测该 id 在代码区只出现 1 次：stage_gate.py:575 的声明本身）；把任务 status 置为非法值 totally_bogus_status 时，阶段④ 的违例集合与合规输入**完全相同**（都是 0 条）"
+    note: "本条属**已绑定但无判别力**：'任务状态可核' 当前没有任何可观测的被检谓词（缺口 G9-1）。"
