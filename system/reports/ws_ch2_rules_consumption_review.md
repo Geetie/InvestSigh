@@ -2688,10 +2688,15 @@ done_empty_output_rows == no_change_day_exempt + degraded_empty_output + empty_o
    **完全相同的 2 条违例** ⇒ **继承自 `main`、与本卡无关**。
    （★ 复跑时我先用 `| tail -5` 读它的退出码，那是 `tail` 的 `rc` —— 违反 `口径 17`；
    已改为单独执行取 `rc=1`，见本节末的自查。）
-4. **本卡未跑"整仓 29 条回归"**：`G-60` 的删除配额约束下，本轮只跑了**同源面**
-   （`tests/daily` 全目录 + `tests/injection/test_wiring_guards.py` = **81 passed**）与
-   **14 道 pre-commit 门禁**（全绿）+ **27 道全量门禁**（26 绿 / 1 项继承自 main）。
-   跨面全量回归按纪律留给新的回合（不静默：这是**未跑**，不是**跑过**）。
+4. **本卡未跑"整仓 29 条回归"**：`G-60` 的删除配额约束下，本轮跑了**同源面 + 直接消费面**：
+   `tests/daily` 全目录 + `tests/injection/test_wiring_guards.py`（**81 passed**）、
+   `tests/injection/test_stage_gate.py` + `tests/injection/test_audit_regressions.py`（**24 passed**
+   —— ★ 这一对是**必须**的：`stage_gate.py` **import** `scripts/daily/degrade.py` 的
+   `holds_valid_result()`，而我改了 `degrade.py` 的内部取记录方式）；
+   `tests/guards` 全目录（**108 passed**，见 `#96`）；**14 道 pre-commit 全绿**；
+   **27 道全量门禁**（26 绿 / 1 项继承自 main）。
+   跨面的**其余**批次仍**未跑**（`injection` 的 7 个分片批等）—— 按纪律留给新的回合
+   （不静默：这是**未跑**，不是**跑过**）。
 5. 我**未**改动 `stage_gate.py`（`G-63` 的两个落点仍在）—— 那是另一张卡的范围。
 
 #### 17.16.8 我本轮的自查（又一次把"读数"读成"结论"的前一刻停住）
@@ -2705,3 +2710,496 @@ done_empty_output_rows == no_change_day_exempt + degraded_empty_output + empty_o
   ⇒ 差异 100% 来自**我方**（13-O 的改动），**不是** main 改了它们。
   我没有据此得出"main 也动了"的结论，而是先查 `git log` 再落纸。
 
+---
+
+### §17.17 卡 `#96` 实现：`pre-commit.sh` 的**根解析失败**改报 `exit 2`（`G-01`：输入错误 ≠ 违规）
+
+**主理人裁定**（`batch13_taskbook.md`「裁定 · 13-O 顺带两小件」第 2 条）：
+「`pre-commit.sh:29/33/41` 三处"仓库根解析失败/可疑"仍是 `exit 1`（按 `G-01` 应为 `2`）⇒ 另开小卡」，
+并明示「他的判断正确」（= 该另开卡，**不顺手改**）。本卡的**产物**就是那三行 + **单独反例**。
+
+#### 17.17.1 对象与取样（`口径 10` / `口径 9`）
+
+| 项 | 值 |
+|---|---|
+| 实施树 | 上述工作树 @ `ws/ch2-rules`，改动前 HEAD = `a6b70a9` |
+| 被测文件 | `system/scripts/ops/pre-commit.sh`（**只改"根解析"三处**，不动 14 条 `run_gate` 调用） |
+| 新增测试 | `system/tests/guards/test_precommit_exit_contract.py`（8 例，**零 conftest 依赖**） |
+| 门禁读数所属树 | 上述工作树 |
+
+#### 17.17.2 ★ 先枚举调用点（卡要求"不得只改不查"）—— 结论：**没有调用方区分 `1` 与 `2`**
+
+| # | 调用点 | 它怎么用退出码 | 受本改动影响的可能 |
+|---|---|---|---|
+| ① | `.git/hooks/pre-commit`（薄壳，13-O 装） | `exec sh "${root}/…/pre-commit.sh"` ⇒ **git 只区分"零 / 非零"**，不解释码值 | **无**（`1`→`2` 都是非零 ⇒ 提交照旧被拒） |
+| ② | 人工 `sh system/scripts/ops/pre-commit.sh`（本文件头部第 5 行写明这是正式用法；多份报告亦用） | 人读输出 | **改善**：输入错误不再伪装成"你改坏了" |
+| ③ | `tests/guards/*`（13-O 的 `test_hook_same_source.py` 与本卡新文件） | 断言具体码值 | **被本卡显式覆盖** |
+| ④ | `install_hooks.sh --check` | 只 `cmp -s` **内容** | **无**（不看退出码）；实测 `--check` 仍 `rc=0` |
+
+- **无 CI**：仓库根无 `.github/` / `.gitlab-ci.yml` / `Makefile`（实测 `ls`）。
+- `pre-commit.sh` **不引用** `verify.py` / `run_all_gates.py`（`口径 16`：它不跑 pytest）。
+- ⇒ **本改动是语义更正，不改变任何调用方的行为**；唯一新增的读者是**人**（诊断）与**测试**（契约）。
+  这一步是我按 `口径 10` 做的"先说清谁在读"，不是推断 —— 四个调用点逐个看过。
+
+#### 17.17.3 改了什么（三处；**码 + 措辞**都改）
+
+| 落点 | 情形 | 改前 | 改后 |
+|---|---|---|---|
+| ①`git rev-parse --show-toplevel` 失败 | 不在任何仓库里 | `pre-commit: 无法定位仓库根…` + `exit 1` | `pre-commit [INPUT-ERROR] 无法定位仓库根…` + 一行"这是输入错误不是违规" + 一行**处置** + `exit 2` |
+| ②根解析**为空** | git 成功但没给出路径 | `… 仓库根解析为空 …` + `exit 1` | 同上形态 + `exit 2` |
+| ③根解析**可疑**（`${root}/system/scripts` 不存在） | **没有可检对象**（`G-03`） | `… 根解析可疑 …` + `exit 1` | 同上形态 + `exit 2` |
+
+★ 措辞与 13-O 已落地的 `run_gate` 输入预检**同形**（`[INPUT-ERROR]` 前缀 + "这是输入错误不是违规" +
+  一行处置），使**同一次提交里的输入错误只有一个码、一种说法**。
+★ 三处**码相同（`2`）但成因措辞必须不同**（否则读输出分不出"没进仓库 / 根算错 / 没有可检对象"）——
+  这条由 `test_three_input_errors_are_textually_distinct` 钉住。
+
+#### 17.17.4 证据：手工实测 + 8 条用例 + `K0`–`K9` 可判红反例
+
+**手工实测**（本树真实脚本，`/tmp/pc96`）：
+
+```
+① 非 git 目录（GIT_CEILING_DIRECTORIES 钉住）
+   pre-commit [INPUT-ERROR] 无法定位仓库根（git rev-parse --show-toplevel 失败）
+   rc=2
+② 假仓库根（git init 但无 system/scripts）
+   pre-commit [INPUT-ERROR] 根解析可疑 —— '/private/tmp/pc96/fakeroot/system/scripts' 不存在（cwd=…）
+   rc=2
+```
+
+**`K0`–`K9` 反例探针**（每个实验改一行 `exit 2`→`exit 1`，`finally` 还原并**逐字断言还原成功**）：
+
+| 实验 | 打回成什么 | 结果 |
+|---|---|---|
+| `K0` | 不改 | `8 passed` |
+| `K1` | 落点① → `exit 1` | `exit=1`，**1 failed**（`test_non_git_dir_is_input_error`） |
+| `K2` | 落点② → `exit 1` | `exit=1`，**1 failed** |
+| `K3` | 落点③ → `exit 1` | `exit=1`，**1 failed** |
+| `K4` | **尾巴**把真违例也报成 `2`（反向越界） | `exit=1`，**1 failed**（对照用例） |
+| `K9` | 全部还原 | `8 passed`（现场未留补丁） |
+
+★ `K4` 是**双向**的：本卡既不许"输入错误报成违规"，也不许"违规报成输入错误"。
+  8 条用例里含一条**刻意与 13-O 重复**的"门禁脚本不在被检树仍 `2`" —— 两份证据互不依赖
+  （`G-03`：不靠单一证据），且它守的正是本卡改动的**同一段前置逻辑**。
+
+**回归**：`tests/guards` 全目录 **108 passed**（含 13-O 的 4 条）；`tests/daily` + `test_wiring_guards`
+**81 passed**；`tests/injection/test_stage_gate.py` + `test_audit_regressions.py` **24 passed**
+（`stage_gate` 是 `daily/degrade.py` 的**直接消费方**，见 §17.16.7 第 4 条）；
+**14 道 pre-commit 全绿**；`install_hooks.sh --check` **`rc=0`**（薄壳未漂移）；
+`run_all_gates` 27 道 **26 绿**（唯一非零仍是 §17.16.7 已归因的 `traceback.py`，继承自 `main`）。
+
+#### 17.17.5 ★ **同族未改清单**（不越卡面，如实登记 —— `R-04` / "不顺手改"）
+
+`pre-commit.sh` 里**还有两处**"环境/输入失败报 `exit 1`"，**本卡未改**：
+
+| 行 | 现状 | 为什么也属同族 | 我为什么没改 |
+|---|---|---|---|
+| `cd "$REPO_ROOT" \|\| exit 1` | 进入被检树失败 → `1` | 同样是"无法进入/定位被检对象" | `#96` 的产物段**枚举了三处**，不含它；团队纪律是"不顺手改"（`#96` 的由来正是 13-O 克制没顺手改） |
+| `找不到可用的 python` → `exit 1` | 环境无解释器 → `1` | 属**环境/输入**，不是被检对象违规 | 同上（且它连"根解析"都不是，families 更远） |
+
+★ **我的判断**：这两处按 `G-01` **也应**是 `2`（否则"同一次提交里的输入错误"仍有两个码，
+  本卡的**缺陷陈述**只被消除了一半）。**但改它们超出卡面**，故：
+  ① 不为它们写断言（**不为已知不一致背书**）；② 在此白纸黑字登记；③ **请主理人一句话裁定**，
+  若同意我下一轮一行改完（含两条对应反例）。★ 这是"**未改**"，不是"**没问题**"。
+
+#### 17.17.6 边界与未证（如实）
+
+1. **落点②（根解析为空）的实际可达性极低**：真 `git rev-parse --show-toplevel` 要么给路径、要么非零失败。
+   本卡用 PATH 前置**假 `git`**（打印空、`exit 0`）造出该态 —— 这证明的是"**契约在该输入下成立**"，
+   **不是**"生产里会出现这种输入"（`G-03`：可达性未证，如实标注）。
+2. 本卡**不动** `.git/hooks/pre-commit`（那是 13-O 装上的共享薄壳；本卡只改判据清单）。
+   实测 `install_hooks.sh --check rc=0` ⇒ 薄壳与模板一致，**无漂移**。
+3. 本卡**未**跑跨面全量回归（同 §17.16.7 第 4 条：`G-60` 配额约束下的同一取舍，仍是"未跑"不是"跑过"）。
+4. `pre-commit.sh` 是**全仓共享**（钩子执行它）⇒ 本改动若错会堵住所有人的提交。
+   故除 `K0`–`K9` 外，我还**先**在本树手工跑通两条输入错误路径与 14 道门禁**才**落库；
+   回滚方式很轻：`git revert` 本提交即可（无安装动作、无共享状态变更）。
+
+#### 17.17.7 我自己的失误（本卡，未落盘）
+
+- ★ 写测试时我把一个用例写成 `del tmp_path` **之后**又用 `tmp_path`（自伤 `NameError`）。
+  与 13-O 那次 `shift 2` **同型**：**载荷约定被我自己破坏**。
+  这次是**落盘前重读**发现的（未运行、未提交）。
+- ★ 写 `echo` 时我第一版又写了**双引号里的反引号**（`` 手工 `sh …` 调用 ``）——
+  在双引号里它是**命令替换**（与 `G-61` 那次 `command not found` 完全同型）。
+  落盘前改成单引号 `'sh …'`，并用 `/usr/bin/grep -n 'echo 双引号+反引号'` 全文复查（余下唯一命中是 13-O
+  已**转义**的那一处，安全）。
+- ★ 复查时我一度用 `python3 … | tail -5; echo rc=$?` 读 `traceback.py` 的退出码 ——
+  那是 `tail` 的 `rc`（`口径 17`）。已单独执行取到真值 `rc=1`，见 §17.16.7 第 3 条。
+
+
+
+---
+
+### §17.18 卡 `#96` 扩范围轮：**「根/环境不明」这一族补齐五处** + 我自己找到的**三处断言缺陷**
+
+> 本节是主理人 `#96` 裁定 ① 的执行记录（「那两处同族未改的 `exit 1`：改成 `2`，并入 `#96`」）。
+> **顺序纪律**：先收 `#96`（含扩的两处），再进 `G-65` —— 本节只记 `#96`，`G-65` 见 §17.19。
+
+#### 17.18.1 对象与取样钉死（`口径 10` / `口径 9`）
+
+| 项 | 值 |
+|---|---|
+| 实施树（对象） | `/Users/gaza/Developer/InvestSigh/.worktrees/ws-ch2-rules` @ 分支 `ws/ch2-rules` |
+| 改动前 HEAD | `15835d8`（其 `pre-commit.sh` 与 `f014222` 同版：三处根解析已 `2`，另两处仍 `1`） |
+| 取样时刻 | 2026-09-17 CST |
+| 被改文件 | `system/scripts/ops/pre-commit.sh`（**唯一**）+ `system/tests/guards/test_precommit_exit_contract.py` |
+| 门禁读数所属树 | 上述工作树（**不是**主仓） |
+
+#### 17.18.2 裁定 ① 的执行：这一族共**五处**，不是三处
+
+| # | 落点 | 触发条件 | 改前 | 改后 |
+|---|---|---|---|---|
+| ① | `git rev-parse --show-toplevel` 失败 | 不在任何仓库里 / `.git` 不可读 | `2`（13-O，`f014222`） | `2` 不变 |
+| ② | 根解析**为空** | `git` 成功但零输出 | `2`（同上） | `2` 不变 |
+| ③ | 根**可疑**（`${root}/system/scripts` 不存在） | 被检树没有 `system/` | `2`（同上） | `2` 不变 |
+| ④ | **`cd "$REPO_ROOT"` 失败** | `git` 给出一个不存在的工作树根 | **`1`** | **`2`** |
+| ⑤ | **环境里没有可用 python** | `WORKBUDDY_PY` 未设 + 三候选全无 | **`1`** | **`2`** |
+| ⑤' | **`WORKBUDDY_PY` 指向不可用的解释器** | 变量设了、但那个路径不是可执行/不在 PATH | **不检查 ⇒ 跑完 14 道全诬告** | **`2`** |
+
+★ **⑤' 是本轮真正重的一处，而它连"码"都不对**：改前**根本没有这道检查**，
+  于是 `"$PY" "$@"` 以 `127` 失败 14 次，`run_gate` 的 `else` 支把每一次都判成**违规**。
+  主理人裁定里说的「只改三处 ⇒ 本卡要消除的缺陷**只消除一半**」在 ⑤' 上比预想更严重：
+  **不是"码不一致"，是"没有码"**。
+
+★ 为什么 ④⑤ 也属**同族**（而非"另开一张卡"）：`G-01` 把 `2` 定义为
+  **"无法确定被检对象 / 判据与对象不同源"**。④ 是"对象（被检树）进不去"，
+  ⑤/⑤' 是"判据（python 门禁）根本没法加载" —— **两者都不是"你改坏了"**。
+  若只改三处，则**同一次提交里的输入错误仍有两个码**（① ② ③ → `2`，④ ⑤ → `1`），
+  本卡要消除的那句缺陷陈述**只被消除了一半**。
+
+#### 17.18.3 原始读数（改前 vs 改后，命令逐字）
+
+**P1（⑤' 坏解释器）** —— 真实树，`WORKBUDDY_PY=/nonexistent/python`：
+
+```
+$ WORKBUDDY_PY=/nonexistent/python sh system/scripts/ops/pre-commit.sh   # 改后
+rc=2
+pre-commit [INPUT-ERROR] 解释器不可用：'/nonexistent/python'（既不在 PATH，也不是可执行文件）
+  ★ 这是**输入错误**（exit=2），**不是**违规：环境里的解释器不可用，与你的改动无关。
+  ★ 若放过它（实测）：14 道门禁**一道都没跑**，却全部被报成「阻断（exit=127）」
+    ⇒ 把「环境错了」伪装成「你改坏了 14 道门禁」（与 G-61 同族，rc=127 形态）。
+  ★ 处置：export WORKBUDDY_PY=<可用解释器路径>；或清空它让它回落到候选/python3。
+```
+
+**P2（④ `cd` 进不去）** —— 假 `git` 打印一个不存在的根（`/tmp/pc96d/bin/git`）：
+
+```
+$ PATH=/tmp/pc96d/bin:$PATH sh …/pre-commit.sh          # 改后
+rc=2
+…/pre-commit.sh: line 55: cd: /nonexistent/pc96/nowhere: No such file or directory
+pre-commit [INPUT-ERROR] 无法进入仓库根：cd '/nonexistent/pc96/nowhere' 失败
+  ★ 这是**输入错误**（exit=2），**不是**违规：被检树进不去，与你的改动无关。
+  ★ 处置：检查该路径是否存在/可进入（cwd=/tmp/pc96d），或本文件的调用方是否传了错误的环境。
+
+$ PATH=/tmp/pc96d/bin:$PATH sh /tmp/pc96old/pre-commit-old.sh    # 改前（HEAD 版）
+rc=1
+/tmp/pc96old/pre-commit-old.sh: line 50: cd: /nonexistent/pc96/nowhere: No such file or directory
+        ↑ **全部输出就这一行**（shell 自己打的），无一句说明、无处置
+```
+
+★ **改前 P2 比我在裁定回复里说的更差**：我说"提交者被告知你改坏了"，
+  实测是**连这句都没有** —— `rc=1` 加一行 shell 的 `cd:`，**一个字都没解释**。
+  这是"失败通道静默"的**最弱形态**：有码、无因、无处置。
+
+**P3（⑤ 环境缺解释器）** —— `env -i PATH=<只含 git> HOME=<空>`，`WORKBUDDY_PY` 未设：
+
+```
+$ env -i PATH=/tmp/pc96e/bin HOME=/tmp/pc96e/home /bin/sh …/pre-commit.sh   # 改后
+rc=2
+pre-commit [INPUT-ERROR] 找不到可用的 python（WORKBUDDY_PY 未设，三个候选都不在 PATH / 不存在）
+  ★ 这是**输入错误**（exit=2），**不是**违规 —— 环境缺解释器，与你的改动无关。
+  ★ 处置：export WORKBUDDY_PY=<解释器绝对路径>；或清空它让它回落到候选/python3。
+
+$ env -i … /bin/sh /tmp/pc96f/tree/system/scripts/ops/pre-commit.sh          # 改前
+rc=1
+pre-commit: 找不到可用的 python
+```
+
+★ 三处新措辞**互不相同**（`无法进入仓库根` / `找不到可用的 python` / `解释器不可用`），
+  且都不含 `阻断`；四处（含原三处）**码同为 `2` 而因可分**（`test_three_input_errors_are_textually_distinct` 钉前两处）。
+
+#### 17.18.4 ★ 本轮的硬发现：`rc=127` 那 14 条假指责是**可复现**的，不再只是"手上的记忆"
+
+改前我只做过一次手工回放（当时记在 §17.17）。本轮我把它**固化成机器可复现**：
+把 14 道门禁**一律桩成 `exit 0`**，再把 ⑤' 的守卫条件改成 `if false;` ⇒ 输出**逐字复现**改前形态：
+
+```
+pre-commit: 判据树 HEAD=（无提交） · 本树门禁 14 道 · 判据=<夹具树>/pre-commit.sh
+pre-commit → append_only_guard
+…（14 行 `pre-commit → `：**每一道门都启动了**）…
+…/pre-commit.sh: line 163: /nonexistent/python: No such file or directory
+pre-commit ✗ append_only_guard 阻断（exit=127）
+…（14 行 `pre-commit ✗ … 阻断（exit=127）`）…
+                                                                     ⇒ rc=1
+```
+
+- **每一道门禁都"启动了"**（14 行 `pre-commit → `）⇒ 从输出看是"14 道判据都判你有问题"；
+- **而 14 道 python 一道都没真正跑**（全是 `No such file or directory`）；
+- 结论落在 `exit 1`（**违规**），`G-01` 契约下这句话的意思是"**被检对象有问题**"。
+
+★ 这比 `G-61`（`rc=2` 被报成阻断）更重：`G-61` 至少**码是对的、只是话错了**；
+  ⑤' 是**码与话同时错**，且**假指责面积最大**（14 条，一条不少）。
+★ **行号必须带版本号**：改前手工回放时是 `line 131`，本节复现时是 `line 163`
+  （因为本题的 guard 块把文件撑长了）—— 引用行号而不写版本＝**不可复核的证据**。
+
+#### 17.18.5 测试侧：我自己找到的**三处断言缺陷**（两次假红 + 一次恒真）
+
+本轮我把"输入错误没被报成违规"这句判据写成断言时，**在同一个坑里连踩三次**。
+三次都不是笔误，而是同一个根因，故列成表（**全部由反例实测抓出，不是纸上自查**）：
+
+| # | 我写的断言 | 它实际读到的"证据" | 后果 | 抓出它的反例 |
+|---|---|---|---|---|
+| 1 | `assert out.count("阻断") == 0` | **我自己诊断里的引文**：`却全部被报成「阻断（exit=127）」` | 假红 `assert 1 == 0` | 首次运行即红 |
+| 2 | `assert "exit=127" not in out` | **同一处引文**里的 `exit=127` | 假红（同为 `assert 1 == 0`） | 首次运行即红 |
+| 3 | 元断言 `assert _ACCUSE_PREFIX in src` | `pre-commit.sh` **注释里**为留证据逐字引的 `pre-commit ✗ rule_key_alignment_guard …` | **恒真**：删掉真的 `echo` 行后仍 `1 passed` | **K10** |
+
+**共同根因**：我为了"让人看懂"，把**改前的真实输出**逐字引用进诊断与注释；
+于是"**要检测的那个 token**"与"**解释它的文字**"**同形**（`G-62` 的"两个不同事实拥有同一可观测通道"，
+只不过这次同形的是**证据与解释**）。
+
+**修法（已落地）**：断言只读**代码路径唯一产生、且解释性文字不会复述**的东西：
+
+| 常量 | 值 | 为什么它骗不了 |
+|---|---|---|
+| `_ACCUSE_PREFIX` | `pre-commit ✗ ` | 只有 `run_gate` 的 `else` 支能产生 |
+| `_GATE_START_PREFIX` | `pre-commit → ` | 只有 `run_gate` 进门那行能产生 |
+| `_BLOCK_SETTLEMENT` | `pre-commit: 有门禁阻断，提交被拒。` | 只有结算成违规那一行能产生 |
+| `_EMITTERS`（元断言用） | `echo "pre-commit ✗ ` 等**发射语句的词法开头** | **注释里不会出现 `echo "…`** ⇒ 删掉发射行必红 |
+
+**顺带修掉的第二处（我自己 13-O/`f014222` 那轮写的）**：
+三处根解析用例里的 `assert "阻断" not in out` 是**装饰性**的 ——
+那三支改前的旧代码是 `echo "…无法定位仓库根…"; exit 1`，**根本不打「阻断」二字**
+⇒ 该断言**改前改后都成立**，对"这一支是否被错报成违规"**零鉴别力**（`G9` 的同一形状，
+而 `criterion_effectiveness_guard` 只审**已绑定的判据表**，审不到 `assert` 行）。
+⇒ 换成 `_GATE_START_PREFIX not in out`（**非恒真**：它钉住"前置输入检查没被挪到门禁循环之后"，
+挪了就会先打 14 次 `pre-commit → ` 再 `exit 2` —— 即"**先诬告全部门禁、最后再把码改正**"）。
+
+#### 17.18.6 `K1`–`K10` 十条反例（`/tmp/pc96_killtest.py`，10/10 有判别力）
+
+每个实验：备份 → 改一处 → 跑指定用例 → **无条件还原**（并断言字节复原）。
+
+| # | 反例（改什么） | 期望变红的用例 | 读数 |
+|---|---|---|---|
+| K1 | 落点① `exit 2`→`1` | `test_non_git_dir_is_input_error` | `1 failed` ✔ |
+| K2 | 落点② `exit 2`→`1` | `test_empty_root_is_input_error` | `1 failed` ✔ |
+| K3 | 落点③ `exit 2`→`1` | `test_root_without_system_scripts_is_input_error` | `1 failed` ✔ |
+| K4 | **越界**：结算行 `exit 1`→`2` | `test_real_violation_still_exits_1` | `1 failed` ✔ |
+| K5 | 落点④ `exit 2`→`1` | `test_cd_failure_is_input_error` | `1 failed` ✔ |
+| K6 | 落点⑤ `exit 2`→`1` | `test_missing_interpreter_is_input_error` | `1 failed` ✔ |
+| K7 | ⑤' 守卫条件 → `if false;`（= 改前行为） | `test_unusable_workbuddy_py_is_input_error` | `1 failed` ✔ |
+| K8 | 把 ⑤' 整块**搬到循环之后** | 同上 | `1 failed` ✔（红在 `_assert_not_accused`） |
+| K8b | 把**根可疑**检查搬到循环之后 | `test_root_without_system_scripts_is_input_error` | `1 failed` ✔（**隔离**验 `_assert_gate_loop_not_started`） |
+| K10 | **删掉** `echo "pre-commit ✗ …"` 那一行 | `test_accusation_prefixes_are_still_emitted` | `1 failed` ✔ |
+
+`K0` 基线 `12 passed`；`K9` 全部还原后 `12 passed`。**10/10** 反例有判别力。
+
+★ **`K8` 与 `K8b` 是刻意分开的**：`K8` 里先红的是"被诬告"那条（循环跑完 14 道全诬告），
+  "循环已启动"那条**被遮住了** ⇒ 若不隔离，我会把一个**没验过的断言**当成验过了。
+  `K8b` 单独把循环跑起来、同时**不产生**任何 `✗`/结算行，于是只剩"循环已启动"能抓 —— 它红了。
+  ★ 这正是我在 §17.16 批评过别人的形态（"两条判据对同一对象给出相反/重叠结论"），
+  **这一轮轮到我自己**：**多重断言的合取式里，前一条会遮住后一条**，必须逐条隔离验。
+
+★ **`K10` 是这十条里最讽刺的一条**：它守的是"**断言不许恒真**"，而它自己**先恒真了**。
+
+#### 17.18.7 边界与未证（**不声称穷尽**）
+
+1. **"这一族只有五处"是"我逐行读过本文件"的结论，不是机器证明。**
+   `Q8` 第 ① 条已如实登记：本文件不声称穷尽，也没有门禁能证明"再无第六处"。
+   我能给的**最强**陈述是：五处之外，`pre-commit.sh` 里其余的 `exit` 都是
+   `run_gate` 的 `return 0` / 结算支的 `exit 1`（违规）/ `exit 2`（输入错误）/ 末尾 `exit 0`。
+2. **`exit 2` 的语义在 git 侧被压平**：`.git/hooks/pre-commit` 薄壳 `exec sh …`，
+   git 只区分"零/非零"，**不解释 `1` 与 `2` 的区别**。⇒ 本改动的收益**全部落在"人读输出"与"测试契约"**，
+   **对 `git commit` 的行为零变化**（调用点枚举见 `pre-commit.sh:20-24`）。这一点不改＝不是遗漏，是刻意。
+3. **未跑**：`verify.py` 的 injection 7 片分片**仍未跑**（同 §17.17）。`tests/guards` 112 全绿、
+   `run_all_gates` 27 道里 `traceback.py` 在主干即红（`G-65`，**不属本卡**）。
+4. **`test_unusable_workbuddy_py_is_input_error` 的场景是"桩门禁"**：14 道桩是 `sys.exit(0)`，
+   所以它证明的是"**前置检查在循环之前**"与"**没被诬告**"，**不**证明"14 道真门禁的行为"。
+
+#### 17.18.8 裁定 ② / ③ 的接收
+
+- **② 我不接**（遵裁定）：`traceback.py` 主干红 + `run_all_gates`(27) ≠ `pre-commit`(14)
+  = **流程级缺口 `G-65`**（主理人已登记）；`G-63` 两落点分派 `ws-degrade-contract`（A）/`ws-daily-fix-engineer`（B）。
+  ⇒ 本轮我**一行都没碰** `traceback.py` 与 `stage_gate.py`/`degrade.py` 的判据（只改了 `pre-commit.sh` 与一个测试文件）。
+- **③ 我接**：`G-65` 的**可见性修复**见 §17.19（本轮随后执行）。
+
+#### 17.18.9 自查
+
+- ★ **同一个坑连踩三次**（17.18.5）—— 三次都是"我自己的解释文字成了断言的假证据"。
+  这**不是粗心**，是这个项目里反复出现的**同一条规律**在**测试侧**的投影：
+  **两个不同事实共享同一可观测通道**（`G-62`）。我把它登记为 `G-62` 的**第六型**（测试侧）候选：
+  「**解释性文字与被解释的输出同形** ⇒ 任何按 token 扫全文的断言都读到解释」。
+  建议的机械形态：**断言只许读"词法开头"或"发射语句"，禁读语义词。**
+- ★ **多重断言的遮蔽**（K8/K8b）—— 我在同一处写了"没被诬告"与"循环没启动"两条，
+  前一条在 K8 里遮住后一条 ⇒ 差点把未验的断言当验过。**修法**：每条否定断言都要有**只触发它**的反例。
+- ★ 我**没有**擅自把这条新规律写进 `CONVENTIONS.md`（那需要主理人裁定 —— 我在 13-O 那轮已经知道
+  "跨面写约定"要走裁定）；本节只做**登记**。
+- ★ 本轮所有"改前"读数均取自 `git show HEAD:…`（`15835d8`）落成的 `/tmp/pc96old/pre-commit-old.sh`，
+  **不是**凭记忆 —— 且锚点先核对过（`cd "$REPO_ROOT" || exit 1` 1 次 / `找不到可用的 python` 1 次）。
+
+---
+
+### §17.19 卡 `#96` §③：`G-65` 的**可见性修复**（两组门禁集合之差必须机器可见）
+
+#### 17.19.1 对象与取样钉死（`口径 10` / `口径 9`）
+
+| 项 | 值 |
+|---|---|
+| 实施树（对象） | `/Users/gaza/Developer/InvestSigh/.worktrees/ws-ch2-rules` @ `ws/ch2-rules` |
+| 改动前 HEAD | `0582804`（§17.18 的提交） |
+| 取样时刻 | 2026-09-17 CST |
+| 被改/新增 | `system/scripts/ops/pre-commit.sh`（改）、`system/scripts/ops/gate_set_diff.py`（**新**）、`system/tests/guards/test_gate_set_visibility.py`（**新**，13 例） |
+
+#### 17.19.2 缺口（`G-65`）与"**明确不做**"的那一半
+
+`GATES` **27 道** vs `pre-commit` **14 道**不是同一集合 ⇒ **13 道只在集成时跑，红着也不挡提交**。
+本树 27 道汇总（§17.19.7）里 `traceback.py exit=1` 就是**活样本**：它红着，而提交照过。
+
+★ **不做**：把 27 道塞进 `pre-commit`。理由（逐条）：
+① 会让每次提交变慢，而"**卡死的门禁 = 被关掉的门禁**"——**扩大**门禁集合反而**削弱**门禁；
+② `口径 16` 已定 pre-commit 不跑 pytest，而 13 道里的多数是 pytest 形态的检查器；
+③ 差的**存在**不是缺陷，**差的不可见**才是。⇒ 只买一行**可见性**。
+
+#### 17.19.3 做法：三个数都**派生**，且**两条独立派生必须对得上**
+
+| 数 | 谁产 | 手段 |
+|---|---|---|
+| 本树门禁数 | `pre-commit.sh` | `case` 扫 `${_SELF}` 的行首（13-O 原样，**不用 grep**，`V-10`） |
+| `run_all_gates` 集合 | `gate_set_diff.py` | **装载真源模块**取 `len(GATES)`（**不是**文本扫 `GATES`） |
+| 差值 `\|G \\ P\|` | 同上 | 集合差（`G \\ P`），**不是** `\|G\| - N` |
+
+★ **为什么用"装载"而不是"扫行"**：扫行只在"格式恰好如此"时成立，格式一变计数就**静默漂** ——
+  本卡**刚在同一行上实测过**这个形态（§17.19.4）。装载真源是 `G-06`（单一真源）的直接落实。
+★ **为什么第二条派生**：`pre-commit.sh` 的 `case` 与派生器的正则都在数"本树门禁"，
+  两者**手段独立**⇒ 不一致时报 `⚠ 两处派生不一致`（**不阻断提交**）。
+  "同一事实的两条派生必须对得上"是 `G-06` 在**派生层**的形态；只写一条，漂了没人知道。
+
+新行（真实树，逐字）：
+
+```
+pre-commit: 判据树 HEAD=0582804 · 本树门禁 14 道 · run_all_gates 另有 13 道（集成时跑） · 判据=/…/system/scripts/ops/pre-commit.sh
+```
+
+#### 17.19.4 ★★ 动手前先修掉一处**我自己在 13-O 写下的静默缺陷**（`$0` 相对路径）
+
+`_gate_count` 的派生用 `while … done < "$0"`，而本文件**稍后会 `cd "$REPO_ROOT"`** ⇒
+相对 `$0` 再也解不开 ⇒ 重定向失败 ⇒ **整个循环体一次都不执行** ⇒ 计数**静默停在 `0`**。
+
+实测（改前，本树 `0582804`，cwd = `system/scripts/ops`）：
+
+```
+$ sh pre-commit.sh
+pre-commit.sh: line 129: pre-commit.sh: No such file or directory
+pre-commit: 判据树 HEAD=0582804 · 本树门禁 0 道 · 判据=pre-commit.sh
+pre-commit → append_only_guard
+…（14 道**确实都跑了**）…
+pre-commit ✓ 全部门禁放行                                    ⇒ rc=0
+```
+
+★★ **这是本轮最该记的一条**：13-O 那一行**本来就是为了治"静默"**，
+  而它在**另一种调用方式**下**自己变成了静默**（报 `0 道` 且 `exit 0` 说"全放行"）。
+  ⇒ "可见性输出"本身也是判据，**它也要被反向验证**；否则它就是**假证据的来源**。
+
+**两处修法（独立的两个保险）**：
+
+1. `$0` 在**任何 `cd` 之前**钉成绝对路径（`_SELF`）⇒ 拿回**真数**；
+2. 计数**取不到时不许报 `0`**，改写"**取不到**（⚠ 不得当作 0）"⇒ **不许说谎**。
+   ★ 第 2 条是**独立**的：即使 `_SELF` 又坏了（例如被 `source` 调用），也只会有"取不到"，不会有假数。
+
+#### 17.19.5 验收 ① ② ③ 的原始读数
+
+**① 两个数各自与实际集合一致** —— `test_numbers_match_the_actual_sets`：
+测试自己 parse `pre-commit.sh`（`_GATE_RE`）+ 自己 `importlib` 装载 `run_all_gates.py`，
+用**第三条独立路径**现算 `(|P|, |G\\P|)` 与输出对；并钉住 `P ⊆ G`（否则"另有"会被**低报**）。
+
+**② 增/删一道门禁 ⇒ 两个数自动跟着变**（`/tmp/g65_killtest.py`，A1–A4 全 PASS）：
+
+| 实验 | 改什么 | 本树门禁 | 另有 | `⚠ 未登记` |
+|---|---|---|---|---|
+| A1 | 把 `traceback`（已在 `GATES` 里）**提升**为提交时门禁 | `14→15` | `13→12` | 无 |
+| A2 | 加一道**未登记**的门禁 | `14→15` | **`13→13`** | **有**（点名 `zz_fake_guard.py`） |
+| A3 | **删掉**一道提交时门禁 | `14→13` | `13→14` | 无 |
+| A4 | 被 `source` 调用（`$0`≠本文件） | **`取不到`** | `27 道（两集合之比不可得）` | — |
+
+★ **A2 是这三格里最有信息量的**：「另有」**没变**，而且**这是对的** —— 集合差**真的**没变，
+  新增的是"**两处口径不一致**"（`G-07`）。若实现写成"机械地 `|G| - N`"，
+  就会报 `12`，把"不一致"伪装成"差变小了"（`G-62`）。⇒ `B4` 反例专门打这一点，**红**。
+
+**③ 全道 PASS 不受影响**（真实树，逐字）：
+
+```
+$ sh system/scripts/ops/pre-commit.sh
+rc=0   ·   `pre-commit → ` 14 次  ·  `pre-commit ✗ ` 0 次  ·  `阻断` 0 次  ·  `[INPUT-ERROR]` 0 次
+末尾：pre-commit ✓ 全部门禁放行
+```
+
+#### 17.19.6 `B1`–`B8` 八个反例（`/tmp/g65_killtest2.py`，8/8 有判别力）
+
+| # | 反例 | 期望变红的用例 | 红在哪（**原文**） |
+|---|---|---|---|
+| B1 | `$0` 打回裸 `$0` | `…does_not_silently_count_zero` | 行里出现 `**取不到**（⚠…）` ⇒ `_numbers` 解析失败（**不是**报 0：两个保险独立生效） |
+| B2 | 删掉"取不到"那一支 | `…is_not_reported_as_zero` | `AssertionError: 取不到时报了 0 道（假数）` |
+| B3 | 删掉可见性行 | `…real_tree_still_passes…` | `输出里没有可见性行` |
+| B4 | 「另有」改成机械 `\|G\|-N` | `…unregistered_gate_is_flagged` | `assert 12 == 13` —— "集合差没变却把「另有」改了" |
+| B5 | 删掉"未登记"告警 | 同上 | `未登记的门禁没被点名` |
+| B6 | 派生器取不到时报 0 | `…missing_module_says_unavailable_not_zero` | 输出里出现 `另有 0 道` |
+| B7 | 删掉交叉核对 | `…flags_cross_check_mismatch` | 不再报 `两处派生不一致` |
+| B8 | 改发射字面量 | `…emitted_literals_are_still_in_the_sources` | 元断言命中 |
+
+`B0` 基线 `13 passed`；`B9` 全部还原后 `13 passed`。
+
+#### 17.19.7 `run_all_gates` 27 道汇总（本树，`--timeout 60`）
+
+**26 绿 + 1 红**：红的是 `traceback.py`（`exit=1`，**主干即红**，见 §17.16.7 的归属判定）。
+本卡改动**没有**引入任何新红。
+```
+conflict_scan 0 · append_only_guard 0 · rules_lock_guard 0 · registry_schema_guard 0 ·
+schema_sync_guard 0 · assert_gate_input 0 · freeze_guard 0 · launch_guard 0 · module_denylist 0 ·
+no_signal_day 0 · no_placeholder_guard 0 · neutrality_check 0 · return_guard 0 · anti_padding 0 ·
+gap_to_task 0 · **traceback 1** · pipeline 0 · stage_gate(--stage prep) 0 · injection_guard 0 ·
+verification_policy_guard 0 · shell_var_guard 0 · graph_integrity_guard 0 · locator_check 0 ·
+criterion_effectiveness_guard 0 · quote_provenance_guard 0 · scenario_tag_binding_guard 0 ·
+rule_key_alignment_guard 0          非零计数 = 1
+```
+★ 这张表**就是 `G-65` 的收益证明**：那个 `1` **红着**，而**提交照过**（`pre-commit` 不看它）。
+  此前这件事**只在有人手工跑 27 道时才能发现**；现在每次提交的第一行就写着"另有 13 道（集成时跑）"。
+
+#### 17.19.8 门禁抓出真问题一次：`SWALLOW_EXCEPTION_CONTINUE`
+
+派生器初版取不到数时写的是 `except Exception: return None` ——
+被 **`no_placeholder_guard::SWALLOW_EXCEPTION_CONTINUE`** 当场拦下（`scripts/ops/gate_set_diff.py:64`）。
+
+★ **它抓得对，我没有加豁免**：`return None` 会让"**文件不在本树**"与"**装载失败**"
+  在调用方**看起来一模一样**（`G-62`）—— 而这恰恰是**本节自己**要消灭的形态。
+★ 修法照本项目**已两次记录**的做法（`scripts/ops/sample_batch_times.py::_read_log_header`、
+  `scripts/daily/coverage.py:145`）：**返回带原因的字符串**（返回类型写成 `list[str] | str`），
+  失败**携带原因**并进入输出。实测四种失败各报各的：
+```
+文件不在本树：run_all_gates.py
+装载失败（SyntaxError: invalid syntax (broken_gates.py, line 1)）
+无法按路径装载（spec/loader 为空）：pre-commit.sh
+`GATES` 是空序列（⚠ 空 ≠ 没有门禁 —— 不得当作 0）
+```
+★ 记功一句：**这是本卡"门禁在起作用"的第三个独立证据**（前两次见 §17.16/§17.17）。
+
+#### 17.19.9 边界与未证
+
+1. `gate_set_diff.py` **永不阻断提交**（`rc` 恒 `0`，除用法错误 `2`）—— **刻意的**：
+   它是可见性工具，不是门禁。⇒ "有人看见差却不当回事"这件事，**本卡管不了**。
+2. "两处口径一致"只在**危险方向**（本树有、`run_all_gates` 无）报 `⚠`；
+   反向（`run_all_gates` 有、本树无）**本来就是本卡要暴露的正常差**，不是缺陷。
+3. 本卡**没有**机器强制"那 13 道在集成时**确实**有人跑" —— `run_all_gates` 是一份**清单**，
+   **不是调度器**。⇒ 差可见 ≠ 差会被处理。
+4. `$0` 的修法只覆盖"脚本被**当脚本**执行"这一族；被 `source` 时仍取不到数，
+   此时输出"**取不到**"（B1/A4 已实测）——**这不修**，因为"被 source"本就不是本文件的用法。
+5. `tests/guards` 由 **`125 passed`** 覆盖（112 → +13）；**未跑**：injection 7 片（同 §17.17/§17.18）。
+
+#### 17.19.10 自查
+
+- ★ **本轮最重的一条是自己打自己**：13-O 那行"可见性输出"在**相对路径调用**下
+  **自己变成了假数**（`0 道` + `exit 0` "全放行"）。我是在**给同一行加东西之前**
+  顺手探了一下才发现的 —— **如果我直接加新行不改它，这个假数会一直留着，而且新行会站在它旁边**。
+  ⇒ 教训：**"可见性输出"也是判据，必须与普通判据一样做反向验证**（`G9` 的同一形状）。
+- ★ 我**没有**把"27 道塞进 pre-commit"当作"更彻底的修法" —— 那会把**门禁变慢**，
+  而慢门禁会被绕过；`口径 16` 也已定 pre-commit 不跑 pytest。**扩范围 ≠ 收口**。
+- ★ 我**没有**擅自新增 `CONVENTIONS.md` 条目（`G-65`/"可见性输出须反向验证"两条都只在本报告登记，
+  等主理人裁定）。
