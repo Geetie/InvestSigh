@@ -406,17 +406,39 @@ $ python system/scripts/ops/verify.py --list
 ## 六、提交与仓库状态
 
 见本报告提交本身及其**前置提交**（下方 `git log` / `git status` 为提交后的实录）。
-★ 报告无法把**自身所在提交**的 hash 写进自身文本（自指），故：
-
-```
-（提交后由 §6.1 补写）
-```
+★ 报告无法把**自身所在提交**的 hash 写进自身文本（自指），故本报告**本体**的提交用
+`git log -1 -- system/reports/ws_verify_shard_report.md` 查；**实质改动**由下面两个提交承载。
 
 ### 6.1 提交后实录
 
 ```
-（提交后由 §6.1 补写）
+$ git log --oneline -3                      # 分支 ws/verify-shard（基于 main = 016f311）
+6a4bd2f fix(verify): 分片超时改以「工作树实测」标定（统一 300s）+ 更正三处不成立的论证
+2012150 fix(verify): injection 批按显式文件路径分 6 片（原目录全量批事实上被宿主配额关掉）
+016f311 docs: T-13 已裁定「扩表 18→22」；登记 G-RC-09 / G9-1 / G9-2 / G-28
+
+$ git status --short                        # 本工作树
+(空 —— 零未提交改动)
+
+$ cd /Users/gaza/Developer/InvestSigh && git status --short    # 真仓库（main）
+ M system/reports/ws_independent_audit_batch11.md
+   ↑ ★ 这一条**不是本单**改的（本单从未写主仓库；它是另一位 Agent 的未提交改动，
+     与开工时看到的 ` M system/reports/phase1_open_tensions.md` 一样属并行工作流的在途状态）
+
+$ git diff --stat HEAD -- '00_*.md' '01_*' … '11_*'          # 设计区
+(空 —— **设计区零改动**，符合 R-05)
+
+$ python system/scripts/checks/verification_policy_guard.py system
+RESULT: PASS（0 violations）      # 20 批 / 26 目标 / 56 测试文件 / 未覆盖 0 / max_timeout 300
+
+$ pre-commit
+pre-commit ✓ 全部门禁放行          # 两个提交都在全绿下落地（**未用 --no-verify**）
 ```
+
+| 提交 | 内容 |
+|---|---|
+| **`2012150`** | 41 例纯移动拆分（+`_guard_common.py`）、`verify.py` 6 片显式文件路径 + `INJECTION_SHARDS`、`test_shard_coverage.py` 四条机器绑定、`CONVENTIONS.md::V-02` 15→20 批 + 6 轮次代价、报告首版 |
+| **`6a4bd2f`** | 超时改以**工作树实测**标定（统一 300s）+ 更正三处不成立的论证（隔离副本标定 / `32×273<9999` / 我的并发误判）+ 配额归因 + 配额触顶后本轮不恢复的实测 |
 
 ---
 
@@ -425,7 +447,8 @@ $ python system/scripts/ops/verify.py --list
 | 证据 | 位置 | 是否入库 |
 |---|---|---|
 | 6 片隔离副本原始日志 | `system/reports/verify_shard_isolated_injection-{a..f}.log` | 否（`reports/*.log` 被 `system/.gitignore` 忽略，留盘可查） |
-| 工作树 `injection-a` 超时留档 | `system/reports/verify_injection-a_latest.log`（`exit=124`，`耗时 60.01s`） | 否（同上） |
+| 工作树内逐片留档（最新即 `latest`） | `system/reports/verify_injection-{a..f}_latest.log`（a `exit=0/63.67s` · b `exit=0/123.08s` · c 配额触顶 `exit=1/7.35s`） | 否（同上） |
+| 工作树 `injection-a` 超时留档（**初次误判的那次**） | `system/reports/verify_injection-a_2026-09-16_200612.log`（`exit=124`，`耗时 60.01s`） | 否（同上） |
 | 纯移动对拍脚本 | `/tmp/_cmp_split.py` | 否（一次性） |
 | 反向对照驱动脚本 | `/tmp/rc_shard.sh` | 否（一次性） |
 | 反向对照完整输出 | 见 §2.3（已内联全文） | 是（本报告） |
