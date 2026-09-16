@@ -63,7 +63,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -76,12 +76,84 @@ if __package__:
 else:  # 直接以脚本方式运行（CLI 出口；仓库既有守卫都是这种调用方式）
     from scripts.pricelayer import MoatPriceContamination, PriceLayerError, QuoteCaliberViolation
 
+REVIEW_YAML = "rules/review.yaml"
+RULE_KEY_FORCED_RECHECK = "forced_recheck"
+RULE_KEY_SINGLE_DAY_DROP_PCT = "single_day_drop_pct"
+RULE_KEY_THREE_DAY_CUMULATIVE_PCT = "three_day_cumulative_pct"
+RULE_KEY_ON_HIT = "on_hit"
+RULE_KEY_KEEP_ORIGINAL_JUDGMENT_TIME = "keep_original_judgment_time"
+
 ABNORMAL_DROP_1D = Decimal("-0.07")
 ABNORMAL_DROP_3D = Decimal("-0.12")
-"""异常下跌阈值（`00_待拍板项清单` **B2 已确认**：单日 ≤ −7% 或 3 日累计 ≤ −12%）。
+"""异常下跌阈值的**设计逐字回落值**（`00_待拍板项清单` **B2 已确认**）。
 
+★ 真值取自 `rules/review.yaml::forced_recheck.single_day_drop_pct`（`-7`）与
+  `three_day_cumulative_pct`（`-12`）—— **参数只住 `rules/`**（`Ch11 §D.2`）。
+  本常量仅作规则文件/该键缺失时的回落；`check` 另做"代码默认值 == 文件真值"的绑定断言。
 ★ `Ch5 §F.5` 逐字："**不自动止损/抄底**"（`N5.5-06` / `T08`）—— 本阈值**只触发复查**。
 """
+
+
+@dataclass(frozen=True)
+class RecheckTrigger:
+    """`rules/review.yaml::forced_recheck` 的解析结果（**带来源标注**）。"""
+
+    single_day_drop: Decimal
+    three_day_cumulative: Decimal
+    keep_original_judgment_time: bool = True
+    value_source: str = "design_default"
+
+
+def load_recheck_trigger(root: str | Path | None = None) -> RecheckTrigger:
+    """读 `rules/review.yaml::forced_recheck` 的阈值（`Ch5 §F.5` / B2 / `T08`）—— **唯一读口**。
+
+    ★ 比例口径归正：规则文件写的是**百分点**（`-7` / `-12`），本层内部用**小数**
+      （`-0.07` / `-0.12`）。换算在**这一处**完成，避免两套口径并存。
+    - 文件/键缺失 → 回落设计逐字值（B2）并标 `value_source="design_default"`。
+    - 取值非负或非数值 → `DailyExplainError`（**响亮失败**；阈值必须是负的下跌阈值）。
+    """
+    from scripts._common import _cached_yaml  # `P-02`
+
+    def _fallback() -> RecheckTrigger:
+        return RecheckTrigger(
+            single_day_drop=ABNORMAL_DROP_1D,
+            three_day_cumulative=ABNORMAL_DROP_3D,
+            value_source="design_default",
+        )
+
+    if root is None:
+        return _fallback()
+    path = Path(root) / REVIEW_YAML
+    if not path.exists():
+        return _fallback()
+    doc = _cached_yaml(path) or {}
+    node = doc.get(RULE_KEY_FORCED_RECHECK)
+    if not isinstance(node, Mapping):
+        return _fallback()
+    try:
+        one_day = Decimal(str(node.get(RULE_KEY_SINGLE_DAY_DROP_PCT))) / Decimal(100)
+        three_day = Decimal(str(node.get(RULE_KEY_THREE_DAY_CUMULATIVE_PCT))) / Decimal(100)
+    except (InvalidOperation, TypeError) as exc:
+        raise DailyExplainError(
+            f"{REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK} 阈值非数值"
+            f"（{node.get(RULE_KEY_SINGLE_DAY_DROP_PCT)!r} / "
+            f"{node.get(RULE_KEY_THREE_DAY_CUMULATIVE_PCT)!r}）—— 不静默兜底"
+        ) from exc
+    if one_day > 0 or three_day > 0:
+        raise DailyExplainError(
+            f"{REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK} 阈值必须为负（下跌口径）："
+            f"{one_day} / {three_day}（B2：单日 ≤ −7% / 3 日累计 ≤ −12%）"
+        )
+    on_hit = node.get(RULE_KEY_ON_HIT)
+    keep = True
+    if isinstance(on_hit, Mapping) and RULE_KEY_KEEP_ORIGINAL_JUDGMENT_TIME in on_hit:
+        keep = bool(on_hit.get(RULE_KEY_KEEP_ORIGINAL_JUDGMENT_TIME))
+    return RecheckTrigger(
+        single_day_drop=one_day,
+        three_day_cumulative=three_day,
+        keep_original_judgment_time=keep,
+        value_source="rules",
+    )
 
 FACTOR_KINDS: tuple[str, ...] = ("benchmark", "peer", "company_event", "environment")
 """`Ch5 §F.3` 逐字的四类候选因素（基准/同行/公司事件/环境）；`N5.5-02` 要求覆盖四类。"""
@@ -316,16 +388,24 @@ def is_abnormal_decline(
     daily_change_pct: Decimal,
     *,
     three_day_change_pct: Decimal | None = None,
-    drop_1d: Decimal = ABNORMAL_DROP_1D,
-    drop_3d: Decimal = ABNORMAL_DROP_3D,
+    trigger: RecheckTrigger | None = None,
+    drop_1d: Decimal | None = None,
+    drop_3d: Decimal | None = None,
 ) -> bool:
-    """异常下跌判定（`Ch5 §F.5` + B2）：单日 ≤ −7% **或** 3 日累计 ≤ −12%。
+    """异常下跌判定（`Ch5 §F.5` + B2）：单日 ≤ 阈值 **或** 3 日累计 ≤ 阈值。
 
+    ★ 阈值**读** `rules/review.yaml::forced_recheck`（`trigger` = `load_recheck_trigger(root)`）
+      —— **不硬编码**（`Ch11 §D.2`）。`drop_1d` / `drop_3d` 只是**显式覆盖**（测试用）。
     ★ 命中**只触发复查**：`Ch5 §F.5` 逐字"**不自动止损/抄底**"（`N5.5-06`）。
     """
-    if daily_change_pct <= drop_1d:
+    trigger = trigger or RecheckTrigger(
+        single_day_drop=ABNORMAL_DROP_1D, three_day_cumulative=ABNORMAL_DROP_3D
+    )
+    one_day = trigger.single_day_drop if drop_1d is None else drop_1d
+    three_day = trigger.three_day_cumulative if drop_3d is None else drop_3d
+    if daily_change_pct <= one_day:
         return True
-    return three_day_change_pct is not None and three_day_change_pct <= drop_3d
+    return three_day_change_pct is not None and three_day_change_pct <= three_day
 
 
 def enqueue_review(
@@ -334,23 +414,30 @@ def enqueue_review(
     original_judgment_time: datetime,
     daily_change_pct: Decimal,
     three_day_change_pct: Decimal | None = None,
+    trigger: RecheckTrigger | None = None,
 ) -> ReviewTicket | None:
     """异常下跌 → `enqueue_review`（`Ch5 §F.5` / `T08`）；未触发 → `None`（**不产工单**）。
 
     ★ 返回值是**复查工单**，不是买卖动作 —— `Ch5 §F.5` 明令"不自动止损/抄底"。
+    ★ 阈值取 `rules/review.yaml::forced_recheck`（`trigger`）；**不硬编码**。
     """
-    if not is_abnormal_decline(daily_change_pct, three_day_change_pct=three_day_change_pct):
+    trigger = trigger or RecheckTrigger(
+        single_day_drop=ABNORMAL_DROP_1D, three_day_cumulative=ABNORMAL_DROP_3D
+    )
+    if not is_abnormal_decline(
+        daily_change_pct, three_day_change_pct=three_day_change_pct, trigger=trigger
+    ):
         return None
-    trigger = (
-        f"单日 {daily_change_pct} ≤ {ABNORMAL_DROP_1D}"
-        if daily_change_pct <= ABNORMAL_DROP_1D
-        else f"3 日累计 {three_day_change_pct} ≤ {ABNORMAL_DROP_3D}"
+    reason = (
+        f"单日 {daily_change_pct} ≤ {trigger.single_day_drop}"
+        if daily_change_pct <= trigger.single_day_drop
+        else f"3 日累计 {three_day_change_pct} ≤ {trigger.three_day_cumulative}"
     )
     return ReviewTicket(
         recommendation_id=recommendation_id,
         status="rechecking",
         original_judgment_time=original_judgment_time,
-        trigger=trigger,
+        trigger=reason,
     )
 
 
@@ -359,18 +446,74 @@ def enqueue_review(
 NOTE_NO_PRICES = "NO_PRICES"
 _PRICE_CALIBER_FIELDS = ("currency", "trading_session", "adjustment_caliber_version")
 
+RULE_BOUND_ENTRIES: tuple[tuple[str, str], ...] = (
+    (REVIEW_YAML, RULE_KEY_FORCED_RECHECK),
+)
+"""``(规则文件, 本模块实际读取的顶层键)`` 的机器绑定对照集合（`Ch11 §D.2`）。"""
+
+
+def _rule_binding_violations(root: Path, trigger: RecheckTrigger) -> list[str]:
+    """**规则↔代码机器绑定**：`rules/review.yaml` 的强制复查口径必须与实现一致。
+
+    | # | 判据 | 依据 |
+    |---|---|---|
+    | ① | `forced_recheck` 键**真实存在** | `Ch11 §D.2`（参数只住 `rules/`） |
+    | ② | 阈值与代码回落值（B2）**一致** | B2 / `Ch5 §F.5` |
+    | ③ | `on_hit.keep_original_judgment_time` 为真 | `T08`（复查未完成显示原判断时间） |
+
+    ★ 规则文件不存在 → 返回空（调用方另有 note 面，**不**当已核）。
+    """
+    from scripts._common import _cached_yaml
+
+    path = root / REVIEW_YAML
+    if not path.exists():
+        return []
+    doc = _cached_yaml(path) or {}
+    violations: list[str] = []
+    for relpath, key in RULE_BOUND_ENTRIES:
+        if key not in doc:
+            violations.append(
+                f"{relpath} 缺本模块实际读取的键 {key!r} —— 声明与实现脱节（Ch11 §D.2）"
+            )
+    if trigger.value_source == "rules":
+        if trigger.single_day_drop != ABNORMAL_DROP_1D:
+            violations.append(
+                f"{REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK}.{RULE_KEY_SINGLE_DAY_DROP_PCT} "
+                f"= {trigger.single_day_drop} 与代码回落值 {ABNORMAL_DROP_1D} 不一致（B2）"
+            )
+        if trigger.three_day_cumulative != ABNORMAL_DROP_3D:
+            violations.append(
+                f"{REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK}.{RULE_KEY_THREE_DAY_CUMULATIVE_PCT} "
+                f"= {trigger.three_day_cumulative} 与代码回落值 {ABNORMAL_DROP_3D} 不一致（B2）"
+            )
+        if not trigger.keep_original_judgment_time:
+            violations.append(
+                f"{REVIEW_YAML}:: {RULE_KEY_FORCED_RECHECK}.{RULE_KEY_ON_HIT}."
+                f"{RULE_KEY_KEEP_ORIGINAL_JUDGMENT_TIME} 为假 —— `T08`：复查未完成时"
+                "必须显示原判断时间"
+            )
+    return violations
+
 
 def check(root: str | Path) -> Any:
     """扫描 `facts/prices.jsonl`：每条行情必须过**口径五要素**（`Ch5 §F.1`）。
 
     ★ 判据是**运行时效果**：某条快照的口径要素缺失 ⇒ 它**不得**被用于解释与收益计算，
       故在此拦下（`N5.5-01` / `T11`）。空样本 → 显式 note（`G-03`）。
+    ★ 另含**规则↔代码机器绑定**（与 `facts/` 数据无关，故空样本也照跑）：本模块读取的
+      `rules/review.yaml::forced_recheck` 键必须真实存在，且阈值与代码回落值一致。
     """
     from scripts._common import CheckReport, Violation
     from schema.store import read_records
 
     root_path = Path(root)
     report = CheckReport(checker="pricelayer_daily_explain")
+    report.scanned["rule_binding_checks"] = len(RULE_BOUND_ENTRIES)
+    trigger = load_recheck_trigger(root_path)
+    report.scanned["recheck_value_source"] = 1 if trigger.value_source == "rules" else 0
+    for text in _rule_binding_violations(root_path, trigger):
+        report.violations.append(Violation("DAILY-RULE-BINDING", text))
+
     rows = read_records(root_path, "prices")
     report.scanned["prices"] = len(rows)
     report.scanned["caliber_fields"] = len(_PRICE_CALIBER_FIELDS)

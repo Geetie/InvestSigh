@@ -355,10 +355,12 @@ BATCHES: Mapping[str, Batch] = {
     "pricelayer": Batch(
         # 新增测试目录必须同时加批次，否则 `V-06` 会把新目录判成"未覆盖"（`CONVENTIONS.md::V-06`）。
         # 由**批次 13-B**（Ch5 价格层）随 `tests/pricelayer/` 一并加入（任务卡 13-B 明令）。
-        # 超时：工作树内实测 39.18s（127 例）→ **180s（≈4.6×）**：
-        # `V-02` 允许 4~8×，且不越 300s 上限；余量足以区分"慢"与"卡死"。
+        # 超时：工作树内实测 **53.89s / 83.80s**（168 例，两次采样）→ 取 **300s（≈3.6~5.6×）**。
+        # 依据 `CONVENTIONS.md::V-02` 注：判据是「`<= 300s` + 余量足以区分"慢"与"卡死"」，
+        # 倍数边界在慢批次上已不成立（8× = 671s > 300s）⇒ 与 `daily`/`injection-*` 同属
+        # "慢批次取不超过上限的最大值"。
         "pricelayer", "tests/pricelayer/（Ch5 价格层：反解多解/估值路由/倒填/情景/历史外推/每日解释）",
-        _pytest("tests/pricelayer"), 180.0, _exit_zero,
+        _pytest("tests/pricelayer"), 300.0, _exit_zero,
     ),
     "graph": Batch(
         "graph", "tests/graph/（依赖图与 T12 传播）",

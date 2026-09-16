@@ -50,7 +50,7 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
 
 **强制手段**：守卫断言每批 `timeout > 0` 且 `<= 300s`，且 `BATCHES` 与 `ORDER` 键集合一致。
 
-**当前批次表**（**20 批**；超时随实测更新，更新须同步守卫上限）：
+**当前批次表**（**21 批**；超时随实测更新，更新须同步守卫上限）：
 
 | 批次 | 内容 | 超时 | 实测 |
 |---|---|---|---|
@@ -72,6 +72,7 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
 | `transmit` | `tests/transmit/`（Ch7 传导编排引擎） | 60s | ~5s |
 | `evidence` | `tests/evidence/`（Ch6 证据层：去重/独立判定/预算闸门） | 150s | ~18s |
 | `daily` | `tests/daily/`（阶段④每日运行：覆盖可核/降级/幂等/调度） | 180s | ~43s |
+| `pricelayer` | `tests/pricelayer/`（Ch5 价格层：反解多解/估值路由/倒填/情景/历史外推/每日解释）· 168 例 | 300s | 53.89s / 83.80s（3.6~5.6×） |
 | `gates` | `run_all_gates.py`（全部门禁逐项退出码） | 60s | ~3s |
 | `stage` | `stage_gate.py --stage all`（阶段判据） | 30s | ~0.3s |
 

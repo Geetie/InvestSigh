@@ -68,6 +68,12 @@ class PriceGuardReport:
     scenario_status: str = "pending"
     scenario_value_source: str = "design_default"
     scenario_blocked: bool = False
+    scenario_blocking: bool = False
+    """`rules/scenario.yaml::scenario_method_blocking.when` 对当前状态**判定出的**阻塞与否。
+
+    ★ 不是"状态 == pending"的硬编码结果；规则文件改了条件，本字段随之改变
+      （`Ch11 §D.2`：参数只住 `rules/`）。
+    """
 
     @property
     def passed(self) -> bool:
@@ -110,6 +116,10 @@ def run_price_guards(root: str | Path) -> PriceGuardReport:
         ("order_guard", order_guard.check),
         ("history_guard", history_guard.check),
         ("daily_explain", daily_explain.check),
+        # ★ `scenario_guard.check` 承载**规则↔代码机器绑定**判据（`rules/scenario.yaml` 的键
+        #   是否真的存在、标签集是否与枚举一致、`probability.default` 是否恒为 null）
+        #   —— 与 `valuation.check` 对称，必须在流水线里跑到，不能只在 CLI 上跑。
+        ("scenario_guard", scenario_guard.check),
     ):
         result = checker(root_path)
         report.guards_run.append(name)
@@ -119,12 +129,14 @@ def run_price_guards(root: str | Path) -> PriceGuardReport:
     policy = scenario_guard.load_scenario_policy(root_path)
     report.scenario_status = policy.status
     report.scenario_value_source = policy.value_source
-    report.guards_run.append("scenario_guard")
+    report.scenario_blocking = policy.blocking
+    report.guards_run.append("scenario_guard:policy")
     report.notes.extend(policy.notes)
     try:
         scenario_guard.assert_relative_judgment_allowed(policy)
     except ScenarioMethodPending as exc:
         # `Ch5 §E.4`：pending ⇒ **阻塞**相对判断生成（下游输出"待判断"而非建议）。
+        # ★ 阻塞与否由 `rules/scenario.yaml::scenario_method_blocking.when` 决定（非硬编码）。
         report.scenario_blocked = True
         report.notes.append(f"SCENARIO_METHOD_PENDING: {exc}")
 
@@ -209,6 +221,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"  guards_run: {', '.join(report.guards_run)}")
     print(f"  checked_ids: {len(report.checked_ids)}")
     print(f"  scenario_method_status: {report.scenario_status}（{report.scenario_value_source}）")
+    print(f"  scenario_blocking: {report.scenario_blocking}（读 rules/scenario.yaml）")
     for note in report.notes:
         print(f"  note: {note}")
     for violation in report.violations:

@@ -56,9 +56,12 @@ def test_run_price_guards_calls_all_five_guard_modules() -> None:
     pairs = _attribute_pairs(body)
     for module in ("valuation", "order_guard", "history_guard", "daily_explain"):
         assert (module, "check") in pairs, f"{module}.check 未被引用（守卫没真的被接上）"
+    # ★ `scenario_guard.check` 承载**规则↔代码机器绑定**判据 —— 与 `valuation.check` 对称，
+    #   必须也在流水线里跑到（不能只在 CLI 上跑）。
+    assert ("scenario_guard", "check") in pairs, "规则↔代码绑定判据未在流水线里跑"
     assert ("scenario_guard", "load_scenario_policy") in pairs, "§E.4 策略读取未接上"
     assert ("scenario_guard", "assert_relative_judgment_allowed") in pairs, (
-        "§E.4 的 pending 阻塞必须真的被调用"
+        "§E.4 的阻塞必须真的被调用"
     )
 
 
@@ -83,6 +86,7 @@ def test_run_price_guards_is_read_only_and_reports_guards_run(scratch: Path) -> 
     assert before == after, "价格层守卫是只读的（不得写 facts/）"
     assert set(report.guards_run) >= set(REQUIRED_MODULES)
     assert report.scenario_status == "pending", "§E.4：默认 pending"
+    assert report.scenario_blocking is True, "§E.4 逐字条件 pending ⇒ 阻塞（读规则文件判定）"
 
     # 有真源数据时：checked_ids 反映"考察过的对象"（供 StepOutcome.skipped）
     (scratch / "facts" / "baselines.jsonl").write_text(
@@ -137,3 +141,63 @@ def test_cli_runs_guards_and_returns_zero_on_clean_root(scratch: Path, run_scrip
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "scenario_method_status: pending" in proc.stdout
     assert "RESULT: PASS" in proc.stdout
+
+
+def test_run_price_guards_surfaces_rule_binding_violations(
+    scratch: Path, real_rules
+) -> None:
+    """★ 规则↔代码绑定违例必须**在流水线里**被拦到（不只 CLI）—— 与 `valuation.check` 对称。
+
+    注入：真 `rules/valuation-methods.yaml` 的 `unregistered_fallback.method_class` 改名，
+    而代码默认值没改 ⇒ `run_price_guards` 必须产出违例。
+    """
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml", "scenario.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["unregistered_fallback"]["method_class"] = "misc"
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+
+    report = pricelayer_step.run_price_guards(scratch)
+    assert any("VALUATION-RULE-BINDING" in v for v in report.violations), report.violations
+    assert report.passed is False
+
+
+def test_run_price_guards_clean_on_real_rules_files(scratch: Path, real_rules) -> None:
+    """反向对照：真 `rules/` 文件（`valuation-methods` + `scenario`）→ **无规则绑定违例**。"""
+    real_rules(scratch, "valuation-methods.yaml", "scenario.yaml", "freeze.yaml")
+    report = pricelayer_step.run_price_guards(scratch)
+    binding = [v for v in report.violations if "RULE-BINDING" in v]
+    assert binding == [], binding
+    assert report.scenario_blocking is True
+
+
+def test_run_price_guards_surfaces_rule_binding_violations(
+    scratch: Path, real_rules
+) -> None:
+    """★ 规则↔代码绑定违例必须**在流水线里**被拦到（不只 CLI）—— 与 `valuation.check` 对称。
+
+    注入：真 `rules/valuation-methods.yaml` 的 `unregistered_fallback.method_class` 改名，
+    而代码默认值没改 ⇒ `run_price_guards` 必须产出违例。
+    """
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml", "scenario.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["unregistered_fallback"]["method_class"] = "misc"
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+
+    report = pricelayer_step.run_price_guards(scratch)
+    assert any("VALUATION-RULE-BINDING" in v for v in report.violations), report.violations
+    assert report.passed is False
+
+
+def test_run_price_guards_clean_on_real_rules_files(scratch: Path, real_rules) -> None:
+    """反向对照：真 `rules/` 文件（`valuation-methods` + `scenario`）→ **无规则绑定违例**。"""
+    real_rules(scratch, "valuation-methods.yaml", "scenario.yaml", "freeze.yaml")
+    report = pricelayer_step.run_price_guards(scratch)
+    binding = [v for v in report.violations if "RULE-BINDING" in v]
+    assert binding == [], binding
+    assert report.scenario_blocking is True

@@ -93,6 +93,11 @@ class ScenarioMethodPending(PriceLayerError):
 
     `Ch5 §E.4` 逐字：`pending` 时 `assert_scenario_match` 无法建立一致口径
     → **阻塞相对判断生成**（第七章前置门收不到可用的 `benchmark_forecast`，输出"待判断"而非建议）。
+
+    ★ **触发条件不写在本类里**：是否阻塞由规则键 `rules/scenario.yaml::scenario_method_blocking.when`
+    决定（`scenario_guard.load_scenario_policy` 读入后放入 `ScenarioPolicy.blocking`）——
+    今日该键求值为 `scenario_method_status == pending`，故类名如此；**规则改了，触发条件随之改变**
+    （`Ch11 §D.2`：参数只能住 `rules/`，代码不得内置）。缺该键时回落设计逐字条件并记 note。
     """
 
 
