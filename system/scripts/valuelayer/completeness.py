@@ -1008,6 +1008,53 @@ def form_context_from(root: str | Path) -> FormContext:
     )
 
 
+# ──────────────────── 版本选择：只判"当前版本"（追加式真源的必然） ────────────────────
+#
+# ★ 为什么必须有这一步（**不是**为了绕开门禁，是追加式真源的结构性后果）：
+#   `facts/baselines.jsonl` 是**追加式版本表**（`Ch9 §3.4.2` 纪律 4 / `§N9.1-17`
+#   主键 = `(company_id, version)`），历史版本**不得删改**、保留供 as-of 回看。
+#   一条 baseline 要"补深度"，唯一合规的动作是**追加新版本行**（旧行原样留存）。
+#   ⇒ 若门禁对**所有历史行**逐条判 §G 形式完备性，则任何一次"补深度"都会
+#     让**它自己刚补完的历史缺口**永久变红（恒红门禁 = 一定会被关掉，`G-01`），
+#     且"当前研究基线是否完备"这个问题**永远不会得到回答**。
+#   ⇒ 判据的**被检对象**必须是"每条 `company_id` 的当前版本"：
+#     门禁回答的是"**现在**这条研究基线完不完备"，历史版本由 as-of 回看承担。
+#   ★ 反面（`G-03`：真空不得当已核）：被跳过的历史版本**必须显式记账 + 计数**，
+#     不得静默丢弃 —— 故 `check()` / `g_depth_violations()` 都把跳过数写进输出。
+
+
+def _sort_key(row: Any) -> tuple[int, int]:
+    """版本排序键 = `(version, recorded_seq)`；非整数（含缺失 / `tbd`）一律按 `-1` 处理。
+
+    ★ 为什么两个分量：`version` 是设计给的版本号；`recorded_seq` 是追加序（同版本重写时的次序）。
+      `version` 缺失或非法时**不猜值**，按最小处理 —— 于是"当前版本"会退化为"recorded_seq 最大者"，
+      仍是**可判定**的（不制造一个假版本号）。
+    """
+
+    def _as_int(value: Any) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return -1
+
+    return (_as_int(_field(row, "version")), _as_int(_field(row, "recorded_seq")))
+
+
+def current_baselines(rows: Sequence[Any]) -> list[Any]:
+    """从 `baselines` 全量行里挑出**每条 `company_id` 的当前版本**（其余为历史版本）。
+
+    返回顺序按分组键升序（稳定、可复现）。分组键取 `company_id`；缺失时退回 `baseline_id`
+    （两者都缺的行自成一键，仍会被判 —— 不因缺键而漏判）。
+    """
+    latest: dict[str, Any] = {}
+    for row in rows:
+        key = str(_field(row, "company_id") or _field(row, "baseline_id") or "<unnamed>")
+        current = latest.get(key)
+        if current is None or _sort_key(row) > _sort_key(current):
+            latest[key] = row
+    return [latest[k] for k in sorted(latest)]
+
+
 # ───────────────────────────── 门禁入口 ─────────────────────────────
 
 
@@ -1024,16 +1071,29 @@ def check(root: Path) -> CheckReport:
     status = truth_source_status(root, "baselines")
     if status == "missing":
         raise FileNotFoundError("缺少真源 facts/baselines.jsonl")
-    baselines = read_records(root, "baselines")
-    report.scanned["baselines"] = len(baselines)
-    if not baselines:
+    all_baselines = read_records(root, "baselines")
+    if not all_baselines:
         # ★ 先看"有没有被检对象"，再读配置：无对象时不必要求规则文件就绪 ——
         #   否则"真源为空"这一事实会被"规则没装好"的输入异常**遮住**，
         #   而两者要传达的信息完全不同。
+        report.scanned["baselines"] = 0
         report.notes.append(
             "NO_BASELINES: facts/baselines.jsonl 存在但为空 —— 无被检对象（真空成立，非'已验证'，G-03）"
         )
         return report
+    # ★ 只判各 company_id 的**当前版本**（理由见 `current_baselines` 的注释）；
+    #   被跳过的历史版本**显式记账 + 计数**（`G-03`：真空/跳过不得当已核）。
+    baselines = current_baselines(all_baselines)
+    report.scanned["baselines"] = len(baselines)
+    report.scanned["baselines_all_versions"] = len(all_baselines)
+    report.scanned["baselines_historical_skipped"] = len(all_baselines) - len(baselines)
+    if len(all_baselines) != len(baselines):
+        report.notes.append(
+            f"HISTORICAL_VERSIONS_SKIPPED: facts/baselines.jsonl 共 {len(all_baselines)} 行，"
+            f"其中 {len(all_baselines) - len(baselines)} 行为同公司旧版本；"
+            "本次只判各 company_id 的当前版本（追加式版本表，历史版本供 as-of 回看："
+            "Ch9 §N9.1-17 / §3.4.2）"
+        )
     cfg = _rules.baseline_cfg(root)
 
     ctx = form_context_from(root)
@@ -1097,8 +1157,8 @@ def g_depth_violations(root: Path) -> list[Violation]:
 
     if truth_source_status(root, "baselines") == "missing":
         return [Violation("nvidia_sample", "缺少真源 facts/baselines.jsonl", "facts/baselines.jsonl")]
-    baselines = read_records(root, "baselines")
-    if not baselines:
+    all_baselines = read_records(root, "baselines")
+    if not all_baselines:
         return [
             Violation(
                 "nvidia_sample",
@@ -1106,6 +1166,11 @@ def g_depth_violations(root: Path) -> list[Violation]:
                 "facts/baselines.jsonl",
             )
         ]
+    # ★ 与 `check()` 同源：只判各 `company_id` 的**当前版本**（`current_baselines` 的注释给出理由）。
+    #   历史版本被跳过这件事，在 `check()` 侧有显式 `scanned`/`notes` 记账；
+    #   本函数（阶段判据侧）**只报违例、不报计数**（沿用其既有契约），
+    #   故这里对"跳过"的处理是**同一判据、同一被检对象**，不因出口不同而改变口径（`G-06`）。
+    baselines = current_baselines(all_baselines)
     try:
         cfg = _rules.baseline_cfg(root)
         # ★ 只要求**必须已拍板**的三项（`CFG_REQUIRED_DECIDED`）。

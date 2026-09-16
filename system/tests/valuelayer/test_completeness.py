@@ -46,6 +46,7 @@ from scripts.valuelayer.completeness import (
     STATUS_NOT_EVALUATED,
     STATUS_PASS,
     FormContext,
+    current_baselines,
     form_complete,
     form_context_from,
     g4_branch_outcome,
@@ -627,3 +628,71 @@ def test_tbd_threshold_does_not_silently_become_a_number() -> None:
     reasons = " ".join(v.reason for v in empty.violations)
     assert "最小字段数" not in reasons, reasons
     assert "为空" in reasons, reasons
+
+
+# ══════════ 版本选择：只判「当前版本」（追加式真源的必然，`Ch9 §N9.1-17`） ══════════
+#
+# ★ 为什么需要这一组（WS-A · 卡 `01_WS-A` 的 AC-02/AC-03）：
+#   `facts/baselines.jsonl` 是**追加式版本表**（纪律 4），"补深度"的唯一合规动作是
+#   **追加新版本行**（旧行原样留存）。若门禁对**所有历史行**逐条判 §G，则一次"补深度"
+#   会让它刚补完的历史缺口**永久变红**（恒红 = 一定会被关掉，`G-01`）。
+#   ⇒ 判据的被检对象必须是"每条 `company_id` 的当前版本"。
+#   ★ 反向仍要拦：当前版本不完备 ⇒ **照样 `exit 1`**（下面第二条用例钉住这一点，
+#     免得"只判当前版本"退化成"什么都不判"）。
+
+
+def test_current_baselines_picks_the_highest_version_per_company() -> None:
+    """同一 `company_id` 多版本 ⇒ 只取最高版本；不同公司各自保留一条。"""
+    rows = [
+        {"company_id": "CO-1", "version": 1, "baseline_id": "b1"},
+        {"company_id": "CO-1", "version": 3, "baseline_id": "b3"},
+        {"company_id": "CO-2", "version": 1, "baseline_id": "c1"},
+    ]
+    picked = current_baselines(rows)
+    assert [r["baseline_id"] for r in picked] == ["b3", "c1"]
+
+
+def test_current_baselines_breaks_ties_by_recorded_seq() -> None:
+    """同 `version` 时以追加序 `recorded_seq` 判先后（追加式真源的行序即时序）。"""
+    rows = [
+        {"company_id": "CO-1", "version": 2, "recorded_seq": 5, "baseline_id": "a"},
+        {"company_id": "CO-1", "version": 2, "recorded_seq": 9, "baseline_id": "b"},
+    ]
+    picked = current_baselines(rows)
+    assert [r["baseline_id"] for r in picked] == ["b"]
+
+
+def test_current_baselines_does_not_drop_rows_without_version_keys() -> None:
+    """★ 缺 `company_id` / `version` 的行**不得被静默丢弃**（各自成键、仍被判）。
+
+    否则"缺键"会变成一条绕过被检的旁路（`G-03`：没有可检对象 ≠ 已验证）。
+    """
+    rows = [{"baseline_id": "x"}, {"baseline_id": "y", "version": "tbd"}]
+    picked = current_baselines(rows)
+    assert {r["baseline_id"] for r in picked} == {"x", "y"}
+
+
+def test_cli_judges_only_the_current_version_per_company(code_root) -> None:
+    """历史版本不完备、当前版本完备 ⇒ **`exit 0`**，且显式记账"跳过了几条历史版本"。"""
+    seed_compliant(code_root)
+    rows = [
+        baseline(version=1, moat=[], driver_refs=[], business_refs=[]),  # 历史版本：不完备
+        baseline(version=2),  # 当前版本：完备
+    ]
+    write_jsonl(code_root, "baselines", rows)
+    code, out = run_gate_inproc(CHECKER, code_root)
+    assert code == 0, out
+    assert "HISTORICAL_VERSIONS_SKIPPED" in out, out
+
+
+def test_cli_current_version_incomplete_still_fails(code_root) -> None:
+    """**反向对照**：当前版本不完备 ⇒ 仍 `exit 1`（"只判当前版本"不等于"放行一切"）。"""
+    seed_compliant(code_root)
+    rows = [
+        baseline(version=1),  # 历史版本：完备
+        baseline(version=2, moat=[], driver_refs=[], business_refs=[]),  # 当前版本：不完备
+    ]
+    write_jsonl(code_root, "baselines", rows)
+    code, out = run_gate_inproc(CHECKER, code_root)
+    assert code == 1, out
+    assert "sections_nonempty" in out, out

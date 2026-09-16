@@ -276,8 +276,38 @@ _SESSION_LOCK = SYSTEM_ROOT / "tests" / ".pytest-session.lock"
 
 
 def _pid_alive(pid: int) -> bool:
-    """该 PID 是否仍存活（用于判定锁是否**陈旧**）。"""
+    """该 PID 是否仍存活（用于判定锁是否**陈旧**）。
+
+    ★★ **Windows 兼容性（本机实测修掉，勿回退）**：
+      `os.kill(pid, 0)` 在 Windows 上**不是**"探测存活" —— 它走的是
+      `OpenProcess` + `TerminateProcess` 路径，对 **sig=0** 直接抛
+
+          OSError: [WinError 87] 参数错误
+
+      而**不是** `ProcessLookupError`。于是下面那句"其余 `OSError` 一律保守视为存活"
+      会把**任何**锁（哪怕持有者早已退出）都判成"被活着的会话持有"
+      ⇒ **陈旧锁永不自愈，本工作树被永久锁死**（实测：`verify.py` 某批超时被杀后
+      `pytest_sessionfinish` 没跑、锁没释放，此后**所有**批次都被
+      `[V-05] 本工作树已有 pytest 会话在跑` 挡住，且该 pid 实际已不存在）。
+
+      ⇒ Windows 侧改用 `OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION)` 探测：
+        **返回 NULL = 进程不存在**（实测对已退出 pid 返回 `0`，对 `os.getpid()` 返回非 0）。
+
+    ★ 保留 Unix 侧的原实现（`os.kill(pid, 0)` 在 POSIX 上正是"探测存活"的惯用法）。
+    """
     import os
+
+    if os.name == "nt":
+        import ctypes
+
+        _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(
+            _PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+        )
+        if not handle:
+            return False
+        ctypes.windll.kernel32.CloseHandle(handle)
+        return True
 
     try:
         os.kill(pid, 0)

@@ -1,0 +1,4 @@
+# 强制 LF：本仓以「内容哈希」上锁（rules/ 0444 + SHA256），
+# 而 Windows 的 core.autocrlf 会把检出转成 CRLF ⇒ 哈希恒不符（rules_lock_guard 恒红）。
+# `-text` = 不做任何行尾转换，按字节原样存取（跨平台字节一致）。
+* -text
