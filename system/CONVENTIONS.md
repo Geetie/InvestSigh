@@ -34,32 +34,46 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
 
 ### V-02 每批必须设定**适合的**超时时间
 
-**规范**：每个批次必须带独立的超时上限，取值约为**该批实测典型耗时的 8~30 倍** ——
-宽到不会因偶发抖动误报，紧到能在"真的卡住"时**快速暴露**。
+**规范**：每个批次必须带独立的超时上限，取值要让**偶发抖动不误报**、而"真的卡住"能**快速暴露**。
+
+> ★ **倍数的适用边界（批次 10 审计 `G8` 修正）**：原措辞是"取实测典型耗时的 **8~30 倍**"。
+>   实测**该经验值在慢批次上已不成立** —— 例如 `daily` 典型 43s，8× = **344s > 300s 上限**；
+>   `guards`(18.5s)/`injection`(36.4s) 按原值也只有 3.2×/3.3×。
+>   **根因**：那个倍数来自"批次都在 0.3~4s"的时代。当单批从 4s 涨到 43s，绝对余量已经够大
+>   （180s 足以区分"慢"与"卡死"），再乘 8 只会撞上限。
+>   → **现行判据**：**超时 ≤ 300s**，且**余量要能区分"慢"与"卡死"**（慢批次 4~8× 即可）。
+>   `verification_policy_guard` 只强制 `0 < timeout ≤ 300s` —— 这是**刻意的**：倍数靠人判断，
+>   把它做成硬门槛会逼出"为了过门禁而虚报实测值"。
 
 **为什么**：超时值就是**故障探测器**。设得过宽（如统一 600s），卡死就退化成"跑得慢"，
 又回到 V-01 的老问题。
 
 **强制手段**：守卫断言每批 `timeout > 0` 且 `<= 300s`，且 `BATCHES` 与 `ORDER` 键集合一致。
 
-**当前批次表**（超时随实测更新，更新须同步守卫上限）：
+**当前批次表**（**15 批**；超时随实测更新，更新须同步守卫上限）：
 
 | 批次 | 内容 | 超时 | 实测 |
 |---|---|---|---|
-| `unit` | `tests/unit/` | 60s | 2.0s |
-| `conflict` | `tests/conflict/` | 30s | 0.3s |
-| `guards` | `tests/guards/` | 60s | 3.7s |
-| `injection` | `tests/injection/` | 120s | 27.4s |
-| `root` | `tests/test_ch11_invariants.py` | 30s | 0.3s |
-| `compute` | `tests/compute/`（确定性计算层） | 60s | 4.2s |
-| `graph` | `tests/graph/`（依赖图与 T12 传播） | 60s | 3.8s |
-| `validators` | `tests/validators/`（locator 定位校验器） | 30s | 3.8s |
-| `claim` | `tests/claim/`（主张五态状态机） | 30s | 3.6s |
-| `gates` | `run_all_gates.py`（23 项门禁） | 60s | 2.3s |
-| `stage` | `stage_gate.py --stage all` | 30s | 0.2s |
+| `unit` | `tests/unit/`（契约 + 作用域匹配器） | 60s | ~8s |
+| `conflict` | `tests/conflict/`（P-03/P-05/P-07 schema） | 30s | ~0.3s |
+| `guards` | `tests/guards/`（门禁退出码契约 + 验证规范） | 60s | ~18s |
+| `injection` | `tests/injection/`（注入 / 接线 / 审计回归） | 120s | ~36s |
+| `root` | `tests/test_ch11_invariants.py`（Ch11 不变量） | 30s | ~0.3s |
+| `compute` | `tests/compute/`（确定性计算层） | 60s | ~5s |
+| `graph` | `tests/graph/`（依赖图与 T12 传播） | 60s | ~4s |
+| `validators` | `tests/validators/`（locator 定位校验器） | 30s | ~5s |
+| `claim` | `tests/claim/`（主张五态状态机） | 30s | ~5s |
+| `decision` | `tests/decision/`（决策层 triage / gate / rules） | 30s | ~2.4s |
+| `transmit` | `tests/transmit/`（Ch7 传导编排引擎） | 60s | ~5s |
+| `evidence` | `tests/evidence/`（Ch6 证据层：去重/独立判定/预算闸门） | 150s | ~18s |
+| `daily` | `tests/daily/`（阶段④每日运行：覆盖可核/降级/幂等/调度） | 180s | ~43s |
+| `gates` | `run_all_gates.py`（全部门禁逐项退出码） | 60s | ~3s |
+| `stage` | `stage_gate.py --stage all`（阶段判据） | 30s | ~0.3s |
 
-★ 后 4 个批次由**主理人在集成时统一加入**（`reports/parallel_workstreams.md §5 I-3`）——
-  并行工作流的 Agent **不得**自行改 `verify.py`（三方同改必冲突），只报"需新增批次"。
+★ `evidence` / `daily` / `transmit` 等**由主理人在集成时统一加入**（`reports/batch9_stage3_4_taskbook.md §3 I-1`）——
+  并行工作流的 Agent **不得**自行改 `verify.py`（多方同改必冲突），只报"需新增批次"。
+★ **批次表不写项数**（曾出现 18/19/20/23 四种数字）：项数的真源是 `run_all_gates.GATES` 与
+  `tests/guards::GUARDS`（**两个不同的数**），描述里重复它必然漂移。
 
 ### V-03 **超时 = 该批有问题**，且**绝不算通过**
 

@@ -92,12 +92,6 @@ EXEMPT_PATTERNS = (
     #   若不豁免它们，规则会把自己的**文档**判成违例 —— 正是"误报刷屏 → 门禁被关掉"的引信。
     "scripts/checks/no_placeholder_guard.py",
     "config/placeholder_exemptions.yaml",
-    # ★ `reports/` 是**运行产物目录**，不是代码：守卫把"规则名 + 规则说明"写进自己的 JSON 报告，
-    #   下次扫描该报告就会**自我命中**（实测：`pre-commit.sh` 第 ⑥ 道门禁因此被自己的报告阻断 ——
-    #   与 `D-5` / `D-7` 同类，只是这次经由**报告产物**这条路径复发）。
-    #   扫描"守卫自己写出来的报告"没有任何防护价值（那些文字**就是**规则本身），
-    #   故整目录免扫。`_COPY_SKIP` 亦已把 `reports` 排除在夹具之外 —— 与此一致。
-    "reports/",
     "tests/",
     "scripts/checks/no_placeholder_guard.py",
 )
@@ -446,8 +440,23 @@ def scan_file(path: Path, root: Path) -> tuple[list[Finding], list[str]]:
     return findings, notes
 
 
+#: **顶层目录前缀**豁免（与 `EXEMPT_PATTERNS` 的**子串**匹配**不同** —— 这里必须锚定开头）。
+#:
+#: ★ 为什么单独列一条（批次 10 审计抓到我自己的**自相矛盾**）：
+#:   原先把 `"reports/"` 放进 `EXEMPT_PATTERNS`，而 `_is_exempt` 用的是 `pat in normalized`
+#:   （**子串**匹配）⇒ **任何**名为 `reports` 的目录（哪怕在很深的位置）都会被**整目录、
+#:   全规则、静默**免扫 —— 与 `config/placeholder_exemptions.yaml` 自称"本文件是**唯一**的
+#:   豁免入口"**直接矛盾**；且**不产生任何 note**（审计探针实测：含目标词的文件
+#:   根本不进 `files` 计数，因而连"被豁免"都看不见）。
+#:   → 改为**锚定开头**的前缀匹配：只豁免**顶层** `reports/`（运行产物目录，守卫自己写报告到那里，
+#:     扫它必然自我命中）。语义**收窄且可判定**。
+_EXEMPT_PREFIXES = ("reports/",)
+
+
 def _is_exempt(relpath: str) -> bool:
     normalized = relpath.replace("\\", "/")
+    if any(normalized.startswith(pref) for pref in _EXEMPT_PREFIXES):
+        return True
     return any(pat in normalized for pat in EXEMPT_PATTERNS)
 
 

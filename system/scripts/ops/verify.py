@@ -158,14 +158,19 @@ BATCHES: Mapping[str, Batch] = {
     "evidence": Batch(
         # 新增测试目录必须同时加批次，否则 `V-06` 会把新目录判成"未覆盖"（`CONVENTIONS.md::V-06`）。
         # 由主理人在集成时加入（`reports/batch9_stage3_4_taskbook.md §3 I-1`）。
+        # 超时：实测 ~18s → 150s（**≥8×**，符合 `V-02`）。
         "evidence", "tests/evidence/（Ch6 证据层：去重/独立判定/预算闸门）",
-        _pytest("tests/evidence"), 60.0, _exit_zero,
+        _pytest("tests/evidence"), 150.0, _exit_zero,
     ),
     "daily": Batch(
         # 新增测试目录必须同时加批次，否则 `V-06` 会把新目录判成"未覆盖"（`CONVENTIONS.md::V-06`）。
         # 由主理人在集成时加入（`reports/batch9_stage3_4_taskbook.md §3 I-1`）。
+        # 超时：实测 ~43s。★ 批次 10 审计 `G8` 指出原值 60s 只有 **1.4×**（违 `V-02` 的 8~30×）。
+        #   但 8× = 344s **超过 `V-02` 的 300s 上限** ⇒ 取 **180s（约 4.2×）**：
+        #   仍有充足余量区分"慢"与"卡死"，且不越上限。
+        #   → `V-02` 的"8~30×"是**慢批次出现前**的经验值；该规则的适用边界已登记（见 `CONVENTIONS.md::V-02` 注）。
         "daily", "tests/daily/（阶段④每日运行：覆盖可核/降级/幂等/调度）",
-        _pytest("tests/daily"), 60.0, _exit_zero,
+        _pytest("tests/daily"), 180.0, _exit_zero,
     ),
     "gates": Batch(
         # ★ 不写"多少项"（批次 7 审计）：数字的真源在 `run_all_gates.GATES`，

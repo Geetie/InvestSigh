@@ -1,0 +1,17 @@
+# system/requirements.txt —— 依赖清单（批次 10 审计 `G-B10-06` 关闭对象）
+#
+# ★ **为什么必须有这个文件**（实测故障，由独立审计发现）：
+#   项目**原本没有任何依赖清单**（无 `requirements.txt` / `pyproject.toml`）。
+#   后果：换一个解释器/会话跑门禁时，凡走 `_common._cached_yaml()` 的检查器都会
+#   `ModuleNotFoundError: No module named 'yaml'` —— 而 `_common.run_checker()` 的
+#   `except (FileNotFoundError, ValueError, KeyError, OSError)` **不捕 `ImportError`**
+#   ⇒ 直接**抛栈**，表现为 `gates` / `stage` 批**假红**（看起来像代码坏了，其实是环境缺包）。
+#
+# 版本取自项目实际在用的隔离环境（见 `system/PROGRESS.md` 的「依赖版本」行）。
+# 升级请连同 `PROGRESS.md` 一起改（两处都写版本 = 必然漂移，故此处**只作声明**，
+# 真源仍以 `PROGRESS.md` 的环境记录为准；`pip install -r system/requirements.txt` 用于**复现环境**）。
+
+pydantic==2.13.5
+PyYAML==6.0.3
+jsonschema==4.26.0
+pytest==9.1.1
