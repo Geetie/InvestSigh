@@ -544,6 +544,25 @@ class Source(TimeMixin):
     health: str = TBD                                 # 健康状态（供降级判定）
 
 
+class ClaimStatus(str, Enum):
+    """主张五态（`Ch6 §E.1` 状态机，逐字）。
+
+    ★ **初始态由设计写死为 `pending_verification`** —— `Ch6 §E` 状态机首行：
+      `[*] --> pending_verification : ②③④ 提取完成（初始态）`。
+      初版把它写成自由字符串 `"active"`，而 **`active` 根本不在五态内**，
+      于是**真实链路写出的 claim 带着违约状态**（与我修过的"五类时间全为 None"
+      同类：**只有真跑一次才暴露**）。
+      改用**封闭枚举**（`R-06`：可穷尽）—— pydantic 直接拒绝越界值，
+      此类缺陷无法再静默复发。
+    """
+
+    pending_verification = "pending_verification"
+    supported = "supported"
+    disputed = "disputed"
+    refuted = "refuted"
+    superseded = "superseded"
+
+
 class Claim(TimeMixin):
     """主张（`Ch9 §N9.1-13` / `§3.4.6`）。
 
@@ -565,7 +584,7 @@ class Claim(TimeMixin):
     supersedes: str | None = None                     # 版本链：新版本指向被取代的旧版本
     version_kind: VersionKind | None = None           # 三类版本事件语义（若为本行是修订版）
     locator: str = ""                                 # 定位（页码/段落/表格/视频时间点）
-    status: str = "active"
+    status: ClaimStatus = ClaimStatus.pending_verification
     full_text_read: bool = False                      # 由 `scripts/validators/locator_check.py` 程序校验
     impact_capability: dict[str, Any] = Field(default_factory=dict)
 

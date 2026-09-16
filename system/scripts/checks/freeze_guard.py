@@ -118,8 +118,15 @@ def check_no_freeze_param_in_decision_scope(root: Path) -> tuple[list[Violation]
                     name = node.attr
                 elif isinstance(node, (ast.Import, ast.ImportFrom)):
                     names = [a.name.split(".")[-1] for a in node.names]
+                    # ★ 根治（由 `ws/graph` 工作流暴露的潜伏缺陷）：
+                    #   `ast.Import` **没有** `.module` 属性（只有 `ast.ImportFrom` 有），
+                    #   初版直接 `node.module` → 决策作用域内**任何裸 `import X`**
+                    #   都会让本守卫抛 `AttributeError`（守卫自己崩，不是报违例）。
+                    #   此前 `scripts/decision/**` 与 `scripts/graph/**` 都是空包，
+                    #   故从未被触发 —— 典型的"从没被真实输入跑过"的缺陷。
+                    module_name = getattr(node, "module", None) or ""
                     if any(n in FREEZE_READ_MARKERS for n in names) or (
-                        node.module or ""
+                        module_name
                     ).split(".")[-1] in ("freeze", "config"):
                         v.append(
                             Violation(

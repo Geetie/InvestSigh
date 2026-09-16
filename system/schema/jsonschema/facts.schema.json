@@ -777,9 +777,8 @@
           "type": "string"
         },
         "status": {
-          "default": "active",
-          "title": "Status",
-          "type": "string"
+          "$ref": "#/$defs/ClaimStatus",
+          "default": "pending_verification"
         },
         "supersedes": {
           "anyOf": [
@@ -974,6 +973,18 @@
       ],
       "title": "ClaimPropagation",
       "type": "object"
+    },
+    "ClaimStatus": {
+      "description": "主张五态（`Ch6 §E.1` 状态机，逐字）。\n\n★ **初始态由设计写死为 `pending_verification`** —— `Ch6 §E` 状态机首行：\n  `[*] --> pending_verification : ②③④ 提取完成（初始态）`。\n  初版把它写成自由字符串 `\"active\"`，而 **`active` 根本不在五态内**，\n  于是**真实链路写出的 claim 带着违约状态**（与我修过的\"五类时间全为 None\"\n  同类：**只有真跑一次才暴露**）。\n  改用**封闭枚举**（`R-06`：可穷尽）—— pydantic 直接拒绝越界值，\n  此类缺陷无法再静默复发。",
+      "enum": [
+        "pending_verification",
+        "supported",
+        "disputed",
+        "refuted",
+        "superseded"
+      ],
+      "title": "ClaimStatus",
+      "type": "string"
     },
     "Company": {
       "additionalProperties": false,
@@ -4209,9 +4220,8 @@
           "type": "string"
         },
         "status": {
-          "default": "active",
-          "title": "Status",
-          "type": "string"
+          "$ref": "#/$defs/ClaimStatus",
+          "default": "pending_verification"
         },
         "supersedes": {
           "anyOf": [
@@ -4406,6 +4416,18 @@
       ],
       "title": "ClaimPropagation",
       "type": "object"
+    },
+    "ClaimStatus": {
+      "description": "主张五态（`Ch6 §E.1` 状态机，逐字）。\n\n★ **初始态由设计写死为 `pending_verification`** —— `Ch6 §E` 状态机首行：\n  `[*] --> pending_verification : ②③④ 提取完成（初始态）`。\n  初版把它写成自由字符串 `\"active\"`，而 **`active` 根本不在五态内**，\n  于是**真实链路写出的 claim 带着违约状态**（与我修过的\"五类时间全为 None\"\n  同类：**只有真跑一次才暴露**）。\n  改用**封闭枚举**（`R-06`：可穷尽）—— pydantic 直接拒绝越界值，\n  此类缺陷无法再静默复发。",
+      "enum": [
+        "pending_verification",
+        "supported",
+        "disputed",
+        "refuted",
+        "superseded"
+      ],
+      "title": "ClaimStatus",
+      "type": "string"
     },
     "Company": {
       "additionalProperties": false,
