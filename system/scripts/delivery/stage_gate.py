@@ -490,23 +490,6 @@ def stage_core_chain_passed(root: Path) -> tuple[bool, list[Violation], dict[str
     return (not v), v, {"relations": len(relations), "impacts": len(impacts)}
 
 
-def _holds_valid_result(task: Mapping[str, Any]) -> bool:
-    """该行是否**持有有效结果** —— 首日豁免（追加序判定）的谓词。
-
-    取**两载体并集**而非单选，避免"只看一个字段"造成的漏判：
-
-    - `last_valid_result_ref` 非空：降级链上的显式引用（一次降级后保留的成果）；
-    - `output_refs` 非空 **且** `status == "done"`：正常完成任务的产出引用。
-
-    ★ 为什么必须并集：若只看 `last_valid_result_ref`，则"某轮正常完成、下一轮失败"的场景
-      会被误判为首日（前一行是 `done`，它没有 `last_valid_result_ref`）→ **漏报真违规**。
-      这与本项目"allowlist > denylist、穷尽优于抽样"的口径一致（`R-06`）。
-    """
-    if task.get("last_valid_result_ref"):
-        return True
-    return task.get("status") == "done" and bool(task.get("output_refs"))
-
-
 def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str, int]]:
     """时点可核 + **覆盖可核** + 任务状态可核 + **降级保留上次有效结果**（`Ch11 §B`）。
 
@@ -518,7 +501,17 @@ def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
     ★ **为什么必须绑**（否则判据形同虚设）：`registry/delivery.yaml` 声明它是 automated，
       而"声明"与"实现"必须有**机器绑定**（本项目的血泪铁律 5）——
       不绑的话，**覆盖不达标时阶段④门禁不会红**，等于判据没接。
+
+    ★ 「该行是否持有有效结果」的谓词**只有一份** —— 从 `scripts/daily/degrade` **import**
+      （`G-45` 收口）。本模块**不再自持一套**：此前这里另写了一个 `_holds_valid_result()`
+      （只认 `last_valid_result_ref` / `output_refs` 两个载体），而 `degrade.py` 认的是
+      "一次成功的运行" ⇒ 同一批行两个模块给出**相反结论**（实测：`degrade` 说 'check_d1_full'
+      有、`stage_gate` 说 False 无）。"上次有效结果"是**同一个业务概念**，
+      必须与写路径（`pipeline._write_check_record` 复用 `degrade.last_valid_result_ref()`）
+      同源，否则同一契约在三处各说各话。
     """
+    from scripts.daily.degrade import holds_valid_result
+
     tasks = _read_jsonl(root / "facts" / "tasks.jsonl")
     check_records = [t.get("check_record") for t in tasks if t.get("check_record")]
     if not check_records:
@@ -553,10 +546,26 @@ def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
     #   ★ `degrade_first_day_exempt` **必须为可观测计数**（不是静默 `continue`）：
     #     上一版正是"静默失效"—— 计数恒 0 而没人注意。计数走 `scanned`，
     #     在门禁输出里逐字可见（`scanned daily_run.degrade_first_day_exempt: N`）。
+    #
+    #   ★★★ **谓词必须外移**（本单 `G-43` 修的就是这一半）：上面"追加序"只解决了**外层**
+    #     条件；**内层谓词**若恒为 False，结论照样是"全员豁免"。批次 11 独立审计实测：
+    #     真实字段形状 `[done + output_refs=[] + last_valid_result_ref=null, failed]`
+    #     ⇒ `degrade_first_day_exempt=1`、**预期的那条真违规 FATAL 一条不报**
+    #     （唯一 FATAL 是无关的 CV4）。根因：`pipeline._write_check_record()` 此前
+    #     **两个载体都不填** ⇒ 旧谓词在生产数据上恒 False。
+    #     ⇒ 现改为唯一真源 `degrade.holds_valid_result()`，其载体②"一次成功的运行"
+    #       不依赖任何**未被写入**的字段；配合写路径补齐后，
+    #       "此前有成功运行却丢引用"才真的会红。
+    #
+    #   ★ `rows_holding_valid_result` 与 `degrade_first_day_exempt` **成对可观测**：单看"豁免 0"
+    #     分不清"没有失败行"与"谓词恒 False"（两者观测量相同）。同一条命令里给出
+    #     "按该谓词真的持有有效结果的行数"，任何一方的恒真 / 恒假都当场可见
+    #     （`G-03`：空样本不得当已核）。
     first_day_exempt = 0
+    rows_holding_valid_result = 0
     for _idx, t in enumerate(tasks):
         if t.get("status") == "failed" and not t.get("last_valid_result_ref"):
-            if not any(_holds_valid_result(_prior) for _prior in tasks[:_idx]):
+            if not any(holds_valid_result(_prior) for _prior in tasks[:_idx]):
                 first_day_exempt += 1
                 continue
             v.append(
@@ -567,6 +576,8 @@ def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
                     "facts/tasks.jsonl",
                 )
             )
+        elif holds_valid_result(t):
+            rows_holding_valid_result += 1
     # 时点可核（Ch9 §2.2）：每条 check_record 必须能被 run_date 定位
     for cr in check_records:
         if not cr.get("run_date"):
@@ -584,7 +595,7 @@ def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
     v += cv.violations
     criterion("daily_run", "coverage_verifiable", v)
     v += assert_criteria_implemented(root, "daily_run")
-    return (not v), v, {"tasks": len(tasks), "check_records": len(check_records), "degrade_first_day_exempt": first_day_exempt, **cv.scanned}
+    return (not v), v, {"tasks": len(tasks), "check_records": len(check_records), "degrade_first_day_exempt": first_day_exempt, "rows_holding_valid_result": rows_holding_valid_result, **cv.scanned}
 
 
 def stage_expansion_passed(root: Path) -> tuple[bool, list[Violation], dict[str, int]]:

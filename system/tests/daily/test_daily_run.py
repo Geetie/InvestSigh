@@ -316,3 +316,99 @@ def test_coverage_ok_when_acceptance_input_is_covered(code_root: Path) -> None:
 
     report = daily_run.run_daily(code_root, _RUN_DAY)
     assert report.coverage_ok is True, report.coverage_violations
+
+
+# ── ★ `G-43` / `G-45`：写路径**真的**填了「保留上次有效结果」的两个字段 ─────────────
+#
+# 缺陷回顾（独立审计批次 11，逐条实测）：
+#   `pipeline._write_check_record()` 写 `facts/tasks.jsonl` 时**既不设** `last_valid_result_ref`
+#   **也不设** `output_refs` ⇒ 真行恒为 `None` / `[]` ⇒ 阶段④ 的判据
+#   `degrade_keeps_last_valid` 的首日豁免谓词**恒 False** ⇒ 每个失败行都被当"首日"豁免
+#   ⇒ **判据空转，从不报任何真违规**；且全仓库 `output_refs=` **零个生产赋值点**。
+#
+# ★ 本用例为什么必须走**完整 `run_daily`**（而不是直接调写入函数）：
+#   "改了谓词"与"真源里字段真的被填了"是两件事 —— 前者在函数级测试里就能过，
+#   后者只有**真跑一遍端到端再读真源**才看得见（本项目反复出现的形态："改了"但机器上不生效）。
+
+
+def _stub_eight_steps(monkeypatch: pytest.MonkeyPatch, fail_step: dict) -> None:
+    """把 8 步换成**确定性桩**（只为造出"第一次成功"这一前提），写入方仍是真代码。
+
+    ★ 为什么必须换桩：step 2/3/4/7/8 的模型侧在本批次**未交付**，`rules/pipeline.yaml` 里
+      `blocking: true` ⇒ 不换桩则每轮都 `blocked`，"成功运行"这个前提**根本造不出来**，
+      于是"失败行应保留引用"这条契约永远无法被端到端验证。
+      桩只提供 `StepOutcome`，**被验证的写入方 `_write_check_record()` 是真代码**。
+    """
+    from scripts.orchestrate import pipeline as P
+
+    real = P.Pipeline._register_default_steps
+
+    def patched(self):  # type: ignore[no-untyped-def]
+        real(self)
+        for no in range(1, 9):
+            def handler(_d, _s, _no=no):  # type: ignore[no-untyped-def]
+                if fail_step.get("on") and _no == 3:
+                    raise RuntimeError("注入故障：step 3 模型侧超时")
+                return P.StepOutcome(produced=[f"obj-step{_no}"])
+            self.register_step(no, handler)
+        # 7/8 步的 hook 也注册（否则 `assert_steps_complete` 记 G1-05 gap → 恒 blocked）
+        self.register_publish_hook(lambda _r: None)
+        self.register_verify_hook(lambda _r: None)
+
+    monkeypatch.setattr(P.Pipeline, "_register_default_steps", patched)
+
+
+def test_writepath_really_fills_degrade_contract_fields(
+    code_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """先成功、后失败：读 `facts/tasks.jsonl` 的**真实行**，证明两个字段真的被填了。
+
+    断言四件事（缺一不可）：
+    ① 成功行：`status=done`、`output_refs` **非空**（本轮真正新写入的对象引用）、
+       `last_valid_result_ref=None`（本次结果就是有效结果）；
+    ② 失败行：`status=failed`、`output_refs` 如实为空、
+       `last_valid_result_ref` = **第一次成功运行的 `check_id`**（`Ch8 §E.2`："失败时指向旧结果"）；
+    ③ 降级标记行（`degrade.mark_degraded()` 写的，**另一个模块**）指向**同一个** `check_id`
+       —— 消掉 `G-45` 的"两个模块口径相反"；
+    ④ 首日（第一次运行）失败时 `last_valid_result_ref` **如实为空**，不得臆造（`G-03`）。
+    """
+    fail_step: dict = {}
+    _stub_eight_steps(monkeypatch, fail_step)
+
+    # ── 第 1 天：**首日**失败运行 → 引用如实为空（不得编一个，`G-03`） ──
+    fail_step["on"] = True
+    first = daily_run.run_daily(code_root, date(2026, 9, 15))
+    assert first.blocked is True and first.degraded is True
+    first_check = [r for r in read_records(code_root, "tasks") if r.get("check_record")][0]
+    assert first_check["status"] == "failed"
+    assert first_check["last_valid_result_ref"] is None, first_check
+    assert first_check["output_refs"] == [], first_check
+
+    # ── 第 2 天：成功运行 ──
+    fail_step["on"] = False
+    ok = daily_run.run_daily(code_root, _RUN_DAY)
+    assert ok.blocked is False and ok.degraded is False
+    ok_row = [r for r in read_records(code_root, "tasks") if r.get("check_record")][-1]
+    ok_id = ok_row["check_record"]["check_id"]
+    assert ok_row["status"] == "done", ok_row
+    assert ok_row["last_valid_result_ref"] is None, ok_row
+    assert ok_row["output_refs"] == [f"obj-step{n}" for n in range(1, 9)], ok_row
+
+    # ── 第 3 天：再一次失败运行 → **必须**保留上一次成功运行的引用 ──
+    #    ★ 用**不同运行日**：降级标记的幂等键是 `degrade::<date>::<scope>`，
+    #      同日复用会命中幂等、不落新标记（那会掩盖本用例要看的字段）。
+    fail_step["on"] = True
+    bad = daily_run.run_daily(code_root, date(2026, 9, 17))
+    assert bad.blocked is True and bad.degraded is True
+    bad_row = [r for r in read_records(code_root, "tasks") if r.get("check_record")][-1]
+    assert bad_row["status"] == "failed", bad_row
+    assert bad_row["last_valid_result_ref"] == ok_id, (
+        "失败运行**必须**保留上一次成功运行的 check_id（Ch8 §E.2）——\n"
+        f"实得 {bad_row['last_valid_result_ref']!r}，期望 {ok_id!r}"
+    )
+    assert bad_row["output_refs"] == [], bad_row
+
+    # ── ③ 跨模块口径一致：`degrade.mark_degraded()` 写的标记行指向**同一个** check_id ──
+    marks = _degraded_marks(code_root)
+    assert marks[-1]["last_valid_result_ref"] == ok_id, marks
+    assert bad.last_valid_result_ref == ok_id, bad.last_valid_result_ref
