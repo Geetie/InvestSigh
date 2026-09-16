@@ -74,6 +74,11 @@ assumption_grid:
 solution_set_display:
   default_count: 3                          # B18 逐字（「默认展示 3 组」）—— 设计 `§J.3` 原为"待定"
   max_count: 5                              # B18 逐字（「最多 5 组」）—— 同上
+  must_show_multiple: true                  # ★ 语义键（`§B.1` 逐字）：「一个 P 对应**无穷多组**解。故**必须展示多组解**，
+                                            #   否则会把某一解误当"市场的唯一真相"」—— 这是**语义要求**、非数值参数。
+                                            #   ★ 数值下界（"多"的机械化 = ≥2）**不在此处**：它由本键**派生**
+                                            #   （`min_count = 2 if must_show_multiple else 1`），
+                                            #   以**避免**"语义键与数值键可互相矛盾"的同一事实两处（`G-06`）。
   selection: "代表解 + 区间包络"             # §I.2 行 2 控制手段逐字
   overflow: fold                            # §I.2 行 2 逐字（「…上限 N，**超出折叠**」）
 

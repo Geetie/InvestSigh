@@ -369,29 +369,47 @@ note: 判据台账[nvidia_sample]：函数体内已绑定 2 条，声明为 auto
 ⇒ **我已按 `R8-2` 修表**（见本文开头边界表下的更正说明），并把授权**收窄到"仅限本卡自己那一条"**。
 ⇒ 13-A 已获明令：`verify.py` 只加 `valuelayer` 条目、**不得动 `pricelayer`**（`R2`）。
 
-#### R8-3 · 13-B 的两个**死常量**：不是"留在代码"，而是"**进 `rules/`**"
+#### R8-3 · 13-B 的三个常量：不是"留在代码"，而是"**参数进 `rules/`、护栏留代码**"
 
-`ws/ch2-rules` 报告：13-B 有 `DEFAULT_DISPLAY_CAP=3` / `MAX_DISPLAY_CAP=5`（`grep` 零引用 = 死常量），
-以及 `DEFAULT_MIN_SOLUTIONS=2`；并引我的话"'不收进 rules' ≠ '写进代码'"。
+`ws/ch2-rules` 报告：13-B 有 `DEFAULT_DISPLAY_CAP=3` / `MAX_DISPLAY_CAP=5` / `DEFAULT_MIN_SOLUTIONS=2`；
+并引我的话"'不收进 rules' ≠ '写进代码'"。
+
+> ★★ **订正（`ws-ch2-rules` 自曝，主理人采纳）**：本段原写「两个常量…（`grep` 零引用 = 死常量）」——
+> **该判定是假阴性**：`ws-ch2-rules` 第二次踩了 BSD `grep` **不支持 `\|` 交替**的坑，`grep -rn 'A\|B\|C'` 返回 `exit=1`。
+> 实测三个常量**全在决策路径**（`solver.py:318` 默认参数 / `:336` 越界 `raise` / `:391` 置 `degraded` /
+> `:403` 呈现前不变式 / `:503` `check()` 产 `Violation`）⇒ 它们在**装 `rules/` 之前就已经在影响产出**，
+> 所以**不是**"死常量"，而是**"活参数住错了地方"**。档位由「不好/不够」**上调为「错」**。
+> ★ 主理人留痕：**本段先前照抄了该流的假阴性**，且该假阴性是在**我自己的裁定文本里**被引用的 ——
+> 教训：**裁定文本引用下级的 `grep` 结果前，要么自己复跑、要么注明"未复核"**。
 
 ★ **它引用得对，但推出的结论我推翻。** 我当时判"暂不收进 `rules/`"的**前提**是
-**没有键名、没有指派文件**；现在前提没了 —— `05/02:460 §J3` 就是 `00_待拍板项清单.md` **B18 的来源**，
-而 **B18 已拍板**：「估值解集展示上限 `N` = **默认展示 3 组，最多 5 组**〔新给〕」。
-⇒ 条件变了，裁定随之改变：**必须进 `rules/`**（`rules/scenario.yaml`，§J3 指派的件）。
+**没有键名、没有指派文件**；现在前提没了 —— `05/02:460` 是 `§J.3` 本体，`00_待拍板项清单.md` **B18**（出处栏 = `05/02` J3）已拍板：
+「估值解集展示上限 `N` = **默认展示 3 组，最多 5 组**〔新给〕」。
+⇒ 条件变了，裁定随之改变：**必须进 `rules/`**。
 
 **先给一条可复用的统一判据**（免得每件重新吵）：
 
 > **"影响产出取值/选择"的数 = 参数 ⇒ 必须住 `rules/`（`Ch11 §D.2` 单一真源 + `P-09`）；**
 > **"仅为防组合爆炸/防卡死的上界" = 护栏 ⇒ 可住代码，但必须在 docstring 明标为护栏。**
 
-按此判据逐条落：
+按此判据逐条落（★ 落点已更正为 **`rules/valuation-methods.yaml`**，见下）：
 
 | 常量 | 判定 | 处置 |
 |---|---|---|
-| `DEFAULT_DISPLAY_CAP=3` | **参数**（决定"展示哪几组解"，直接改变产出） | 进 `rules/scenario.yaml`，值 `3`，`basis` 记 B18 |
-| `MAX_DISPLAY_CAP=5` | **参数**（同上） | 进 `rules/scenario.yaml`，值 `5`，`basis` 记 B18 |
-| `DEFAULT_MIN_SOLUTIONS=2` | ★ **设计无字面 2，B18 也没给** | **不得自创**。有设计出处 → 按其转写；无 ⇒ **删掉该常量**（改为"展示解数 = 求解器实际解出组数，下界由 B18 的 `default_display_cap` 与真实解数共同决定"），若确需下界则登记 `tbd` 交需求方 |
-| `max_grid_points=256` / `max_nodes=512` | **护栏**（防搜索爆炸，不改变解集语义） | 可留代码，docstring 须标"护栏" |
+| `DEFAULT_DISPLAY_CAP=3` | **参数**（决定"展示哪几组解"，直接改变产出） | **已落** `rules/valuation-methods.yaml::solution_set_display.default_count = 3`（`182f8a1`），`basis` 记 B18 |
+| `MAX_DISPLAY_CAP=5` | **参数**（同上） | **已落** 同件 `max_count = 5` |
+| `DEFAULT_MIN_SOLUTIONS=2` | ★ **设计无字面 2** —— 但 `§B.1` 有**语义**出处（逐字「一个 P 对应**无穷多组**解。故**必须展示多组解**」） | **取方案 ②（语义键 + 代码派生）**：`rules/` 增 `must_show_multiple: true`（语义键，非数值）；**代码删掉常量 `2`**，改为**从该键派生** `min_count = 2 if must_show_multiple else 1`。**不补 `min_count: tbd`** —— `tbd` 会把一条**已经说死的语义要求**降级成"待定"，且与语义键构成"同一事实两处"（可互相矛盾） |
+| `max_grid_points=256` / `max_nodes=512` | **护栏**（仅截断搜索 + `:273` 明写"不静默"，不改变解集语义） | 留代码，docstring 须标"护栏" |
+
+★ **落点更正（`e`）**：本节原写 `rules/scenario.yaml`，**与实装矛盾**。改判依据三条（见 `182f8a1` 提交信息）：
+① `§I.2` 风险表行 1 把「反解搜索空间」的控制手段**明文指派**给 `rules/valuation-methods.yaml`，
+「多解展示爆炸」是**紧邻的同一族**控制手段；② `§J.2` 离散粒度**已在该件**；
+③ **生产者同源**（`assumption_grid.solver_ref` 指的就是 `scripts/pricelayer/solver.py`）。
+⇒ **实装为准**：`rules/valuation-methods.yaml::solution_set_display`。
+
+★ **前瞻风险（`d`，`ws-ch2-rules` 提出，主理人采纳）**：`rules/valuation-methods.yaml:61`
+`grid_search_upper_bound: tbd` 一旦被拍板，代码里的 `max_grid_points=256` **若不改读就会重演同一双份** ⇒
+该键拍板时必须**同时**把 `256` 改为从 `rules/` 读。
 
 ⇒ 处置：`ws/ch2-rules` 贴回 `§J3` 的**逐字原文**（键名 + 值 + 出处）+ 上述判定理由；
 **由主理人**安装进 `rules/` + `chmod u+w` + `lock_rules.py` 重锁 + 核 `rules_lock_guard`。
