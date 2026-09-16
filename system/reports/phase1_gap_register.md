@@ -447,5 +447,46 @@ blocked = True
 **先问哪一条是"真命题"**，另一条要么换字段、要么如实放弃并登记代价。
 这与 `G-42` 那次（`skipped` 是自报、不可校验）**同族**：**别让一个字段承担两件事**。
 
+---
+
+## 13. 批次 13 执行期的新发现（`G-50`）—— 「有实现、**没有 owner**」的判据
+
+| # | 缺口 | 严重度 | 状态 |
+|---|---|---|---|
+| **`G-50`** | 阶段② 判据 `evidence_locatable`：`delivery.yaml` 声明 `automated`、**实现齐备**、却**零绑定**且**派单时无人认领** | 中 | 已立卡 **13-C**（处置中） |
+
+### 13.1 事实（逐条实测，非推测）
+
+| 事实 | 证据 |
+|---|---|
+| 声明为 automated | `registry/delivery.yaml:56-58`（statement「证据可定位（Ch6 §D）」） |
+| 函数体内**零绑定** | `stage_nvidia_sample_passed()` 只绑 `six_step_chain_complete` / `derivation_reviewable` |
+| 门禁如实报 FATAL | `[FATAL] G11-04[nvidia_sample] … 'evidence_locatable' … 无对应 criterion() 声明 → 不得据此判 PASS` |
+| **实现早就存在** | `scripts/validators/locator_check.py`（`Ch6 §D` · 8 条可判定判据 · 18 例测试） |
+| 已注册进门禁 | `run_all_gates.py` + `ops/pre-commit.sh` 均有 |
+| 已被生产调用 | `scripts/orchestrate/chain_steps.py:92` `from scripts.validators.locator_check import check as locator_check` |
+| **派单漏项** | 批次 13 任务卡只把 `chapter4_g_depth` 派给 13-A，`evidence_locatable` **无 owner** |
+
+### 13.2 ★ 这是铁律 1 的**变体**，必须单独记住
+
+铁律 1 原文说的是「**只建模块、不接线** = 未完成」。`evidence_locatable` 不是那个形态 ——
+它**有生产调用方**（`chain_steps.py` 真在调）。它的形态是
+**「接线接在了错的层」**：**执行链调用了校验器，但阶段门禁的判据没绑定**。
+
+⇒ **「有生产调用方」≠「判据已接线」。这是两件事，必须分别核。**
+机器暴露面已经有了：`criterion_effectiveness_guard` 的
+`criteria_bound: 12` / `criteria_declared_automated: 18` / `criteria_not_implemented: 6`
+三行合起来才说得出"哪条判据只是声明"。
+
+### 13.3 一般化教训（**派单侧**，主理人责任）
+
+派"未绑定判据"这类活时，**必须先把「该阶段未绑判据」集合逐条列出、每条各配一个 owner**，
+不能只在卡里点名其中一条。否则剩余条目会变成
+**「看起来有人负责、实际无人负责」的孤儿** —— 而它们的症状（门禁 FATAL）只在**前置产物齐备时**才显形，
+平时被 `_deferred()` 挡住，**极容易一直不被发现**。
+
+⇒ 已按此重写：卡 13-C 单独立卡（`batch13_taskbook.md` · commit `29933fa`），
+并规定其余阶段的未绑判据（`core_chain` 2 条 / `expansion` 2 条）**在对应阶段开工时逐条配 owner**。
+
 
 
