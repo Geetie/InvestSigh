@@ -163,6 +163,13 @@ QUOTA_PER_FIXTURE_CASE = 250
 #: ★ 这是**估算值**（`7 + N`，取 `N≈3`）；**真值请在取样时补测**，但即使乘 2 也仍比 `250` 小一个数量级。
 PRICELAYER_QUOTA_PER_CASE = 10
 
+#: ★ **当前观测**的宿主删除预算阈值（主理人裁定 ②：`--plan` 主计划按**这个**值）。
+#: ★★ 它**不是常数** —— 本会话另有 `9999` 的**较早**观测（见 `CONVENTIONS.md::V-09` 与
+#: `ws_verify_shard_report.md` §1.2/§四.2）⇒ 任何用到它的输出都必须写成"**本回合瞬读**"（`V-11` 仪器轴）。
+#: ★ 为什么不按小的估作主计划：会把预算放大 ~10 倍、轮数多到**没人会跑**（而"没人跑的门禁 = 被关掉的门禁"），
+#:   且**判别信号已内建**（真回落时 `BULK_CONFIRM_REQUIRED` 会自己带 `"threshold": 9999`）。
+_OBSERVED_THRESHOLD = 99999
+
 #: 只读配额诊断所需的环境变量（宿主注入；缺任一 ⇒ 诊断不可用，**如实返回原因，不猜**）。
 _QUOTA_ENV_KEYS = (
     "CODEBUDDY_SAFE_DELETE_BULK_STATE_DIR",
@@ -694,6 +701,89 @@ def _measured_cost(cell: Cell) -> tuple[int, str]:
     return m_val * cell.quota_per_case, ""
 
 
+def _ffd_bins(items: list[tuple[str, int]], capacity: int) -> int:
+    """首次适应递减（FFD）装箱 ⇒ 轮数。`items` = `(标签, 成本)`，**可含同名多次**（拆轮时）。"""
+    bins: list[int] = []
+    for _, cost in sorted(items, key=lambda kv: -kv[1]):
+        if cost > capacity:
+            raise ValueError(f"{cost} > {capacity}：调用方必须先过滤)")   # 不静默丢弃
+        for i, used in enumerate(bins):
+            if used + cost <= capacity:
+                bins[i] = used + cost
+                break
+        else:
+            bins.append(cost)
+    return len(bins)
+
+
+def _round_scenarios(
+    run_costs: list[tuple[str, int]], capacity: int, repeat: int
+) -> dict[str, object]:
+    """算「轮数下限」的**两个形态**（★ 二者不可混为一谈，混了就会得出错误的可行性结论）：
+
+    - **`whole`（整格同轮）** —— `口径 21` 的可比性要求：同一格 `repeat` 次读数**同类可比**。
+      ⇒ 若某格的 `repeat` 次总量就超过本阈值，则**该格在此阈值下无法按此要求取样**（如实列出）。
+    - **`split`（允许拆轮）** —— 每格 `repeat` 次可分到不同轮次。
+      ⇒ 只要**单次**就超阈值，则该格**在此阈值下根本取不到样**（如实列出）。
+
+    ★ 两者必须**分别**给「装不进的格」，**不许**把"两次装不下"说成"单次跑不了"（我第一版就写错了这个标签）。
+    """
+    run_fail = [n for n, c in run_costs if c > capacity]
+    placeable = [(n, c) for n, c in run_costs if c <= capacity]
+    same_round_fail = [n for n, c in placeable if c * repeat > capacity]
+    whole_items = [(n, c * repeat) for n, c in placeable if c * repeat <= capacity]
+    split_items = [(n, c) for n, c in placeable for _ in range(repeat)]
+    return {
+        "run_fail": run_fail,
+        "same_round_fail": same_round_fail,
+        "whole_rounds": _ffd_bins(whole_items, capacity) if whole_items else 0,
+        "split_rounds": _ffd_bins(split_items, capacity) if split_items else 0,
+    }
+
+
+def _print_round_scenarios(cells: tuple[Cell, ...], repeat: int) -> None:
+    """★ 主理人裁定 ②（2026-09-16）：`--plan` **并列打两个阈值下的轮数** ——
+    **主计划按当前观测阈值**，另一个**只作预案**（同 `#91` 的「操作上限 / 回落预案」处理）。
+
+    ★ 为什么不按小的估：① 小值是**较早**的观测（当前环境是 `99999`），拿它当默认会把预算放大 ~10 倍；
+    ② 按它估 ⇒ 轮数多到**没人会跑**，而"没人跑的门禁 = 被关掉的门禁"（**过度保守本身就是一种失效**）；
+    ③ ★ 判别信号**已内建**：阈值真回落时**读数会自己说话**（`BULK_CONFIRM_REQUIRED` 会带
+    `"threshold": 9999`）⇒ 不需要预先按小值估。
+    """
+    run_costs: list[tuple[str, int]] = []
+    for c in cells:
+        cost, _ = _measured_cost(c)
+        run_costs.append((c.name, cost))
+    print()
+    print(f"- ★★ **轮数预案（两个阈值并列 · 每格 {repeat} 次 · FFD 紧装）** ——"
+          f" ★ 主计划按**当前观测**阈值，另一个**只作预案**：")
+    main_rounds = 0
+    for label, cap, role in ((f"当前观测 `{_OBSERVED_THRESHOLD}`", _OBSERVED_THRESHOLD, "★ **主计划**"),
+                             ("回落值 `9999`", 9999, "仅预案")):
+        s = _round_scenarios(run_costs, cap, repeat)
+        if cap == _OBSERVED_THRESHOLD:
+            main_rounds = int(s["whole_rounds"])          # type: ignore[arg-type]
+        whole = int(s["whole_rounds"])                    # type: ignore[arg-type]
+        split = int(s["split_rounds"])                    # type: ignore[arg-type]
+        sr = s["same_round_fail"]                         # type: ignore[assignment]
+        rf = s["run_fail"]                                # type: ignore[assignment]
+        whole_ok = len(cells) - len(sr) - len(rf)
+        print(f"  - **{label}**（{role}）：**整格同轮最少 {whole} 轮**"
+              f"（**只覆盖 {whole_ok}/{len(cells)} 格**，其余见下两行）"
+              f" ｜ **允许拆轮最少 {split} 轮**（覆盖 {len(cells) - len(rf)}/{len(cells)} 格）")
+        print(f"    - ★ 单格 {repeat} 次就超阈（**可按拆轮做**，但读数跨轮 ⇒ 可比性下降）："
+              + (f"{'·'.join(sr)}" if sr else "无"))
+        print(f"    - ★★ 连**单次**都超阈（**此阈值下根本取不到样**）："
+              + (f"**{'·'.join(rf)}**" if rf else "无"))
+    print(f"  - ★ 主计划的**操作形态**不是「紧装 {main_rounds} 轮」，而是 §4 的"
+          f" **4 轮打包（每轮 ≤50,000 项 = 观测阈值的一半，给同期其它流留一半）**；"
+          f"上表的紧装轮数是**下限**，只回答「装不装得下」。")
+    print("  - ★ 为什么**不**按 `9999` 起计划（主理人裁定 ②）：小值是**较早**的观测（当前环境是 `99999`）·"
+          " 按它估会把预算放大 ~10 倍（多到**没人会跑**，而「没人跑的门禁 = 被关掉的门禁」）·"
+          " 且**判别信号已内建**（真回落时 `BULK_CONFIRM_REQUIRED` 自己会带 `\"threshold\": 9999`）"
+          "⇒ 执行时以**读数自报的 threshold** 为准，不预先按小值估。")
+
+
 def _print_plan(cells: tuple[Cell, ...], repeat: int) -> None:
     total_ref = total_meas = 0
     print("## 取样计划（`--plan`：**不执行任何批次**）")
@@ -737,7 +827,10 @@ def _print_plan(cells: tuple[Cell, ...], repeat: int) -> None:
     print("- ★ 两个必须一起读的限定：① `threshold` **不是常数**（观测到 `9999` 与 `99999` 两个值）"
           "⇒ 上面 `threshold` 只是**本回合瞬读**；② 「触顶后本轮不恢复」**已被证伪**"
           "（同命令相隔 1 秒一拒一绿）⇒ 不得拿「触顶」当「本轮没戏」的理由。")
-    print("- ★ 按上述，**排他的物理含义请以主理人的调度为准**（我自检不了「是否同一 `rid`」）。")
+    print("- ★ 按主理人裁定 ①：**表述**按上一条（同一 `rid` 内不得有别的夹具流），"
+          "但**执行纪律仍按「同一宿主独占」**（跨 `rid` 只证了「计数独立」、**没证「配额独立」**；"
+          "且两种错法代价不对称：猜错「共享」只是白等、猜错「独立」是**假绿**）⇒ 不确定时取保守。")
+    _print_round_scenarios(cells, repeat)
     print("- ★ 现测列为 **重型/轻量** 两个数：`29/0` = 29 例用复制整棵树的夹具；`0/100` = 100 例用**轻量根**夹具"
           "（每例 ≈10 项，见 `Cell.quota_per_case`）⇒ **不能只比一个数**。")
     print("- ★ 量不到时**打印原因**并从**引用值**退回（已在行下 `↳` 标出），**不静默**。")
