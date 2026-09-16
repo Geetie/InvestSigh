@@ -103,9 +103,19 @@ def _stage_gate_verdict(code: int, out: str) -> tuple[bool, str]:
     stages = ("prep", "nvidia_sample", "core_chain", "daily_run", "expansion")
     seen: dict[str, str] = {}
     for stage in stages:
-        if f"{stage}: PASS" in out:
+        has_pass = f"{stage}: PASS" in out
+        has_blocked = f"{stage}: BLOCKED" in out
+        # ★ 两者**同时**出现 = 输出不自洽，**必须响亮失败**（缺口 `G-47`，独立审计发现）：
+        #   原实现用 `if/elif` ⇒ 同时出现时**静默取 PASS**，而"取 PASS"恰好是最危险的那一侧
+        #   （把阻塞读成通过）。判据要么可判定，要么报错，**不得**在歧义时默默选一个。
+        if has_pass and has_blocked:
+            return False, (
+                f"阶段 {stage} 的输出里**同时**出现 `{stage}: PASS` 与 `{stage}: BLOCKED` —— "
+                "判据不自洽，无法据以判定（**不得静默取其一**，尤其不得取 PASS）"
+            )
+        if has_pass:
             seen[stage] = "PASS"
-        elif f"{stage}: BLOCKED" in out:
+        elif has_blocked:
             seen[stage] = "BLOCKED"
     absent = [s for s in stages if s not in seen]
     if absent:

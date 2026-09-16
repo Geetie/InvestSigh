@@ -365,5 +365,57 @@ blocked = True
 | **`G-28`** | 门禁清单手写、不从真源派生 | 中 | ✅ **已修**：`tests/guards/test_exit_code_contract.py::GUARDS` 改为**从 `run_all_gates.GATES` 派生**（唯一真源；仅登记 `{timing}` 一个占位符，**未知占位符响亮失败**）。<br>实测：矩阵 20 → **24**（新纳入 `shell_var_guard` / `graph_integrity_guard` / `locator_check` / `criterion_effectiveness_guard` 四条），**且这四条全部通过三条契约**（干净 → 0 / 缺 `code_root` → 2 / 必报 `scanned`）—— 即原先"零覆盖"的四条守卫是**真的合规**，洞在覆盖而不在实现。<br>原 `assert len(GUARDS) == 20` 已删（那是同一事实的第二个存放处，`G-28` 就是这么烂掉的），改为查**结构性**四条：与真源 relscript 集合相等、显示名集合相等、名字唯一、脚本存在、矩阵非空。<br>★ **复原对照**：在副本上给派生加一个 `filter`（跳过 `shell_var_guard`）→ 元断言**变红**，且消息精确（`Extra items in the right set: 'scripts/checks/shell_var_guard.py'`）⇒ 证明"派生 ≠ 不可被削弱"这条断言真在起作用 |
 | **`T-13`** | `facts/` 是否封闭为 18 表 | —— | ✅ **已裁定（需求方 2026-09-16）：扩表**（18 → 22）。四条依据**全部来自设计自己的方案比选**，不是偏好：`Ch4 §B.1` 否决折叠 · `Ch7 §B.3` 否决合并（给了 MSFT↔NVDA 反例）· `BusinessPosition` 实测**不是** Ch4 的 `business`（前者是覆盖位置对象）· 折叠的现存债可实测（`business_mechanism` 是自由文本串、`DriverModel` 缺 7 字段、`business_refs`/`driver_refs` 不存在 ⇒ `Ch4 §G.1` 六项深度**结构上不可达**）。详见 `phase1_open_tensions.md::T-13`。<br>⚠️ **文档侧待需求方回改**：`提示词 §三` / `施工图 §4` / `Ch9 §3.3.3` 的"18（不得增删改名）"字样属**设计区（只读）**，实现方**不得修改** ⇒ 在回改前存在**一处已批准且已知的代码-文档偏离**，以本裁定为准 |
 
+---
+
+## 12. 批次 11 独立审计的发现（`G-42`~`G-49` · `G-RC-11`）
+
+> 审计员交付 `reports/ws_independent_audit_batch11.md`（范围 `f0d9ee2..016f311`，11 个提交）。
+> **★ 三条高优先级缺陷里有两条打在主理人自己的改动上**，且我都已**独立复核成立**（不是采信结论）。
+
+### 12.1 ★ 三条"守卫看起来在跑、其实没在跑"（与 `G7` / `G9-1` 同族）
+
+| # | 缺陷 | 实测证据（我已复核） | 状态 |
+|---|---|---|---|
+| **`G-44`** | **连续第二次 `run_daily` 必然 `blocked=True`**（破坏阶段④ 的"连续多日运行"） | `grep -rn "skipped=" system/scripts/` ⇒ **唯一生产赋值点是 `chain_steps.py:132`（step 2）**；`pipeline.py:244/319` 只是透传。而 `compute/step.py`（step 5）与 `decision/step.py`（step 6）**都不设 `skipped`**，适配器 `_declare_incomplete_when_empty` **恰好只包装这两步**（两步 `blocking: true`）⇒ 幂等重跑时 `produced=[]` + `skipped=[]` ⇒ 被补 `incomplete_reason` ⇒ `STATUS_GAP` ⇒ 整轮 blocked。<br>★ **`4f95c3d` 的 docstring 逐字承诺要防的正是这件事，机器上不生效** | 🔄 **已派** `ws/step56-skipped`（含**关键反向对照**：上游输入为空 ⇒ 双空 ⇒ **仍必须**判 gap） |
+| **`G-43`** | **首日豁免谓词与真实 `Task` 形状不匹配 ⇒ 阶段④ 判据 `degrade_keeps_last_valid` 空转** | 审计反例（真实字段形状 `[done + output_refs=[] + ref=null, failed]`）⇒ `degrade_first_day_exempt=1`、**真违规 FATAL 没出现**。根因：`pipeline._write_check_record()` **两载体从不填** ⇒ `_holds_valid_result` **恒 False** ⇒ **每一行都被当"首日"豁免**。<br>★ **我的单元测试用了手工构造的行**（`_done_task_with_output()`），**与真实写入形状不符** ⇒ 测试过了、谓词在真数据上是空的（`G-RC-02` 同族：**夹具不真实 ⇒ 判据空转**） | 🔄 **已派** `ws/degrade-contract`（要求把测试夹具改成**走真实写路径**） |
+| **`G-42`** | **`skipped` 是自报、零校验 ⇒ `G1-05` 可被击穿** | 审计构造对抗性桩 `StepOutcome(produced=[], skipped=["我瞎编的"])` ⇒ `G1-05` 违例 **6 → 0**（实测）。<br>★ 我原先写的"**判据强度未削弱**"**过强**：那只对**默认构造的桩**成立 | ✅ **已部分处置**：① `ingest_step` 那一半**已修**（合并 `ws/idempotency` 的 `d9fc241` —— ★ **我此前漏合了这两个提交**，见 §12.3）；② 新增**互斥校验**：`produced ∩ skipped ≠ ∅` ⇒ **响亮违例**（堵住"把 produced 原样抄进 skipped"这种最偷懒的伪造）；③ **边界如实写进 `assert_steps_complete` 的 docstring**：`G1-05` 是**自报式不变量兜底**，能抓"忘记产出的意外"，**不能抓蓄意伪造**；后者只能由 `§九 换人审计 + 读代码`覆盖。<br>**残余（未修，需换共享签名）**：本函数拿不到 `root`，故**无法**用真源校验 `skipped` 的 id 是否真实存在 |
+
+### 12.2 其余发现
+
+| # | 缺陷 | 处置 |
+|---|---|---|
+| **`G-45`** | 同一批行**两模块口径相反**：`daily/degrade.py::last_valid_result_ref()` 认为**有**（`'check_d1_full'`），`stage_gate._holds_valid_result()` 认为**无**；且 `output_refs=` **零个生产赋值点** | 🔄 并入 `ws/degrade-contract`（要求**收敛到一处**） |
+| **`G-46`**（中） | `registry/criterion_counterexamples.yaml` 的 **11 条 `blocked_hint` 值零机械核对**（只有非空校验）⇒ 与伪造 `skipped` 同族 | `OPEN`（机器绑定需加"hint 必须真的出现在反例输出里"） |
+| **`G-47`**（低） | `_stage_gate_verdict` 同阶段**同时**出现 `PASS` 与 `BLOCKED` 时，原实现 `if/elif` **静默取 PASS**（最危险的一侧） | ✅ **已修**：改为**歧义即响亮失败**（"不得静默取其一，尤其不得取 PASS"） |
+| **`G-48`**（中） | **`derived/` 归属矛盾**：根 `.gitignore` 写"可由 `facts/` + `method_version` **确定性重算**"，而 `scripts/compute/store.py` 逐字称其为"**追加式真源**"。★ **"可重算"实测不成立**：`contract.py` 的 `computed_at = computed_at or datetime.now(timezone.utc)` ⇒ 同输入两次运行**逐字节不同**；`version` 来自 **CLI 参数**。 | ✅ **已更正**：撤回我 `5a314a3` 的 gitignore 前提，`derived/` **改回入库**（它承载 `G1-03` 四要素里的"**计算**"那一项）。<br>⚠️ **遗留**：`append_only_guard` 的 pathspec 仍只有 `system/facts/*.jsonl` ⇒ `derived/` 虽是追加式真源但**尚无"既有行不可改"的守卫覆盖**（`OPEN`）。★ **我上次的推理错误**：把"守卫没覆盖"读成"性质不成立" |
+| **`G-RC-11`**（中高） | ★ 审计按我点名的 **E1** 给出的结论：`REGISTRY_MODELS` 的 **4 条登记层真源**（`registry/corporate-actions` / `quality-labels` / `idempotency` / `audit/rule_changes`）**既不在 `_COPY_SKIP`、也不在 `_TRUTH_STEMS`** ⇒ 随 `copytree` 进每个夹具副本、且 `_reset_truth_source` 不清 ⇒ 实测 4 文件各 1 行时 `registry_schema_guard` 输出 `lines_validated: 4`（空时 0）⇒ **门禁观测量随真仓库内容改变**。今日侥幸（真仓库各 0 行且无生产写入点）。<br>另：`_TRUTH_STEMS` 与 `JSONL_MODELS` 今日恰好 18=18 **但零机器绑定**；`_COPY_SKIP` 9 项**只有 `state.json` 有断言**，`derived` 无。T-13 扩表会放大。 | `OPEN`（并入 `ws/schema-expand` 的机器绑定单） |
+
+### 12.3 ★★ `G-49`（流程事故，**我的责任**）—— 请需求方知悉
+
+**两件事，都是我的流程失误，不是代码缺陷**：
+
+1. **派单时未给 agent 建工作树**。我派出修 `G-44` / `G-43` 的两个 agent 时**没建 worktree**，
+   于是它们**走进了别人的工作树**（`ws-schema-expand`），在那里跑了
+   `verify.py --batch injection`（**旧批次名** ⇒ 不是 `ws-verify-shard`），
+   该命令会拉起**整个目录**的 pytest ⇒ **删光那个工作树正在用的夹具** ⇒
+   对方观测到"3 红 1 错 / 114s / copytree ENOENT / 文件被改回"。
+   **定位手段 = `lsof -p <pid> -a -d cwd` 取进程真实 cwd**（比看文件 mtime 可靠）。
+   **已处置**：两个 agent `TaskStop`；越界进程 `kill`；补建两个独立工作树后**重新派单**。
+   **已核实受损方成果基本完好**（4 个新模型在、`facts/` 已 22 表）。
+2. **有 agent 直接提交到 `main`**（`d5a37f8`，违反 `G-4`「集成只由主理人做」），
+   并**顺带带走了我当时未提交的 `.gitignore` 改动**；其提交信息还把**主理人自己的**
+   `d1efa1d` / `c2933c3` / `1c35154` 误认成"非主理人执行的集成动作"。
+   ★ **内容经我复核：正确，故不回退**。它修的正是我 `d1efa1d` 的一个真 bug ——
+   **锁放在 `.work/` 内部，被 `_clear_work_dir` 自己删掉 ⇒ 互斥从未生效**；
+   而"**看起来排他了、其实没有**"会给**假信心**（比没有锁更坏）。
+   修法（锁移到 `system/tests/.pytest-session.lock`，`WORK_DIR` 之外）**更稳健**，我已复核 `5 passed` 并保留。
+   **但流程违规必须登记，不得因"结果正确"而默认它对。**
+
+**收紧措施（已执行/将执行）**：
+- ★ **派单前必须先建工作树**，并把**绝对路径**写进 prompt（本轮已补建 `ws-step56-skipped` / `ws-degrade-contract`）；
+- ★ **每轮结束用 `git log main -1` 核对**有没有非主理人的提交（本轮就是这样发现的）；
+- ★ 工作树基点**越旧风险越高**（旧基点不含新加的守卫）⇒ 新单**从 `main` 建**，并要求先 `git merge main`；
+- ★ **禁止把 `verify.py --batch <整目录>` 当"顺手验证"**（单轮删除量可达 4.4 万项 ≫ 阈值 9999）。
+
 
 

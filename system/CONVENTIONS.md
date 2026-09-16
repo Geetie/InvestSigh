@@ -129,7 +129,23 @@ python system/scripts/ops/verify.py --batch <名>       # 已内置同一环境�
 **为什么**：`tests/conftest.py::pytest_sessionstart` 会整目录清理 `tests/.work/` ——
 并行会话会**互删夹具**，产生不可复现的偶发失败。
 
-**强制手段**：⚠️ **人工**（守卫无法可靠检测并发进程）。
+**强制手段**：**人工 + 机器**（2026-09-16 起，见缺口 `G-RC-10`）。
+
+- **人工（第一道）**：动测前先 `ps` 确认**同一工作树**内没有第二个 pytest 会话。
+- **机器（第二道）**：`tests/conftest.py::pytest_sessionstart` 在 `tests/.work/.session.lock`
+  取**排他会话锁**（记持有者 pid）。已被**活着的**会话持有 ⇒ `pytest.exit(..., returncode=4)`，
+  **响亮失败**并给出可行动处置（等它结束 / 换一个 worktree），**不再静默地把对方的夹具删掉**。
+  陈旧锁（持有者进程已死）**自愈接管**，不会永久锁死工作树。
+  覆盖用例：`tests/guards/test_session_lock.py`（5 条，含"拒绝活着的并发会话""陈旧锁接管"
+  "释放不误删他人锁""同进程重复取锁幂等"）。
+
+> ★ **本条原先写的是"⚠️ 人工（守卫无法可靠检测并发进程）"，与实现相反** ——
+> `G-RC-10` 落地后**代码强于文档**。按纪律 5（声明与实现必须机器绑定）已同步更正。
+> ★ **残余（如实登记，不得当成"已完全防住"）**：
+> ① 锁**只对"取锁之后启动"的会话生效**——先启动的旧会话（其 `conftest` 已载入旧版本）不会取锁；
+> ② 锁保护的是**同一工作树**；**跨 worktree 本就不冲突**（各有自己的 `system/tests/.work`），
+> 不需要也不应该串行；
+> ③ 它**不能**阻止"人为故意绕过"（删锁文件再跑）—— 那是纪律问题，不是守卫能覆盖的。
 
 **留档约定**：`verify.py` 自动写 `reports/verify_<批次>_latest.log`（每批保留最近 3 份）。
 **引用证据一律读该文件，不必重跑。**
@@ -238,6 +254,6 @@ sh system/scripts/ops/bootstrap_worktree.sh
 | 规范 | 强制手段 |
 |---|---|
 | V-01 / V-02 / V-03 / V-04 / V-06 | `scripts/checks/verification_policy_guard.py`（进 `run_all_gates.py` + `pre-commit.sh`）+ `tests/guards/test_verification_policy.py` |
-| V-05 | ⚠️ 人工（并发不可靠检测）；留档由 `verify.py` 自动完成 |
+| V-05 | **人工（动测前 `ps`）+ 机器（`tests/.work/.session.lock` 排他会话锁，`returncode=4`，见 `G-RC-10`）**；留档由 `verify.py` 自动完成 |
 | G-01~G-07 / P-01~P-05 | `tests/guards/` 与 `tests/injection/` 的既有断言 + 各守卫自查 |
 | R-01 / R-02 | `tests/injection/test_guards_reject.py` + 各守卫 docstring 自检 |

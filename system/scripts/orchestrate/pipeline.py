@@ -437,6 +437,30 @@ def assert_steps_complete(result: RunResult, registered_hooks: Mapping[str, bool
             #   ★ 判据强度**未削弱**：`produced` 与 `skipped` **双空**才判违例 ——
             #     一个"什么都不做"的桩处理器两者皆空，仍然被拦（反向对照见
             #     `tests/injection/test_idempotency_rows.py`）。
+            #
+            #   ★★ **边界如实登记（`G-42`，独立审计 2026-09-16 证伪了我的过强表述）**：
+            #     我曾写"判据强度未削弱"，那只对**默认构造的桩**（`StepOutcome()`，两字段皆空）成立。
+            #     审计构造了**对抗性桩**：`StepOutcome(produced=[], skipped=["我瞎编的"])`
+            #     ⇒ `G1-05` 违例 **6 → 0**（实测）⇒ 本条**可被自报击穿**。
+            #     ⇒ 准确表述：**`G1-05` 是"自报式不变量兜底"，能抓"忘记产出的意外"，
+            #       不能抓"蓄意伪造的自报"**。后者只能由**换人审计 + 读代码**覆盖
+            #       （这也正是 `§九 独立验收` 存在的理由）。
+            #     ⇒ 本函数**拿不到 `root`**（签名是 `(result, registered_hooks)`），
+            #       故无法在这里用真源校验 `skipped` 的 id 是否真实存在；要加那条需要改共享签名，
+            #       已登记为缺口，**不在本次自裁范围**。
+            #   ★ 下面这条**互斥校验**是我能在此处**可判定地**加的最强约束：
+            #     同一个 id 不可能**既**是"本轮新写入"**又**是"已存在故未写入" ——
+            #     违反即自相矛盾，必须响亮报出（也顺手堵住"把 produced 原样抄进 skipped"这种最偷懒的伪造）。
+            elif set(step.produced) & set(step.skipped):
+                v.append(
+                    Violation(
+                        "G1-05",
+                        f"第 {step.step} 步（{step.name}）的 produced 与 skipped **相交**："
+                        f"{sorted(set(step.produced) & set(step.skipped))} —— "
+                        "同一对象不可能既'本轮新写入'又'已存在故未写入'（自报自相矛盾）",
+                        "scripts/orchestrate/pipeline.py",
+                    )
+                )
             elif not step.produced and not step.skipped:
                 v.append(
                     Violation(
