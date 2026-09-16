@@ -6,9 +6,10 @@
 
 - **工作树**：`/Users/gaza/Developer/InvestSigh/.worktrees/ws-degrade-contract`
 - **分支**：`ws/degrade-contract`（基点 `d5a37f8`）
-- **本单提交**：`abbe7b3` （`fix(degrade): 修 G-43/G-45 —— 让「降级保留上次有效结果」在真数据上真的会拦`）
-- **报告时的 HEAD**：`abbe7b367034c7987acb3d1660d82ab9d10b6c8c`
-- **`git status --short`**：**（空）** —— 工作树干净
+- **本单提交**：`abbe7b3`（代码，`fix(degrade): 修 G-43/G-45 —— 让「降级保留上次有效结果」在真数据上真的会拦`）
+  + `d34e6e5`（本报告，`docs(report): G-43/G-45 修复报告 —— 补齐 pipeline.py diff 的 hunk 复核结论`）
+- **报告时的 HEAD**：`d34e6e5027fa83b91003e02b2ed02b735ddf0668`
+- **`git status --short`**：**（空）** —— 工作树干净（本报告已入库，故不在未跟踪列表里）
 - **`$PY`** = `/Users/gaza/.workbuddy/binaries/python/envs/default/bin/python`
 - **纪律声明**：全程**未**触碰真仓库 `system/facts/`、`system/derived/`、`system/state.json`
   （`git status --short` 为空即证据）；`rules/**` 未改（权限位由 `bootstrap_worktree.sh` 复原）；
@@ -372,7 +373,7 @@ system/scripts/delivery/stage_gate.py:579: elif holds_valid_result(t):
 | 3b | **审计反例必须变成"拦得住"** | 同上 | §2.2：改前 `exit=0 / exempt=1 / 真违规 0 条` → 改后 `exit=1 / exempt=0 / 命中 FATAL` |
 | 4 | **夹具必须走真实写路径**（并**明说**这一点） | `tests/conftest.py::write_check_records` + 两处注入测试改写 | §1.5；`test_write_path_fills_last_valid_ref_and_output_refs` 直接断言**真行**的三态字段；`test_audit_counterexample_real_shape_is_now_caught` 用真实写路径行 + 定向违约注入 |
 | 5 | `tests/daily` / `tests/injection` 相关用例全绿；一次一个目录 | — | §2.6（44 / 17 / 23 / 24 / 28 / 46 / 32） |
-| 6 | 报告（本文件）：实际命令输出 + 退出码 + commit hash + `git status --short` | `system/reports/ws_degrade_contract_report.md` | 本文件 §②③④ + 抬头（`abbe7b3` / `abbe7b367034c7987acb3d1660d82ab9d10b6c8c` / `git status --short` 为空） |
+| 6 | 报告（本文件）：实际命令输出 + 退出码 + commit hash + `git status --short` | `system/reports/ws_degrade_contract_report.md` | 本文件 §②③④ + 抬头（`abbe7b3`+`d34e6e5` / `d34e6e5027fa83b91003e02b2ed02b735ddf0668` / `git status --short` 为空） |
 | 7 | **不得放松判据** | 三载体**只增不减**（①②③，删掉任一条都会放松） | ①③ 原样保留；② 是新增 ⇒ 相对两侧旧口径是**超集**。`audit_c1`/`first_day` 两向对照证明"该拦的拦、该豁免的豁免" |
 | 8 | 共享文件授权范围 | `pipeline.py` **仅** `_write_check_record` 一处 | 见下 |
 
