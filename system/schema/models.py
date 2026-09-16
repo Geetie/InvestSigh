@@ -60,8 +60,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_valid
 
 from .stems import JSONL_STEMS
 
-from .stems import JSONL_STEMS
-
 
 # ─────────────────────────── 待定 token 规范（Ch2 §C.2 R-14） ───────────────────────────
 TBD = "tbd"
