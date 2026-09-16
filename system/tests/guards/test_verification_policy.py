@@ -407,7 +407,7 @@ def test_v02_table_missing_row_is_detected(code_root: Path) -> None:
     _patch(
         code_root,
         CONVENTIONS_REL,
-        "| `injection-g` | 分片 G（反编造 + 分片绑定） | 300s | 5.67s |\n",
+        "| `injection-g` | 分片 G（反编造 + 分片绑定 + 守卫防御性） | 300s | 5.67s |\n",
         "",
     )
     problems = _v02_binding_problems(code_root)

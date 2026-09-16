@@ -376,10 +376,16 @@ BATCHES: Mapping[str, Batch] = {
         300.0, _exit_zero,
     ),
     "injection-b": Batch(
-        "injection-b", "tests/injection/ 分片 B（判据有效性 + 守卫防御性）",
+        # ★ 重平衡记录（卡 #109，主理人裁定「移片」而非「改上限」，2026-09-16）：
+        #   合并带进 `tests/injection/test_criterion_effectiveness.py`（+264 行）⇒ 本片
+        #   **34 例 > 上限 32**（当时读数；`test_shard_coverage.py` 如实变红并打印
+        #   `{'injection-b': 34}（现算值）` —— 机器绑定按设计生效，不是假红）。
+        #   把 `test_guards_defensive.py`（当时 5 例）移入 `injection-g`（余量最大）⇒
+        #   本片当时 29 / G 当时 29，总例数不变。★ 代价：本片描述串去掉「守卫防御性」，
+        #   与 `injection-g` 互换 —— 两处描述串必须同步改，否则造出新的"两处漂移"。
+        "injection-b", "tests/injection/ 分片 B（判据有效性）",
         _pytest(
             "tests/injection/test_criterion_effectiveness.py",
-            "tests/injection/test_guards_defensive.py",
         ),
         300.0, _exit_zero,
     ),
@@ -432,10 +438,18 @@ BATCHES: Mapping[str, Batch] = {
         #   ★ 移位**不改变任何删除量**：该文件**不建夹具**（它测的是分片绑定自身）；
         #     它的成本是 `test_shard_case_counts_within_quota` 起的 **7 次 `--collect-only`**
         #     子进程，实测合计 **1.72s** ⇒ 相对本片 300s 预算可忽略。
-        "injection-g", "tests/injection/ 分片 G（反编造 + 分片绑定）",
+        # ★ 三次调整（卡 #109，主理人裁定「移片」）：`injection-b` 当时 **34 例 > 上限 32**，
+        #   是主干当时**唯一**的超限真红。把 `test_guards_defensive.py`（当时 5 例）由 B 移入
+        #   本片（当时余量 8，为 7 片最大）⇒ B 29 / G 29，两片均 ≤32，总例数不变。
+        #   ★ 为什么接收方只能是本片：其余各片余量为 f(5) > d(3) > a(2) > c(1) > e(0)，
+        #     其中 f 收下后恰好顶到 32 ⇒ 余量 0，下次再涨一例就又要移。G 是本轮唯一"移完还有余量"的片。
+        #   ★ 移位**不改变任何删除量**：`test_guards_defensive.py` 为纯内存用例（`P-05` 口径），
+        #     不建整树夹具 ⇒ 相对本片 300s 预算可忽略。
+        "injection-g", "tests/injection/ 分片 G（反编造 + 分片绑定 + 守卫防御性）",
         _pytest(
             "tests/injection/test_quote_provenance.py",
             "tests/injection/test_shard_coverage.py",   # ← 由 `injection-f` 移入（见上）
+            "tests/injection/test_guards_defensive.py",  # ← 由 `injection-b` 移入（见上，卡 #109）
         ),
         # ★ 超时 90s → **300s**（主理人裁定）：与 `tests/injection/` 其余各片 **齐平**（同族一致性优先），
         #   并吸收一个**已复现**的宿主状态 —— 子进程若落回沙箱内，本片单次实测可达 **247s ≫ 90s**

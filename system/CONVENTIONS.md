@@ -69,12 +69,12 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
 | `conflict` | `tests/conflict/`（P-03/P-05/P-07 schema） | 30s | 0.50s |
 | `guards` | `tests/guards/`（门禁退出码契约 + 验证规范） | 300s | 13.23s |
 | `injection-a` | `tests/injection/` 分片 A（审计回归 + 链路接线） | 300s | 4.56s |
-| `injection-b` | 分片 B（判据有效性 + 守卫防御性） | 300s | 12.66s |
+| `injection-b` | 分片 B（判据有效性） | 300s | 12.66s |
 | `injection-c` | 分片 C（守卫拦截 A 半 + 追加式） | 300s | 8.56s |
 | `injection-d` | 分片 D（守卫拦截 B 半 + 幂等 + 时间契约） | 300s | 13.88s |
 | `injection-e` | 分片 E（提示注入 + rules 锁 + 时间契约） | 300s | 4.80s |
 | `injection-f` | 分片 F（阶段闸门 + 接线守卫） | 300s | 7.32s |
-| `injection-g` | 分片 G（反编造 + 分片绑定） | 300s | 5.67s |
+| `injection-g` | 分片 G（反编造 + 分片绑定 + 守卫防御性） | 300s | 5.67s |
 | `root` | `tests/test_ch11_invariants.py`（Ch11 不变量） | 30s | 0.38s |
 | `compute` | `tests/compute/`（确定性计算层） | 180s | 2.60s |
 | `graph` | `tests/graph/`（依赖图与 T12 传播） | 60s | 2.68s |
