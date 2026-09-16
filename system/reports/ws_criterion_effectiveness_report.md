@@ -502,3 +502,213 @@ RC=0        ← 11 条（含本次新增的第 ⑪ 条）
 - 真实仓库 `git status --short` 仅见**他人**产物（` M system/tests/guards/test_exit_code_contract.py`
   —— 应为 `ws-guards-catchup` 在收编 `GUARDS` 矩阵；`?? system/tests/.audit-b11/` —— `auditor-batch11`）。
   **我未触碰这两者**，本节实验全部只在副本内进行，真实 `facts/`、`derived/`、`space/` 未被写入。
+
+---
+
+## 六、`G9-1` / `G9-2` 补实现（team-lead 两条裁定落地）
+
+**提交**：`e15d894 feat(stage_gate): 补实现 G9-1/G9-2 —— task_state_auditable 与 review_append_only 从「有声明」到「真的会拦」`
+（基线 `d74a829`，已 `git merge main` 取得 `append_only_guard` 的 `G-RC-12` 修复）
+
+### 6.1 改了什么（逐条对裁定）
+
+| 裁定 | 落地 |
+|---|---|
+| `G9-1`：`daily_run::task_state_auditable` **必须补实现**，不许以 `ineffective` 收尾 | 在 `stage_daily_run_passed()` 内实现 `施工图:203` 的 `all_tasks_have_status(run_window)`：每行 `status` **存在且 ∈ `TaskStatus` 五态**；违例带 `task_id` + 实际值 + 合法域。原 `ineffective` 探针如期变红 → 改成正向反例，并另加**判别力绑定**测试。 |
+| `G9-2`：`review_append_only` **按设计实现 append-only**，不许改 id 措辞 | 按 `Ch10 §D.5` 补两个**互不重叠**的被检面（6.3）；`delivery.yaml` **一行未动**。 |
+| `G9-2`：先查清 `expansion` 里有没有「三层齐备」自己的 id | **没有**（`delivery.yaml:124-133` 只有 3 条）。且**「三层齐备」在全设计区没有「通过判据」级的逐字出处** —— 见 6.5，**待你裁**。 |
+| `G9-2`：`(success, failure, pending)` 三类记录 | **全代码区无载体**（grep 只命中 `delivery.yaml:132` 那句声明本身）⇒ 按 `G-03` 保留为**临时 `ineffective`** 并写明原因 —— 见 6.5，**待你裁**。 |
+| 现场变化：`append_only_guard` 在 worktree 里曾恒空放行（`G-RC-12`） | 已 `merge main` 取得修复，并**把它变成阶段⑤ 的可检项**（6.3 ①）。 |
+
+### 6.2 `G9-1` 的可执行证据（**原始输出 + 退出码**）
+
+实验在**隔离副本**上做（只复制 `facts/ registry/ rules/ scripts/ schema/ derived/ raw/ config/`，真实 `facts/` 零接触）：
+
+```
+═══ 1/4 合规输入（真实 4 行，status 全合法）═══
+$ python <copy>/scripts/delivery/stage_gate.py <copy> --no-report --stage daily_run
+EXIT=0
+  scanned daily_run.criteria_bound: 4
+  scanned daily_run.tasks: 4
+  note: daily_run: PASS
+RESULT: PASS（0 violations）
+
+═══ 2/4 形态一：值非法 ═══
+（把唯一一行的 status 改为 totally_bogus_status）
+$ python <copy>/scripts/delivery/stage_gate.py <copy> --no-report --stage daily_run
+EXIT=1
+  scanned daily_run.criteria_bound: 4
+  [FATAL] daily_run @ facts/tasks.jsonl:0 — check_1 的 status='totally_bogus_status'
+          不在 TaskStatus 合法取值域内（合法值 = ['done', 'failed', 'pending_evidence',
+          'queued', 'researching']）⇒ 任务状态不可核
+RESULT: FAIL（1 violations）
+
+═══ 3/4 形态二：整行无 status 键 ═══
+$ python <copy>/scripts/delivery/stage_gate.py <copy> --no-report --stage daily_run
+EXIT=1
+  [FATAL] daily_run @ facts/tasks.jsonl:0 — check_1 的 status=None
+          不在 TaskStatus 合法取值域内（合法值 = ['done', 'failed', 'pending_evidence',
+          'queued', 'researching']）⇒ 任务状态不可核
+RESULT: FAIL（1 violations）
+
+═══ 4/4 判别力绑定：把副本里那条谓词掏空成恒假 ═══
+（copy/scripts/delivery/stage_gate.py：if not isinstance(got, str) or got not in legal_status:
+                                        → if False:  # gutted-for-probe）
+$ python <copy>/scripts/delivery/stage_gate.py <copy> --no-report --stage daily_run
+EXIT=0                      ← 同一条不合规输入**不再被拦**
+  scanned daily_run.criteria_bound: 4      ← 而「绑定数」**没有任何变化**
+  scanned daily_run.tasks: 1
+RESULT: PASS（0 violations）
+```
+
+**4/4 是本批次的核心结论**：`criteria_bound` 恒为 4 而门禁由红变绿 —— 再次实测「绑定只证明接了，
+不证明真的在查」；而 2/4 与 3/4 就是**唯一**能发现这件事的观测。
+
+### 6.3 `G9-2` 的可执行证据（**原始输出 + 退出码**）
+
+`review_append_only` 现绑定两个被检面，**互不重叠**：
+
+**① append-only 路径真的覆盖本真源**（读 `append_only_guard` 的**判据**，不读输出文字，`G-06`）
+
+```
+═══ 基线（append_only_guard 原样）═══
+$ python <copy>/scripts/delivery/stage_gate.py <copy> --no-report --stage expansion
+EXIT=1     scanned expansion.aog_covers_carrier: 1
+FATAL 条数=2        ← 两条都是既有的「未绑定判据台账」，与本判据无关
+
+═══ 掏空：把副本的 append_only_guard.facts_pathspec() 改成 glob *.bak ═══
+$ python <copy>/scripts/delivery/stage_gate.py <copy> --no-report --stage expansion
+EXIT=1     scanned expansion.aog_covers_carrier: 0
+  [FATAL] expansion @ scripts/checks/append_only_guard.py:0 — append-only 守卫的
+     pathspec='…/facts/*.bak' 未覆盖本函数所读的 facts/*.jsonl ⇒ 复盘记录所在真源
+     不在「既有行不得改写」的射程内（`Ch10 §D.5` 第 2 行 / `Ch9 §3.4.2`）
+
+违例集合差（掏空后 − 基线）= **恰好这 1 条** ⇒ 归因干净
+```
+
+**② 已声明过的 `eval_layer` 层不得从记录集里消失**（`Ch10 §D.5` 第 3 行「禁'只留赢的'」）
+
+```
+═══ 合规（每 task 一层、三层齐备）═══
+$ python <copy>/scripts/delivery/stage_gate.py <copy> --no-report --stage expansion
+EXIT=1     scanned expansion.aog_covers_carrier: 1
+           scanned expansion.tasks_with_eval_history: 3
+RESULT: FAIL（2 violations）   ← **两条都是既有的未绑定判据台账**，专属 hint 不出现
+
+═══ 反例：同一 task 在追加序上先声明三层、后只剩一层 ═══
+（t1: eval_result_history=[research_quality, forecast_quality, investment_result]
+  → 下一行 t1: eval_result={research_quality}）
+$ python <copy>/scripts/delivery/stage_gate.py <copy> --no-report --stage expansion
+EXIT=1
+  [FATAL] expansion @ facts/tasks.jsonl:0 — t1 的复盘记录里层
+    ['forecast_quality', 'investment_result'] 消失（此前已声明过） ⇒ 违反
+    『已声明过的层不得从记录集里消失』（Ch10 §D.5 禁「只留赢的」）
+RESULT: FAIL（3 violations）   ← 1 条本判据 + 2 条既有台账
+```
+
+★ **为什么这条不是「重造第二套 append-only 比对」（`G-06`）**：该反例在 **diff 层面完全合法**
+（纯追加，没有任何既有行被改写）⇒ `append_only_guard` 对它**必然放行**。它违反的是**语义**
+（用户看到的历史被悄悄收窄）。两者被检面**不重叠、互补**：前者管"行有没有被改"，
+后者管"层有没有被丢"。
+
+★ **阶段⑤ 的归因方式**：它在合规输入下**结构上就是 `exit 1`**（两条未绑定判据的台账条目），
+故归因不靠 red/green，而靠**专属 hint + 违例集合差**（与阶段②③ 同一手法，见 §3.1）。
+
+### 6.4 顺带修掉门禁自身的一处设计缺陷
+
+补 `G9-2` 时，**门禁自己 FATAL 了**——这正是"反例必须可执行"的价值：
+
+```
+[FATAL] G9 @ registry/criterion_counterexamples.yaml:0 —
+        #13: 判据 expansion::review_append_only 的 counterexample 条目重复登记
+[FATAL] G9 @ registry/criterion_counterexamples.yaml:0 —
+        #14: 判据 expansion::review_append_only 的 counterexample 条目重复登记
+```
+
+原实现把去重口径定为「`(stage, criterion_id, kind)` 三元组唯一」。但一条判据**本来就可能有多条
+互不重叠的违反轴**（`review_append_only` 就有 ①三层缺层 ②已声明层消失 ③pathspec 没罩住 三个
+独立被检面），把它们压成一条会**丢失证据**。
+
+⇒ 去重口径改为「**测试路径全局唯一**」（防的是同一测试被登记多次冒充多条证据，而不是防同判据多轴）。
+义务本身（A：每条已绑定判据 ≥1 条 `counterexample`）**不受影响**。
+
+### 6.5 仍待你裁定（**我未自行改措辞**，`R-04`）
+
+**① 「三层齐备」是一条没有设计出处的尺** —— 我逐处查过，**"三层必须齐备"在全设计区
+没有「通过判据」级的逐字依据**：
+
+| 出处 | 逐字内容 | 它到底约束什么 |
+|---|---|---|
+| `Ch10 §C.1`（`10/02:198`） | `eval_layer` \| enum \| `research_quality`/`forecast_quality`/`investment_result` | **取值域**（合法值有哪三个），**不是**"三个都必须出现" |
+| `Ch10 §C.4`（`10/02:250`） | `assert layer in VALID_LAYERS, "三层不得新增/合并"` | **取值域**断言 |
+| `Ch10 §C.2`（`10/02:215`） | "三层**不合并**：禁止把三层压成单一 `score`/`confidence`/综合评分" | **负向断言**（禁综合评分） |
+| `施工图:215 / :234` | "**退出物**：三层复盘记录" | **退出物**声明；`:234` 的通过判据只列 3 条，**不含齐备性** |
+
+⇒ 选项：**(a)** 批准新增一条 id，我逐字引 `Ch10 §C.4:250`「三层不得新增/合并」（**我倾向这条**）；
+**(b)** 判定它不属验收判据、删掉该检查（代价：丢掉一层现存判别力，且"退出物：三层复盘记录"无人守）；
+**(c)** 你给别的落点。**在你批之前我保持现状**（仍挂在 `review_append_only` 上，未改措辞、未新增 id）。
+
+**② `(success, failure, pending)` 三类记录的载体是谁** —— 实测**全代码区无承载**：
+
+```
+═══ 证据 4/4：三类记录这条的判别力实测为 0 ═══
+A 混搭(success/failure/pending) EXIT=1
+B 只留赢的(全 success)           EXIT=1
+→ 两份违例集合**完全相同**（2 条对 2 条）
+```
+
+`Ch10 §D.5:332` 逐字要求「成功 / 失败 / `pending`（待判断）各有结构性记录，不可选择性删除」，
+但 `success`/`failure`/`pending` 三元组在代码区**只出现在 `delivery.yaml:132` 那句声明里**
+（`schema/models.py` 无对应枚举、`facts/*.jsonl` 无对应字段）⇒ 按 `G-03` 只能显式记账为
+**「无被检对象」**。我把它登记为**临时 `ineffective`**（条目里写明：临时、原因是**载体未定**、
+补实现的提交号见本节），并留了探针测试 —— 一旦有载体，该探针**当场变红**，强制更新登记（铁律 5）。
+**请你指定载体**，或确认它属后续阶段待交付。
+
+### 6.6 诚实标注：`① append-only 覆盖性` 的判别力是**弱**的
+
+必须说清楚：6.3 ① 的判据是「守卫的 pathspec 前缀 == 本函数所读的 facts 目录 + glob `*.jsonl`」。
+它**近乎恒真**（pathspec 由 `root/facts` 推出，天然指向该目录）——它的价值是**把"机制真的罩住
+这个真源"从假定变成可检项**，而不是提供强判别力。`review_append_only` 的**真判别力在 ②**。
+
+同理，`aog_tracked_files` 在**夹具副本**里恒为 `0`（副本的 facts 不在 git 跟踪范围内），
+故它只**记账**、不判红 —— 否则会把环境伪影误判成数据违例（与 `append_only_guard` 自身
+`count_tracked_matches` docstring 里的既定口径一致）。
+
+### 6.7 本节的验证汇总（**实测命令 + 退出码**）
+
+| 验证 | 命令 | 结果 |
+|---|---|---|
+| 分片 B（含本文件 26 例） | `sh system/scripts/ops/run_pytest.sh tests/injection/test_criterion_effectiveness.py tests/injection/test_guards_defensive.py` | **31 passed**，`RC=0` |
+| 分片 F（含分片配额断言） | `sh … tests/injection/test_stage_gate.py tests/injection/test_wiring_guards.py tests/injection/test_shard_coverage.py` | **29 passed**，`RC=0` |
+| 门禁契约 | `sh … tests/guards` | **69 passed**，`RC=0` |
+| 阶段④ 爆炸半径 | `sh … tests/daily` | **43 passed**，`RC=0` |
+| 全门禁 24 条 | `python system/scripts/ops/run_all_gates.py --timeout 30` | 仅 `traceback.py exit=1`（既有 `T-10`）；`criterion_effectiveness_guard exit=0 (2.04s)`；`stage_gate --stage prep exit=0 (0.72s)` |
+| 提交门禁 | `sh system/scripts/ops/pre-commit.sh` | `pre-commit ✓ 全部门禁放行`，`RC=0`（11 条） |
+
+**性能**：`stage_gate --stage prep` 曾因我把 `schema.models`（pydantic 重模块）放模块顶层而
+由 **0.51s → 0.86s**；已改**就地导入**（只有阶段④ 用得到它），`prep` 回到 **0.72s**，
+差异只由 `daily_run` 承担。新门禁 `criterion_effectiveness_guard` 2.04s。
+
+### 6.8 ⚠️ 给后续各流的约束：分片 B 余量只剩 1
+
+`tests/injection/test_criterion_effectiveness.py` 由 23 → **26** 例，所属分片
+`injection-b` 由 28 → **31** 例，而 `test_shard_coverage.py::test_shard_case_counts_within_quota`
+的上限是 **32**：
+
+```
+$ PYTHONPATH=tests <py> -m pytest tests/injection/test_criterion_effectiveness.py \
+      tests/injection/test_guards_defensive.py --collect-only -q --noconftest
+31 tests collected
+```
+
+⇒ **往本文件再加 >1 个用例就会让分片配额断言变红**（这正是它该有的行为：防"某片单轮跑不完 ⇒
+门禁被静默关掉"）。修法是**把新用例放进新文件并登记到另一片**，或由 `verify.py` 维护者重排分片。
+`verify.py` 属 `V-02` 保护范围，**我未改动**，在此上报。
+
+### 6.9 本节清洁性
+
+- 副本 `system/tests/.probe-g9/`（本节全部实验所在）**已 `rm -rf` 删除**，无残留。
+- 本分支工作树 `git status --short` **空**；`git status --short system/facts/` **空**（真实真源未被写入）。
+- `rules/**` 未被写入（副本内仅 `chmod u+w` 以便探针改 `append_only_guard`，真仓库 `rules/**` 仍 0444：
+  由 `rules_lock_guard` + `injection_guard` 两条门禁各自复核过，均 `exit=0`）。
+- 未触碰 `pipeline.py` / `chain_steps.py`（共享文件）与 `verify.py`。

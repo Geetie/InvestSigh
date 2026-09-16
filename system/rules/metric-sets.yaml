@@ -1,14 +1,10 @@
-# rules/metric-sets.yaml —— 指标集注册表（**候选**，尚未安装进 `rules/`）
+# rules/metric-sets.yaml —— 指标集注册表
 #
 # 权威出处：`04_公司价值研究与深度标准/02_实现方案.md §C.1`（可配置的指标集定义 `rules/metric-sets.yaml`）
 #           `§C.2`（混合公司防指标串味的程序约束）/ `§C.3`（三类是否穷举 → 扩展机制）
 #           `§C.4`（指标 → 财务科目 → 每股指标 三层映射）
 #           `§B.1`（转化链路分段模型）/ `§B.2`（每段证据要求）
 # 落位复核：`00_交付施工图.md` §3.1 第 123 行 / §6 第 252 行（配置 · 阶段② · 出处 `Ch4 §C`）
-#
-# ★ 本文件是**候选**（`system/registry/rule-candidates/`）：`rules/**` 是 0444 + SHA256 锁
-#   （`Ch9 §3.10 J9` / 纪律 9-10），**模型对 `rules/` 无写权**。
-#   安装 = 主理人执行 `chmod -R u+w system/rules` → 复制本文件 → `python system/scripts/ops/lock_rules.py` 重锁。
 #
 # ★ 逐字转写纪律：每个键都能指回**设计节号 + 原文片段**；设计未给值 ⇒ `tbd` + `basis`；
 #   设计没写的键**不新增**。逐键对照表见 `system/reports/ws_ch2_rules_report.md`。
@@ -25,8 +21,6 @@
 
 version: 1
 spec_anchor: "Ch4 §C.1"
-install_target: "rules/metric-sets.yaml"
-install_note: "由主理人安装到 rules/metric-sets.yaml 并跑 system/scripts/ops/lock_rules.py 重锁"
 
 # ── 路由（`§C.1` / `§C.3`）────────────────────────────────────────────────
 routing:

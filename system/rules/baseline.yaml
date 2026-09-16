@@ -1,4 +1,4 @@
-# rules/baseline.yaml —— `baselines` 底稿的上限/阈值参数（**候选**，尚未安装进 `rules/`）
+# rules/baseline.yaml —— `baselines` 底稿的上限/阈值参数
 #
 # 权威出处：`04_公司价值研究与深度标准/02_实现方案.md §D.2`（关键驱动上限 / 超限处理 / 可持续时长）
 #           `§G.2`（"不是六个空标题"的可程序校验：非空率 / 定位数 / 推导数）
@@ -6,10 +6,6 @@
 #           `§B.2`（每段证据要求：待补证段的后果）
 #           阈值取值出处：`00_待拍板项清单.md` **B5 / B6 / D-03**（2026-09-15 已确认）
 # 落位复核：`00_交付施工图.md` §3.1 第 124 行 / §6 第 253 行（配置 · 阶段② · 出处 `Ch4 §B/§G`）
-#
-# ★ 本文件是**候选**（`system/registry/rule-candidates/`）：`rules/**` 是 0444 + SHA256 锁
-#   （`Ch9 §3.10 J9` / 纪律 9-10），**模型对 `rules/` 无写权**。
-#   安装 = 主理人执行 `chmod -R u+w system/rules` → 复制本文件 → `python system/scripts/ops/lock_rules.py` 重锁。
 #
 # ★ 逐字转写纪律：每个键都能指回**设计节号 + 原文片段**；设计未给值 ⇒ `tbd` + `basis`；
 #   设计没写的键**不新增**（未转写项在报告里单列）。逐键对照表见 `system/reports/ws_ch2_rules_report.md`。
@@ -20,12 +16,20 @@
 # ★ 例外说明（本文件内唯一一族的"键名为转写"）：`§B.2` / `§G.2` 的后果语义在设计中是**行文**而非 key，
 #   本节照其语义落布尔键并在行内标注"键名为转写"；**值本身是逐字的**，报告对照表已标出。
 #
+# ★★ 深度约定（主理人裁定 `R8-1`，2026-09-16）—— **本文件的分组深度为准。**
+#   设计里 `cfg.max_primary_drivers_per_business` 这类 `cfg.<key>` 写法，一律读作
+#   **本文件 `thresholds:` 分组下的键**（即 `cfg = baseline["thresholds"]`）；
+#   设计里的 `rules/baseline.yaml: <key>` 是 **`file:key` 记法，不锁深度** ——
+#   项目既成契约：存量 10 件规则文件 **10/10 分组包裹**，且有 2 例同源先例
+#   （`schedule.yaml:trading_calendar` → 实装 `cadence.timezone`；
+#    `freeze.yaml::freeze_param` → 实装 `freeze_params`）。
+#   设计的这两种写法与分组**不矛盾**：设计没写深度，**深度由本件填**。
+#   ⇒ 代码一律按**本文件实有结构**读；**不得**为迁就设计里扁平写法而摊平本文件。
+#
 # 只读（安装后）：0444 + SHA256。
 
 version: 1
 spec_anchor: "Ch4 §D.2 / §B.2 / §G.2 / §G.4"
-install_target: "rules/baseline.yaml"
-install_note: "由主理人安装到 rules/baseline.yaml 并跑 system/scripts/ops/lock_rules.py 重锁"
 
 # ── 阈值（`§D.2` / `§G.2`）──────────────────────────────────────────────
 thresholds:

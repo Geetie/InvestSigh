@@ -1,4 +1,4 @@
-# rules/scenario.yaml —— 情景定义与情景方法状态（**候选**，尚未安装进 `rules/`）
+# rules/scenario.yaml —— 情景定义与情景方法状态
 #
 # 权威出处：`05_价格与市场预期研究/02_实现方案.md §E.3`（情景口径一致性检查：`assert_scenario_match`）
 #           `§E.4`（`scenario_method_status = pending` 的落地 + 转正流程）
@@ -7,10 +7,6 @@
 #           标签取值出处：`00_待拍板项清单.md` **J4/J5（05/02）**；概率口径出处：**B11 / D-03**
 # 落位复核：`00_交付施工图.md` §3.1 第 135 行（`rules/scenario.yaml` + `scripts/pricelayer/scenario_guard.py`
 #           = 情景一致性 + `probability` 默认 null · Ch5 §E）/ §6 第 255 行（情景定义 + `scenario_method_status` · 阶段②）
-#
-# ★ 本文件是**候选**（`system/registry/rule-candidates/`）：`rules/**` 是 0444 + SHA256 锁
-#   （`Ch9 §3.10 J9` / 纪律 9-10），**模型对 `rules/` 无写权**。
-#   安装 = 主理人执行 `chmod -R u+w system/rules` → 复制本文件 → `python system/scripts/ops/lock_rules.py` 重锁。
 #
 # ★ 逐字转写纪律：每个键都能指回**设计节号 + 原文片段**；设计未给值 ⇒ `tbd` + `basis`；
 #   设计没写的键**不新增**。逐键对照表见 `system/reports/ws_ch2_rules_report.md`。
@@ -24,8 +20,6 @@
 
 version: 1
 spec_anchor: "Ch5 §E.3 / §E.4"
-install_target: "rules/scenario.yaml"
-install_note: "由主理人安装到 rules/scenario.yaml 并跑 system/scripts/ops/lock_rules.py 重锁"
 
 # ── 情景标签体系（`§J.4`）────────────────────────────────────────────────
 scenario_tags: [bear, neutral, bull, custom]   # §J.4：「情景标签体系 | 枚举 | 定义 `{bear, neutral, bull, custom}`」

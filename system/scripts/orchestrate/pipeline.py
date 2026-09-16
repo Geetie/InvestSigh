@@ -347,9 +347,34 @@ class Pipeline:
 
         断点续跑（`resume`）会**再写一条**并带 `_r<n>` 修订号：追加式不可变，
         且幂等键保持唯一（重跑同日不产生**重复事件/建议**，但运行记录本身如实追加）。
+
+        ## ★ 本行同时是"降级保留上次有效结果"契约的**唯一写入点**（`Ch8 §E.4`）
+
+        `Ch8 §E.1` 的共同红线：故障时**保留上次有效结果**、**不覆盖为无意义空值**、
+        **不把旧数据标为最新**。落到本行就是两个字段必须**按设计**填：
+
+        | 字段 | 填法 | 依据 |
+        |---|---|---|
+        | `last_valid_result_ref` | 本次运行**未产出有效结果**（`blocked` / `degraded`）时，指向**上一次成功运行**的 `check_id`（无 → `None`，**如实为空**，`G-03`）；本次运行成功时为 `None`（本次结果**就是**有效结果，无需保留旧引用） | `Ch8 §E.2`（"失败时指向旧结果"）/ `N9.2-13` |
+        | `output_refs` | 本次运行的 `StepOutcome.produced` **并集**（= 本轮**真正新写入**的对象引用），**仅当本次运行产出有效结果时填写**；失败 / 阻断 / 降级时如实为空 —— 此时该任务的有效结果是 `last_valid_result_ref` 指向的旧结果，**不是**本次的部分写入 | `Ch8 §E.1` / `§E.4`（"不覆盖为无意义空值"） |
+
+        ★★ **为什么必须在这里填**（缺陷 `G-43` / `G-45`，独立审计实证）：此前本方法
+        **两个字段都不设**，于是 `facts/tasks.jsonl` 里每一行都恒为 `None` / `[]`，
+        使阶段④ 的判据 `degrade_keeps_last_valid` 的首日豁免谓词（`stage_gate` 的
+        `_holds_valid_result()`）**恒 False** ⇒ 每个失败行都被当"首日"豁免 ⇒
+        判据**空转、从不报任何真违规**。且全仓库 `output_refs=` **零个生产赋值点**。
+
+        ★★ **`last_valid_result_ref` 一律复用 `scripts.daily.degrade.last_valid_result_ref()`**
+        （`G-06` 唯一真源 / 纪律 11）：本层**不重算第二套**判定 —— 那正是 `G-45`
+        （同一批行两个模块口径相反）的成因。取值必须在 `append_records` **之前**读：
+        本行尚未落库，故读到的天然是"上一次"。
+
+        ★ 首日（此前**确实没有任何成功运行**）时 `last_valid_result_ref=None` 是**合法**的
+        （`G-03`：如实为空，**不得**臆造一个）。
         """
         from schema.models import CheckRecord, CheckScope, Task, TaskStatus, TaskType
         from schema.store import append_records, read_records
+        from scripts.daily.degrade import last_valid_result_ref
 
         base_key = f"check::check_{result.run_date}_{result.scope}"
         prior = sum(
@@ -358,6 +383,20 @@ class Pipeline:
         )
         suffix = "" if prior == 0 else f"_r{prior}"
         check_id = f"check_{result.run_date}_{result.scope}{suffix}"
+
+        # ★ 本次运行**是否产出有效结果**（`Ch8 §E.1`）：`blocked` 或 `degraded` 都意味着
+        #   "本次结果不完整，须保留上一次的"。二者任一为真，则本行的有效结果 =
+        #   `last_valid_result_ref` 指向的旧结果，且不得把自己本轮的部分写入
+        #   冒充成有效产出（`§E.4`：不得覆盖为无意义空值 / 不得标最新）。
+        valid_run = not (result.blocked or result.degraded)
+        # 追加序里的"上一次成功运行"—— **复用**唯一真源，不重算（见 docstring）。
+        last_ref = last_valid_result_ref(self.root, scope=result.scope)
+        produced: list[str] = []
+        for step in result.steps:
+            for ref in step.produced:
+                if ref not in produced:
+                    produced.append(str(ref))
+
         record = CheckRecord(
             check_id=check_id,
             run_date=date.fromisoformat(result.run_date),
@@ -373,6 +412,8 @@ class Pipeline:
             status=TaskStatus.failed if result.blocked else TaskStatus.done,
             idempotency_key=f"check::{check_id}",
             parent_context={"orchestrator": "pipeline.run_daily"},
+            output_refs=produced if valid_run else [],
+            last_valid_result_ref=None if valid_run else last_ref,
             check_record=record,
         )
         append_records(self.root, "tasks", [task])
