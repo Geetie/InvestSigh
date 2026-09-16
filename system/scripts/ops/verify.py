@@ -6,7 +6,7 @@
 
 ```
 python system/scripts/ops/verify.py --list                 # 看有哪些批次与超时
-python system/scripts/ops/verify.py --batch injection      # 只跑一批（推荐用法）
+python system/scripts/ops/verify.py --batch injection-a    # 只跑一批（推荐用法）
 python system/scripts/ops/verify.py --batch all            # 逐批跑，每批独立超时，超时即停
 ```
 
@@ -25,14 +25,67 @@ python system/scripts/ops/verify.py --batch all            # 逐批跑，每批�
 |---|---|---|
 | `unit`       | `tests/unit/`（契约 + 作用域匹配器） | 60s |
 | `conflict`   | `tests/conflict/`（P-03/P-05/P-07 schema 断言） | 30s |
-| `guards`     | `tests/guards/`（18 守卫 × 退出码契约矩阵） | 60s |
-| `injection`  | `tests/injection/`（注入 / 接线 / 审计回归） | 120s |
+| `guards`     | `tests/guards/`（门禁退出码契约 + 验证规范） | 60s |
+| `injection-a`…`injection-f` | `tests/injection/` 的 **6 个分片**（每片一组显式文件路径） | 60~210s |
 | `root`       | `tests/test_ch11_invariants.py` | 30s |
-| `gates`      | `run_all_gates.py`（19 项门禁） | 60s |
-| `stage`      | `stage_gate.py --stage all`（预期：①PASS + ②–⑤BLOCKED） | 30s |
+| `gates`      | `run_all_gates.py`（全部门禁逐项退出码） | 60s |
+| `stage`      | `stage_gate.py --stage all`（阶段判据 + 退出码自洽） | 30s |
 
-超时值按**实测典型耗时的 8~30 倍**设定 —— 足够宽松（不会因偶发抖动误报），
-又紧到能在"真的卡住"时快速暴露。
+超时值按**实测典型耗时的若干倍**设定 —— 足够宽松（不会因偶发抖动误报），
+又紧到能在"真的卡住"时快速暴露（倍数边界见 `CONVENTIONS.md::V-02`）。
+
+## ★ 为什么 `tests/injection/` 必须切成 6 片（**门禁曾被静默关掉**）
+
+实测（细节与原始输出见 `reports/ws_verify_shard_report.md §2`；规范见 `CONVENTIONS.md::V-08`）：
+
+- 夹具是**每用例复制一份 `system/`**（`conftest.py::code_root`，实测每份 **271 项**），**用完即删**；
+- 宿主对**单轮（turn）**的删除操作有**累积配额**，耗尽后**连单个用例目录都被拒删**
+  → 此后所有夹具 setup 直接报 `E` —— **看起来完全像"测试坏了"**。
+
+★ 本单**实测复现**（跑旧的全目录目标 `tests/injection`，169 例 / 290s）：
+
+```
+[safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED]
+  {"count":102044,"threshold":99999,"scope":"turn","targetCount":1, "targets":["…/tests/.work/test_L3_…-0a05b843"]}
+```
+
+被拒之后 **78 个"建夹具"的用例集体 `E`**，而**不建夹具**的用例照常通过
+（`tests/injection/test_shard_coverage.py` 4 passed）——
+**这个对照本身就是"那些 E 不是代码缺陷"的判据**。
+
+★ 两条**实测修正**（原任务书的量化依据在这两点上不成立，故此处不重复它的算术）：
+
+| 项 | 原依据 | 实测 |
+|---|---|---|
+| 计数单位 | "夹具项数"（271/例） | **≈785 计数/例**（≈2.9 × 271）—— 102,044 计数 ≈ 130 个建夹具用例 |
+| 阈值 | 固定 `9999` | **两次观测不同**：主理人 `9999`、本单 `99999` |
+
+⇒ 故 `32 × 271 = 8,672 < 9,999` **不能**用来论证"32 例是安全的"。
+片大小取 **≤32** 的理由是：① 主理人的**授权上限**；② 有**实测支持**
+（27 / 28 例的片在本机当前阈值下单轮跑完、`exit=0`）。
+**若宿主阈值回落到 9999**，按 `9999 ÷ 785 ≈ 12` 例/片重排（≈14 片）——
+判据落点见 `tests/injection/test_shard_coverage.py::MAX_CASES_PER_SHARD` 上方注释。
+
+修法**只能**是分片（**不靠缩小夹具副本**，理由见下）。
+
+★ 三条**不可放宽**的做法约束：
+
+1. **不靠"缩小夹具副本"省配额** —— 有些守卫**就是扫副本**的
+   （`conflict_scan` 的 L2 扫 `code_root/scripts/**`；`verification_policy_guard` 扫
+   `code_root/tests/**`）。把 `scripts/` / `tests/` 从 `_COPY_SKIP` / 副本里去掉，会让它们
+   **扫到 0 个文件而"通过"** —— 那是比配额严重得多的"守卫静默失效"；
+2. **不用 `-k` / 关键词式分片**（`R-06 ①` 禁关键词/名单式判据：**新用例会静默落进
+   `not` 分支**，而"漏测"与"测过没问题"在报告里长得一样）；
+3. 片目标一律**显式文件路径**（目录式目标会一次拉起整个目录的用例
+   ⇒ 配额问题原样复发）。
+
+★ 三条都有**机器绑定**：`tests/injection/test_shard_coverage.py`
+（穷尽性 · 两两不相交 · 每片用例数 `--collect-only` 现算 ≤ 32 · 目标必须是显式测试文件路径）。
+
+★ **代价（如实写明）**：完整覆盖 `tests/injection` 现在需要 **6 个轮次**（每轮跑一片）。
+这是**宿主单轮删除配额决定的，不是设计选择** —— 同一轮里连跑多片会重新耗尽配额，
+表现为"某片在几秒内突然红 + 一堆 `E`"（`scope: "turn"`）。
+`--batch all` 会把六片连着跑完，因此它**不能**用来做 `tests/injection` 的完整覆盖。
 
 ## 退出码
 `0` 该批通过 / `1` 该批不合格（含超时）/ `2` 环境异常（批次名非法等）。
@@ -56,6 +109,15 @@ KEEP_LOGS = 3
 
 Verdict = Callable[[int, str], tuple[bool, str]]
 
+# 宿主**单轮删除配额**耗尽时打进子进程输出的标记（`CONVENTIONS.md::V-08`，本单实测原文见
+# `reports/ws_verify_shard_report.md §2.3`）：
+#   [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":102044,"threshold":99999,
+#     "scope":"turn","targets":[…/tests/.work/test_L3_…-0a05b843],"targetCount":1}
+# ★ 它的用途**只是归因**（把"配额耗尽"与"测试真的坏了"分开），**不是放行** ——
+#   命中它的批次仍然判**不合格**。只因它的症状（一批夹具 setup 集体报 `E`、进程像坏掉）
+#   与"测试坏了"**长得一模一样**，而本项目最怕的正是"把配额问题误当成代码缺陷去改断言"。
+QUOTA_MARKER = "SAFE_DELETE_BULK_CONFIRM_REQUIRED"
+
 
 @dataclass(frozen=True)
 class Batch:
@@ -72,6 +134,16 @@ def _exit_zero(code: int, out: str) -> tuple[bool, str]:
         return True, "exit=0"
     if code == 124:
         return False, "**超时** —— 该批有问题（极大概率是测试本身）"
+    if QUOTA_MARKER in out:
+        # ★ 仍然是**不合格**（绝不放行）；这里做的只是**把归因说准**。
+        return False, (
+            "**宿主单轮删除配额耗尽**（`scope: \"turn\"`）—— "
+            "**这多半不是测试失败**：配额用尽后夹具 setup 会集体报 `E`，"
+            "看起来和「测试坏了」一模一样（本单实测：78 个建夹具的用例集体 `E`，"
+            "而同一批里**不建夹具**的用例照常通过）。"
+            "处置：**新开一轮**、只跑本片（配额按轮重置）；"
+            "**不要**去改断言 —— 详见 `CONVENTIONS.md::V-08`。"
+        )
     return False, f"exit={code}"
 
 
@@ -137,6 +209,22 @@ def _pytest(*targets: str) -> tuple[str, ...]:
     return ("-m", "pytest", *targets, "-q", "-p", "no:cacheprovider")
 
 
+# ★ `tests/injection/` 的**分片名单** —— "哪几片合起来 = 完整覆盖该目录"的**唯一真源**。
+#
+# 为什么要有这个常量，而不是让判据去猜批次名：
+#   `tests/injection/test_shard_coverage.py` 需要知道"哪些片属于 `tests/injection`"。
+#   若它靠 `name.startswith("injection-")` 去认，那就是 `R-06 ①` 明文禁止的
+#   **关键词式判据**（改个名就静默退出该判据的覆盖范围）。
+#   故这里给一份**显式**名单：改名忘改名单 ⇒ 绑定测试立刻红。
+#
+# 为什么分 6 片（**不是设计选择，是宿主配额决定的**，见模块 docstring 与 `V-08`）：
+#   `tests/injection` 共 165 例 × 每例 271 项夹具副本 ≈ 44,715 项/轮 ≫ 宿主单轮配额 9,999。
+#   完整覆盖该目录现在需要 **6 个轮次**（每轮一片）。
+INJECTION_SHARDS: tuple[str, ...] = (
+    "injection-a", "injection-b", "injection-c",
+    "injection-d", "injection-e", "injection-f",
+)
+
 BATCHES: Mapping[str, Batch] = {
     "unit": Batch(
         "unit", "tests/unit/（契约 + 作用域匹配器）",
@@ -155,9 +243,84 @@ BATCHES: Mapping[str, Batch] = {
         "guards", "tests/guards/（门禁退出码契约 + 验证规范）",
         _pytest("tests/guards"), 60.0, _exit_zero,
     ),
-    "injection": Batch(
-        "injection", "tests/injection/（注入 / 接线 / 审计回归）",
-        _pytest("tests/injection"), 120.0, _exit_zero,
+    # ── `tests/injection/` 的 6 个分片（**原 `injection` 目录全量批次已删除**）──────────
+    # ★ 目标一律**显式文件路径**，**不用目录**（目录 = 一次拉起整个目录的用例 = 配额问题复发），
+    #   **不用 `-k`**（`R-06 ①`：关键词式判据不可穷尽，新用例会静默落进 `not` 分支）。
+    # ★ 每次**只跑一片**：同一轮里连跑多片会重新越过宿主单轮删除配额
+    #   （`SAFE_DELETE_BULK_CONFIRM_REQUIRED`），表现为"某片突然在几秒内变红"。
+    # ★ 超时：各片**互不相同**、按**各自实测**取值（见 `CONVENTIONS.md::V-02` 批次表）：
+    #   实测（**隔离副本**单跑，`verify.py --batch <片>`）：a 6.85s · e 9.82s · f 12.53s ·
+    #   c 16.50s · b 18.62s · d 24.99s。
+    #   取值规则 = **实测 × 8**（`V-02` 给的 4~8× 的**上沿**），再向上取整到 30s 的倍数、
+    #   且**不低于 90s**：a/e 90s · f 120s · b/c 150s · d 210s。一律 ≤300s。
+    #   ★ 为什么取上沿（**本单实测教训**）：同一片 `injection-a` 在**工作树**里跑成
+    #     **80.92s**（`run_pytest.sh` 直接实测，27 passed，**不是卡死**），而隔离副本同代码
+    #     只要 6.85s ⇒ **宿主并发可把单片拖慢 11.8×**。当时 `tests/.work/` 里留着
+    #     `tests/guards` 与 `injection-c` 的夹具残留 ⇒ **同一个工作树里有第二个 pytest 会话**
+    #     （`V-05` 禁止的情形）。取上沿正是 `V-02` 说的"让偶发抖动不误报"。
+    #     ⇒ 见到本批超时的**第一步**不是改断言，而是先确认有没有第二个会话在同一工作树里跑。
+    #   ★ **最终取值 = 六片统一 300s**（`V-02` 允许的上限）；理由与上面那条相反方向的取舍：
+    #     ① 作为**故障探测器**，300s 对**工作树实测**是 2.7~4.7×：
+    #        实测（工作树内 `verify.py --batch <片>`）a 70.74~80.92s · b 63.72s · f 110.13s；
+    #     ② `V-02` 的"4~8×"对 f（110.13s × 4 = 440s）**越过了 300s 上限** ⇒ 与 `daily`
+    #        （43s 实测 → 180s，4.2×）同一处境：**取不超过上限的最大值**；
+    #     ③ 反过来，"取 8× 隔离副本实测（6.85s）"= 60s 会**必然误报**：f 的隔离实测 12.53s
+    #        对应工作树 110.13s（8.8×），60s 上限当场变红 ⇒ `G-01`「天天误报的门禁一定会被
+    #        关掉」。**故一律以工作树实测为标定基准，不用隔离副本的秒数**。
+    #     ★ 遗留风险（如实登记）：f 的余量只有 2.7×，若**同时**有第二个 pytest 会话在同一
+    #       工作树里跑（`V-05` 禁止的情形），f 仍可能被拖到 300s 以上而**假红**。
+    #       见到本批超时的**第一步不是改断言**，而是先确认有没有第二个会话在同一工作树里跑。
+    "injection-a": Batch(
+        "injection-a", "tests/injection/ 分片 A（审计回归 + 链路接线）",
+        _pytest(
+            "tests/injection/test_audit_regressions.py",
+            "tests/injection/test_chain_steps_wiring.py",
+        ),
+        300.0, _exit_zero,
+    ),
+    "injection-b": Batch(
+        "injection-b", "tests/injection/ 分片 B（判据有效性 + 守卫防御性）",
+        _pytest(
+            "tests/injection/test_criterion_effectiveness.py",
+            "tests/injection/test_guards_defensive.py",
+        ),
+        300.0, _exit_zero,
+    ),
+    "injection-c": Batch(
+        # `test_guards_reject_a.py` 是原 `test_guards_reject.py`（41 例）的**前半 21 例**：
+        # 原文件单文件 ≈ 11,111 项就超配额，必须按 `# ═══` 分节边界拆两半（纯移动，断言语义零改动）。
+        "injection-c", "tests/injection/ 分片 C（守卫拦截 A 半 + 追加式）",
+        _pytest(
+            "tests/injection/test_guards_reject_a.py",
+            "tests/injection/test_append_only.py",
+        ),
+        300.0, _exit_zero,
+    ),
+    "injection-d": Batch(
+        "injection-d", "tests/injection/ 分片 D（守卫拦截 B 半 + 幂等 + 时间契约）",
+        _pytest(
+            "tests/injection/test_guards_reject_b.py",
+            "tests/injection/test_idempotency_rows.py",
+            "tests/injection/test_time_contract.py",
+        ),
+        300.0, _exit_zero,
+    ),
+    "injection-e": Batch(
+        "injection-e", "tests/injection/ 分片 E（提示注入 + rules 锁）",
+        _pytest(
+            "tests/injection/test_prompt_injection.py",
+            "tests/injection/test_rules_lock.py",
+        ),
+        300.0, _exit_zero,
+    ),
+    "injection-f": Batch(
+        "injection-f", "tests/injection/ 分片 F（阶段闸门 + 接线守卫 + 分片绑定）",
+        _pytest(
+            "tests/injection/test_stage_gate.py",
+            "tests/injection/test_wiring_guards.py",
+            "tests/injection/test_shard_coverage.py",
+        ),
+        300.0, _exit_zero,
     ),
     "root": Batch(
         "root", "tests/test_ch11_invariants.py（Ch11 不变量）",
@@ -226,7 +389,13 @@ BATCHES: Mapping[str, Batch] = {
 }
 
 ORDER = (
-    "unit", "conflict", "guards", "injection", "root",
+    "unit", "conflict", "guards",
+    # ★ `tests/injection/` 的 6 片必须**逐片单独跑**（见 `INJECTION_SHARDS` 上方的理由）。
+    #   `--batch all` 会把它们连着跑完 —— 那**恰好**会重新越过宿主单轮删除配额，
+    #   在某一处突然变红（`V-08`）。要完整覆盖该目录，请分 6 个轮次跑。
+    "injection-a", "injection-b", "injection-c",
+    "injection-d", "injection-e", "injection-f",
+    "root",
     "compute", "graph", "validators", "claim", "decision", "transmit", "evidence", "daily",
     "gates", "stage",
 )
