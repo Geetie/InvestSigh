@@ -436,8 +436,29 @@ def stage_nvidia_sample_passed(root: Path) -> tuple[bool, list[Violation], dict[
         )
     v: list[Violation] = []
     # 六步链（Ch1 §D 五问 + Ch10 §N1 六结果）：baseline 必须齐六项深度
+    #
+    # ★ 只判**当前版本**（追加式不可变的必然结论，`Ch9 §3.4.2` / `G-01`）：
+    #   `facts/*.jsonl` 追加式 ⇒ 一次修正 = **追加新版本行**；于是同一 `company_id` 可能有多条
+    #   （v1 种子行 + v2/v3 当前行）。若**逐行**判，种子的空 `driver_model` 会**恒报**
+    #   ⇒ 阶段② 该 FATAL 结构上永红（G-01「恒红门禁 = 会被忽略的门禁」）。
+    #
+    #   ★ 唯一真源 = `scripts.valuelayer.completeness.current_baselines()`（WS-A 交付；
+    #     按 `company_id` 分组取 `max(version, recorded_seq)`，缺键不丢行）。此处**复用**它，
+    #     **不**在本函数重造第二个版本选择器（`G-06` 唯一真源）。
+    #   ★ 承前兼容：该模块尚未合入本流时 `import` 失败 ⇒ **不静默**：退回全量行（= 原行为），
+    #     并在返回的 `scanned` 里以 `baseline_current_version_filter`（0=未生效）**显式暴露**。
     required = ("business_mechanism", "historical_numeric_claims", "driver_model", "value_state_refs")
-    for row in baselines:
+    try:
+        from scripts.valuelayer.completeness import current_baselines as _current_baselines
+    except ImportError:
+        _current_baselines = None
+    if _current_baselines is not None:
+        baselines_scope = list(_current_baselines(baselines))
+        baseline_version_filter = 1
+    else:
+        baselines_scope = list(baselines)
+        baseline_version_filter = 0
+    for row in baselines_scope:
         missing = [f for f in required if not row.get(f)]
         if missing:
             v.append(
@@ -467,31 +488,71 @@ def stage_nvidia_sample_passed(root: Path) -> tuple[bool, list[Violation], dict[
     criterion("nvidia_sample", "chapter4_g_depth", v)
     criterion("nvidia_sample", "six_step_chain_complete", v)
     criterion("nvidia_sample", "derivation_reviewable", v)
+    # ★ 判据 `evidence_locatable`（`Ch11 §B` 阶段② 第 2 条 / `Ch6 §D`）—— **接线**（缺口 `G-50`）。
+    #
+    #   这条的形态不是"只建模块、不接线"，而是**「接线接在了错的层」**：
+    #   校验器住 `scripts/validators/locator_check.py`（`Ch6 §D` · 8 条可判定判据 +
+    #   真源缺失 `exit 2` 的输入异常语义），**且已有生产调用方**
+    #   （`scripts/orchestrate/chain_steps.py` 在链路里真调它）—— 唯独**阶段② 的判据没绑**：
+    #   `stage_nvidia_sample_passed()` 函数体内无 `criterion("nvidia_sample", "evidence_locatable", …)`
+    #   字面量 ⇒ `assert_criteria_implemented()` 的双向机器绑定如实报 `G11-04` FATAL
+    #   （"不得据此判 PASS：静默漏判据"）。
+    #
+    #   ⇒ 此处**复用**该校验器（`G-06` 唯一真源：不在此重造第二套定位/全文证明校验），
+    #     并调 `criterion(...)` 让这条判据对本阶段的**门禁**生效。
+    #   ★ 绑定只是**必要条件**（`G9`：绑定 ≠ 会拦）：证明"真的在查"的**可执行反例**
+    #     登记在 `registry/criterion_counterexamples.yaml`，由 `criterion_effectiveness_guard`
+    #     强制"已绑定判据必须有反例"；反例测试见
+    #     `tests/unit/test_criterion_effectiveness_nvidia_sample.py`。
+    #   ★ 惰性就地导入（与上方 `trace_check` / `g_depth_violations` 同款）：只有本阶段用得到它。
+    from scripts.validators.locator_check import check as locator_check
+
+    lc = locator_check(root)
+    v += lc.violations
+    criterion("nvidia_sample", "evidence_locatable", v)
     v += assert_criteria_implemented(root, "nvidia_sample")
-    return (not v), v, {"baselines": len(baselines), **tr.scanned}
+    return (not v), v, {
+        "baselines": len(baselines),
+        "baselines_current_version": len(baselines_scope),
+        "baseline_current_version_filter": baseline_version_filter,
+        **tr.scanned,
+        **lc.scanned,
+    }
 
 
 def stage_core_chain_passed(root: Path) -> tuple[bool, list[Violation], dict[str, int]]:
     """多公司传导跑通 + **T01–T14 全过**（唯一权威表 = `10/01 §2.1`）+ 图谱/提问任务可追溯。
 
-    ★ **诚实声明**：本函数**已实现**的判据是 `multi_company_transmission`
-      （关系图公司数 ≥ 2、影响六要素齐备）。`registry/delivery.yaml` 声明为
-      automated 的 `t01_t14_all_pass` 与 `graph_and_ask_traceable`
-      **尚未实现** —— 它们登记在 `IMPLEMENTED_CRITERIA` 之外，
-      由 `assert_criteria_implemented()` 在**前置产物齐备时直接阻断本阶段**，
-      并在报告里以 `criteria_not_implemented` 计数显式暴露。
+    三条判据**均已真接线**（`registry/delivery.yaml` 声明 automated 的三条全在函数体内绑定）：
 
-      **绝不**把"声明了就算做到"：首次独立审计抓到的正是这条
-      （当时 docstring 声称检查了 T01–T14，代码里根本没有）。
+    | 判据 | 检查落点 |
+    |---|---|
+    | `multi_company_transmission` | 本函数内（关系图公司数 ≥ 2、影响六要素齐备） |
+    | `graph_and_ask_traceable` | **复用** `scripts/graph/traceability.py::check`（关系/影响/关系流的证据与端点可解析 + 任务可追溯，`T14`） |
+    | `t01_t14_all_pass` | **复用** `scripts/graph/acceptance.py::t01_t14_check`（读 `registry/acceptance_input_set.yaml` 台账，**逐条执行** `scripts/graph/acceptance_checks.py` 的判定器；任一 ❌ 即不通过） |
+
+    ★ **为什么必须绑**（否则判据形同虚设）：`registry/delivery.yaml` 声明它们是 automated，
+      而"声明"与"实现"必须有**机器绑定**（本项目铁律 5）—— 不绑的话，T01–T14 不达标 /
+      图谱不可追溯时阶段③门禁**不会红**，等于判据没接。
+      绑法同其余判据：函数体内一处 `criterion(...)` 字面量（由 `bound_criteria()` 的 AST 抽取核对），
+      外加**真的调用**校验器；配套的反例登记在 `registry/criterion_counterexamples.yaml`。
+
+    ★ `scanned` 里恒发 `graph_and_ask_traceable` / `t01_t14_all_pass` 两个计数（即便前置缺失走
+      deferred 分支也发 0）—— 使这两条判据在门禁输出里**逐条可见**，不得被"反正阻塞了"掩盖。
     """
     impacts = _read_jsonl(root / "facts" / "impacts.jsonl")
     relations = _read_jsonl(root / "facts" / "relations.jsonl")
     if not impacts or not relations:
-        return _deferred(
+        passed, deferred_v, scanned = _deferred(
             "core_chain",
             "facts/relations.jsonl 与 facts/impacts.jsonl 的真实关系与影响",
             "Ch7 §C.7 / Ch9 §N9.1-06~16",
         )
+        scanned = dict(scanned)
+        scanned["graph_and_ask_traceable"] = 0
+        scanned["t01_t14_all_pass"] = 0
+        return passed, deferred_v, scanned
+
     v: list[Violation] = []
     companies = {r.get("object_id") for r in relations} | {r.get("subject_id") for r in relations}
     if len(companies) < 2:
@@ -503,8 +564,31 @@ def stage_core_chain_passed(root: Path) -> tuple[bool, list[Violation], dict[str
                 Violation("core_chain", f"{row.get('impact_id')} 影响六要素缺: {missing}（缺条件则不成立）", "facts/impacts.jsonl")
             )
     criterion("core_chain", "multi_company_transmission", v)
+
+    # ★ 「图谱 / 提问任务可追溯」（`Ch9 §N9.1-26` / `T14`）——实现住 `scripts/graph/traceability.py`，
+    #   此处**复用**（`G-06` 唯一真源，不重造）。下面这行 `criterion(...)` 既是记录也是绑定。
+    from scripts.graph.traceability import check as traceability_check
+
+    trace_report = traceability_check(root)
+    v += trace_report.violations
+    criterion("core_chain", "graph_and_ask_traceable", v)
+
+    # ★ 「T01–T14 全过」（唯一权威表 = `10/01 §2.1`）——实现住 `scripts/graph/acceptance.py`，
+    #   此处**复用**；逐条判定器住 `scripts/graph/acceptance_checks.py`。
+    from scripts.graph.acceptance import t01_t14_check
+
+    acceptance_report = t01_t14_check(root)
+    v += acceptance_report.violations
+    criterion("core_chain", "t01_t14_all_pass", v)
+
     v += assert_criteria_implemented(root, "core_chain")
-    return (not v), v, {"relations": len(relations), "impacts": len(impacts)}
+    scanned_out: dict[str, int] = {
+        "relations": len(relations),
+        "impacts": len(impacts),
+        "graph_and_ask_traceable": len(trace_report.violations),
+        "t01_t14_all_pass": int(acceptance_report.scanned.get("t_passed", 0)),
+    }
+    return (not v), v, scanned_out
 
 
 def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str, int]]:

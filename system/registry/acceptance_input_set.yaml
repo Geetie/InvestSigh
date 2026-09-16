@@ -1,0 +1,149 @@
+# registry/acceptance_input_set.yaml —— **T01–T14 验收台账**（阶段③ `t01_t14_all_pass` 的输入）
+#
+# 权威出处：`10_验收与持续复盘/01_需求拆解.md §2.1`（「T01–T14 权威定义表（唯一权威出处）★」）。
+# 本台账是**收口视图**：`scenario` / `expected_behavior` 逐字取自 §2.1（未改写一字）；
+# `responsible_chapter` / `collaborating_chapters` 取 §2.1 的「最终主责章 / 协作章」。
+#
+# > ★ `10_02 §I.2` 把 T 表指向写成"本章 §B.1"是**错的**（`N-01`，需求方侧待修正）。
+# >   实现侧一律以 `10/01 §2.1` 为准。
+#
+# `adjudication` 两种取值：
+#   - `programmatic`：`adjudicator` 指向 `scripts/graph/acceptance_checks.py` 里的判定器，
+#     由判据 `t01_t14_all_pass` **逐条执行**（机器绑定：`adjudicator` 须以 `::<函数名>` 结尾）。
+#   - `delegated`：责任章尚未在本层提供可执行判定载体 → **据实报 ❌**（`G-03`，不冒充当通过）。
+#
+# 本文件可写（`registry/**` 可写）。
+
+version: 1
+authority_anchor: "10/01 §2.1"
+source_manuscript: "源稿第十章《验收与持续复盘》·必测反例（T01–T14 反例表）"
+# 验收输入清单（`Ch10 §N10.1-06`：首批名单 + 样本事件完成核验后冻结 = 版本化）。
+first_list_version: "tbd"
+sample_event_versions: []
+
+t_cases:
+  - t_id: T01
+    scenario: "十篇文章转述同一匿名订单消息"
+    expected_behavior: "保留一个原始证据来源及传播记录，不提升为十份独立佐证"
+    responsible_chapter: "Ch6"
+    collaborating_chapters: ["Ch9"]
+    adjudication: "programmatic"
+    adjudicator: "scripts/graph/acceptance_checks.py::t01_single_root_not_ten_independent"
+    verified_requirement_ids: ["N6.3-03", "N6.3-04", "N9.1-13", "N9.1-14", "N8.4-03"]
+
+  - t_id: T02
+    scenario: "只有一份公开盈利预测发生变化"
+    expected_behavior: "更新公开样本；不声称完整市场一致预期已改变"
+    responsible_chapter: "Ch5"
+    collaborating_chapters: ["Ch6", "Ch9"]
+    adjudication: "programmatic"
+    adjudicator: "scripts/graph/acceptance_checks.py::t02_single_sample_not_consensus"
+    verified_requirement_ids: ["N5.2-02", "N5.2-03", "N6.4-02", "N9.1-20"]
+
+  - t_id: T03
+    scenario: "官方仅披露验证完成"
+    expected_behavior: "不自动升级为量产供应、确认订单或收入"
+    responsible_chapter: "Ch6"
+    collaborating_chapters: ["Ch7", "Ch3"]
+    adjudication: "programmatic"
+    adjudicator: "scripts/graph/acceptance_checks.py::t03_stage_not_auto_upgraded"
+    verified_requirement_ids: ["N6.2-03", "N7.1-06", "N7.1-10", "N9.1-07", "N3.1-06"]
+
+  - t_id: T04
+    scenario: "第三方证据可信且可复核，官方尚未确认"
+    expected_behavior: "可以纳入独立判断，标出假设及验证条件，不因缺官方确认一票否决"
+    responsible_chapter: "Ch6"
+    collaborating_chapters: ["Ch9", "Ch8"]
+    adjudication: "programmatic"
+    adjudicator: "scripts/graph/acceptance_checks.py::t04_third_party_evidence_admitted"
+    verified_requirement_ids: ["N6.3-15", "N6.3-16", "N9.2-01"]
+
+  - t_id: T05
+    scenario: "基本面改善但价格已经更充分反映"
+    expected_behavior: "分开更新价值状态与投资判断，不机械产生买入"
+    responsible_chapter: "Ch4 + Ch5"
+    collaborating_chapters: ["Ch7", "Ch2"]
+    adjudication: "programmatic"
+    adjudicator: "scripts/graph/acceptance_checks.py::t05_value_price_separated_no_mechanical_buy"
+    verified_requirement_ids: ["N4.1-11", "N5.1-03", "N7.3-01", "N2.1-02", "N9.1-18", "N9.1-21"]
+
+  - t_id: T06
+    scenario: "预期绝对收益为正，且仅略高于基准"
+    expected_behavior: "不因额外安全边际、固定置信度或最低超额幅度门槛拒绝建议"
+    responsible_chapter: "Ch2 + Ch7"
+    collaborating_chapters: ["Ch8", "Ch9"]
+    adjudication: "programmatic"
+    adjudicator: "scripts/graph/acceptance_checks.py::t06_no_min_excess_threshold"
+    verified_requirement_ids: ["N2.1-09", "N7.3-01", "N9.1-24"]
+
+  - t_id: T07
+    scenario: "预期仍有正收益，但预计跑不赢基准"
+    expected_behavior: "形成卖出建议并解释相对判断变化"
+    responsible_chapter: "Ch7"
+    collaborating_chapters: ["Ch2", "Ch3"]
+    adjudication: "programmatic"
+    adjudicator: "scripts/graph/acceptance_checks.py::t07_relative_underperform_sells"
+    verified_requirement_ids: ["N7.3-02", "N2.1-10", "N9.1-23"]
+
+  - t_id: T08
+    scenario: "股价大跌且原因未明"
+    expected_behavior: "触发强制复查；不自动止损、不自动买入，也不擅自修改护城河"
+    responsible_chapter: "Ch7 + Ch5"
+    collaborating_chapters: ["Ch2", "Ch8"]
+    adjudication: "programmatic"
+    adjudicator: "scripts/graph/acceptance_checks.py::t08_price_drop_recheck_not_autostop"
+    verified_requirement_ids: ["N7.3-05", "N5.5-06", "N2.1-11", "N9.1-29"]
+
+  - t_id: T09
+    scenario: "低估但缺少明确催化剂，或公司护城河不强"
+    expected_behavior: "分析兑现可能性、周期与风险；不把这两项设为硬性买入门槛"
+    responsible_chapter: "Ch2 + Ch4 + Ch7"
+    collaborating_chapters: ["Ch5", "Ch8"]
+    adjudication: "programmatic"
+    adjudicator: "scripts/graph/acceptance_checks.py::t09_catalyst_moat_not_hard_gate"
+    verified_requirement_ids: ["N2.1-05", "N2.1-12", "N4.3-06", "N4.3-07", "N7.3-01", "N7.4-09", "N7.4-10", "N9.1-18", "N9.1-21"]
+
+  - t_id: T10
+    scenario: "模型暂时不能判断相对收益"
+    expected_behavior: "输出待判断和缺口；不混同为预计跑不赢"
+    responsible_chapter: "Ch7"
+    collaborating_chapters: ["Ch3", "Ch4", "Ch5", "Ch1"]
+    adjudication: "programmatic"
+    adjudicator: "scripts/graph/acceptance_checks.py::t10_pending_not_sell"
+    verified_requirement_ids: ["N7.3-03", "N2.2-01", "N3.2-05", "N9.1-18", "N9.1-21", "N1.2-02"]
+
+  - t_id: T11
+    scenario: "盘后消息进入或发生拆股分红"
+    expected_behavior: "不使用消息前报价假设可成交；收益计算正确处理时间和公司行动"
+    responsible_chapter: "Ch9"
+    collaborating_chapters: ["Ch5", "Ch7", "Ch8"]
+    adjudication: "programmatic"
+    adjudicator: "scripts/graph/acceptance_checks.py::t11_effective_price_and_corporate_action"
+    verified_requirement_ids: ["N9.1-19", "N9.1-31", "N9.3-08", "N7.4-01", "N5.5-01"]
+
+  - t_id: T12
+    scenario: "原证据被撤回或财务数值重述"
+    expected_behavior: "追踪依赖关系、触发复查，保留前后版本及当时可用信息"
+    responsible_chapter: "Ch9"
+    collaborating_chapters: ["Ch6", "Ch1", "Ch2"]
+    adjudication: "programmatic"
+    adjudicator: "scripts/graph/acceptance_checks.py::t12_retraction_traces_dependents"
+    verified_requirement_ids: ["N9.1-33", "N9.1-25", "N9.1-13", "N9.1-31", "N6.3-18", "N1.2-05"]
+
+  - t_id: T13
+    scenario: "关键行情或来源不可访问"
+    expected_behavior: "显示延迟和缺口，不伪造实时价格、全文或预测"
+    responsible_chapter: "Ch9"
+    collaborating_chapters: ["Ch6", "Ch8", "Ch5"]
+    adjudication: "programmatic"
+    adjudicator: "scripts/graph/acceptance_checks.py::t13_missing_source_not_fabricated"
+    verified_requirement_ids: ["N9.3-04", "N9.3-06", "N9.3-07", "N6.4-03", "N6.4-04", "N8.4-05", "N8.4-06", "N8.4-07", "N5.5-01"]
+
+  - t_id: T14
+    scenario: "用户在公司或关系上提问"
+    expected_behavior: "实际产生研究任务、来源回答和可追溯回写；失败状态可见"
+    responsible_chapter: "Ch8"
+    collaborating_chapters: ["Ch9", "Ch1"]
+    adjudication: "programmatic"
+    adjudicator: "scripts/graph/acceptance_checks.py::t14_ask_task_traceable"
+    verified_requirement_ids: ["N8.2-01", "N8.2-02", "N8.2-03", "N8.2-04", "N8.2-05", "N8.2-06", "N8.2-07", "N8.2-08", "N9.1-26", "N1.2-06"]

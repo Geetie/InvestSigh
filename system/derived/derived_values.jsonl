@@ -1,0 +1,1 @@
+{"computed_at": "2026-09-16T19:14:40.088097Z", "derived_id": "dv-nvda-dc-gross-margin-001", "formula": "gross_profit / 96221", "method_version": "compute-v1", "operands": ["raw/2026-08-26-nvidia-q2-fy2027-results.txt#L212", "raw/2026-08-26-nvidia-q2-fy2027-results.txt#L225"], "value": "0.7497531723844067303395308716", "version": "v2"}

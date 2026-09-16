@@ -102,6 +102,13 @@ counterexamples:
     blocked_hint: "Ch4 §G 形式完备性未过"
     note: "批次 13-A 绑定（`Ch4 §G.2` 的校验器 = `scripts/valuelayer/completeness.py`）。反例：把 baseline 的 moat[]（④）与 valuation_inputs（⑤）两个 section 的载体清空 —— 字段在、值是合法空数组，但**实质没有内容** → `form_complete` 五项中 sections_nonempty/nonnull_rate 红 → 阶段② exit 1；合规输入（§G.2 五项 + §G.4 盈利分支全过）下该标记不出现。★ 该用例在**夹具副本**内自备 `rules/baseline.yaml`（§G.2 的阈值只从它读，G-06；真仓库那份尚不存在，故不写它就只能测到'规则缺失 ⇒ 无法判定'这一条）。"
 
+  - stage: nvidia_sample
+    criterion_id: evidence_locatable
+    kind: counterexample
+    test: tests/unit/test_criterion_effectiveness_nvidia_sample.py::test_nvidia_sample_evidence_locatable_blocks_on_unlocatable_claim
+    blocked_hint: "LOCATOR_UNRECOGNIZED"
+    note: "缺口 `G-50`：`evidence_locatable`（`Ch6 §D`）的检查器 `scripts/validators/locator_check.py` **早已实现**、且**已有生产调用方**（`scripts/orchestrate/chain_steps.py`），但阶段② 的 `stage_nvidia_sample_passed()` 函数体**没有绑定** ⇒ 接线接在了**错的层**（有实现 + 有调用方 + 判据没绑）。本卡在函数体内复用该校验器并绑 `criterion(...)`。反例：夹具里只翻转一条 claim 的 `locator` 一个字段 —— 合规定位 `raw/notes.txt#L1-L2` ⇒ `LOCATOR_UNRECOGNIZED` 不出现；非机械可复查串 ⇒ 阶段② exit 1 且该码出现（单变量对照 ⇒ 判别力归因成立）。★ 该反例落 `tests/unit/**`（新文件）：本卡禁改 `verify.py`，而 `tests/injection/**` 新文件必须显式入片（`verify.py::BATCHES`）才行，`tests/unit/` 的批次目标是**目录** ⇒ 新文件自动被 V-06 覆盖（`criterion_effectiveness_guard` 扫 `tests/**`，判据反例落 unit 或 injection 对它等价）。"
+
   # ──────────────────────────── 阶段③ core_chain ────────────────────────────
   - stage: core_chain
     criterion_id: multi_company_transmission
@@ -109,6 +116,28 @@ counterexamples:
     test: tests/injection/test_criterion_effectiveness.py::test_core_chain_multi_company_transmission_blocks_on_single_company
     blocked_hint: "关系图公司数"
     note: "关系图只涉及 1 家公司（自环边）→ 构不成多公司传导 → 阶段③ exit 1"
+
+  - stage: core_chain
+    criterion_id: graph_and_ask_traceable
+    kind: counterexample
+    test: tests/graph/test_core_chain_acceptance.py::test_core_chain_graph_and_ask_traceable_blocks_on_dangling_endpoint
+    blocked_hint: "GRAPHTRACE-REL-ENDPOINT"
+    note: "WS-C 绑定（判据实现 = scripts/graph/traceability.py，stage_gate 复用）。
+      反例：前置产物齐备（relations + impacts 非空，故阶段③ 不因前置缺失而 BLOCKED），
+      但一条关系的 object_id 指向**不存在的节点** → 端点不可解析 → `GRAPHTRACE-REL-ENDPOINT` → 阶段③ exit 1。
+      同用例内含**合规对照**（端点均可解析）断言该 hint **不出现**，证明判别力来自本判据本身、
+      不是别的判据顺带变红（`G-02` 函数名含判据 id）。"
+
+  - stage: core_chain
+    criterion_id: t01_t14_all_pass
+    kind: counterexample
+    test: tests/graph/test_core_chain_acceptance.py::test_core_chain_t01_t14_all_pass_blocks_on_ledger_drift
+    blocked_hint: "ACC-AUTHORITY"
+    note: "WS-C 绑定（判据实现 = scripts/graph/acceptance.py，逐条判定器 = scripts/graph/acceptance_checks.py）。
+      反例：前置产物齐备，但把 T01–T14 台账 `registry/acceptance_input_set.yaml` 的
+      `authority_anchor` 由『10/01 §2.1』篡改成别的指向 → 权威表指向漂移 → `ACC-AUTHORITY` → 阶段③ exit 1。
+      同用例内含**合规对照**（权威锚点正确）断言该 hint **不出现**。
+      ★ 该反例钉在『T01–T14 的唯一权威表 = 10/01 §2.1』这一义务上（`N-01`：`10/02 §I.2` 的指向是错的）。"
 
   # ───────────────────────────── 阶段④ daily_run ─────────────────────────────
   - stage: daily_run
@@ -157,10 +186,12 @@ counterexamples:
       （★ 用「可核的肯定事实」而不是「全设计区没有逐字出处」：后者是**穷举式否定**，易被『你搜漏了』反驳。）
       设计侧佐证：`Ch10 §C.1` 只定义 `eval_layer` 的**取值域**；`§C.4:250` 的
       `assert layer in VALID_LAYERS` 亦为取值域断言。
-      ★ **待需求方裁定**：见张力 **`T-15`**（「退出物『三层复盘记录』是否升格为阶段⑤ 通过判据」）。
-      ★ team-lead 已裁定**保持本中间态**（不批新增 id —— 那会改动通过判据列表=改需求面，超实现方权限；
-      也不批删除 —— 那会让退出物无人守且已实现的真 append-only 语义白做）。
-      ⇒ 故本条**留在本 id 名下**、未改措辞、未新增 id（`R-04`），并在此**白纸黑字标出待裁定**（不静默）。"
+      ★ **已裁定（需求方 2026-09-17：「`T-15` 一律采取主理人推荐值」）—— 「不升格」**：
+      不把「三层复盘齐备」升格为阶段⑤ 的**通过判据**（升格 = 新增门槛，属 `施工图 §0` 第 1 条，
+      不由实现方定）；本条检查**保留在本 id 名下**（判别力不丢，见上面的可核肯定事实）。
+      ★ **观测必须保留**（`G-03`：不允许静默消失）：阶段⑤ 输出 `expansion.layers_seen: k/3`
+      的**显式 note + 计数** —— 该输出属 `scripts/delivery/stage_gate.py` 的 **expansion 段**，
+      **不在 `WS-D` 的写权范围**（任务卡 §2 禁写），已作为**移交项**随报告送 `team-lead`。"
 
   - stage: expansion
     criterion_id: review_append_only
@@ -186,5 +217,10 @@ counterexamples:
     kind: ineffective
     test: tests/injection/test_criterion_effectiveness.py::test_expansion_review_append_only_outcome_categories_have_no_check
     reason: "`Ch10 §D.5` 第 1 行「三类记录齐全：成功 / 失败 / pending（待判断）各有结构性记录，不可选择性删除」**无可检对象**：`success`/`failure`/`pending` 三元组在**整个代码区只出现 1 次**（`registry/delivery.yaml:132` 的声明本身），`schema/models.py` 无对应枚举、`facts/*.jsonl` 无对应字段。故探针实测：把 outcome 由 success/failure/pending 混搭改成**全 success**（字面语义上的『只留赢的』）→ 阶段⑤ 违例集合**完全相同**"
-    note: "★ **临时登记，不是『这条路没问题』**：原因是**载体未定**（等需求方定，见张力 **`T-17`**；team-lead 已裁定**载体属设计范围、不单方面指定**）；补实现的提交号见 `reports/ws_criterion_effectiveness_report.md §3 G9-2`。实现后本探针**当场变红**，强制更新本登记（铁律 5）。按 `G-03` 显式记账为『无被检对象』，**不计为已验证**。
+    note: "★ **临时登记，不是『这条路没问题』**：原因是**载体未定**（等需求方定，见张力 **`T-17`**）。
+      ★ **已裁定（需求方 2026-09-17：「`T-17` 一律采取主理人推荐值」）**：`success/failure/pending`
+      三类记录**无载体** ⇒ 按 `G-03` **显式记账为缺口**（**不算通过、也不算违例**）；**不**新建表/字段/enum
+      （载体属设计决定 —— `T-11`/`T-12` 的先例是**折叠进既有表**或**上报**，不是自造）。
+      补实现的提交号见 `reports/ws_criterion_effectiveness_report.md §3 G9-2`。实现后本探针**当场变红**，
+      强制更新本登记（铁律 5）。按 `G-03` 显式记账为『无被检对象』，**不计为已验证**。
       ★ 推荐方案（**只写，未实现**，供需求方拍板）：在**现有**复盘记录真源（`facts/tasks.jsonl` 的 `eval_result` / `eval_result_history`）上加 `result_kind ∈ {success, failure, pending}`（**复用单一真源、不新建表** —— `facts/` 表集合不得增删改名），并配 `(success, failure, pending) ⊆ 记录集` 的可执行反例。详见报告 §6.5 ②。"

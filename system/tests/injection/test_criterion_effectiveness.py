@@ -1245,13 +1245,30 @@ def test_registry_entry_for_unbound_criterion_makes_guard_fail(code_root: Path) 
     """**登记 ⊆ 已绑定**：给一条"声明为 automated 但未绑定"的判据登记 → 必须 `exit 1`。
 
     否则可以先把**将来要绑**的判据预登记，从而在真正绑定时免于义务。
+
+    ★ **不依赖任何具体判据名**（WS-B 卡随 `evidence_locatable` 绑定一并修）：
+      本用例原先硬编码 `nvidia_sample::evidence_locatable` 作为"未绑定判据"的样本。
+      一旦 `evidence_locatable` 被绑进 `stage_nvidia_sample_passed()`（`G-50` 归零），
+      那个前提**当场消失** ⇒ 用例要么变红、要么退化成空转（"前提不再成立"与"判据没坏"两态同形）。
+      现改为**前提由夹具自持**：往夹具自己的 `registry/delivery.yaml` 某阶段的
+      `pass_criteria_testable` 注入一条**只存在于夹具**的 automated 判据（必然未绑定），
+      再登记它 —— 于是本用例与"真仓库当前绑了哪几条"**彻底解耦**，不会再随他人绑判据而漂移。
     """
+    probe_id = "probe_only_in_fixture_unbound"
+    delivery = code_root / DELIVERY
+    doc = yaml.safe_load(delivery.read_text(encoding="utf-8"))
+    stage_doc = next(s for s in doc["delivery_stages"] if s.get("key") == "nvidia_sample")
+    stage_doc["pass_criteria_testable"].append(
+        {"id": probe_id, "statement": "夹具专用（声明 automated 但未绑定）", "check_kind": "automated"}
+    )
+    delivery.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
     path = code_root / REGISTRY
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     doc["counterexamples"].append(
         {
             "stage": "nvidia_sample",
-            "criterion_id": "evidence_locatable",
+            "criterion_id": probe_id,
             "kind": "counterexample",
             "test": "tests/injection/test_criterion_effectiveness.py::test_prep_compliant_baseline_is_green",
             "blocked_hint": "x",

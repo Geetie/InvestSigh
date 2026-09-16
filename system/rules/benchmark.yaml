@@ -22,7 +22,15 @@ benchmark_objects:
     includes_non_listed_assets: true       # AGIX = true（含非上市资产）
     non_listed_assets:
       disclosure_state: undisclosed        # 缺口单列；**不硬编点值**（承 Ch5 impl §E.1）
-      sensitivity:
+      # ★ `T-20` 改名（需求方 2026-09-17 裁定：「不同物 ⇒ `rules/` 侧改名」）：
+      #   本键原名 `sensitivity`，与**设计**的 `sensitivity[]`（一组**敏感性项**，见
+      #   `05_价格与市场预期研究/02_实现方案.md:224` / `05/01:162`）**同名不同物** ——
+      #   本键是一个 `disclosure_state` 容器（**披露状态**），设计那个是**列表**。
+      #   两者「位置 + 类型 + 语义」两两不同、零机器绑定（同类风险见 `T-03` 的 `freeze_status`）。
+      #   ⇒ 改名避开与设计撞名。★ 代码读的 `sensitivity` 是**事实行**字段
+      #   （`schema.models.Benchmark.sensitivity`，`scripts/pricelayer/history_guard.py:336`
+      #   的 `row.get("sensitivity")`）—— **不是**本键，故本处改名不影响任何消费者。
+      sensitivity_disclosure:
         disclosure_state: undisclosed
     freeze_status: unfrozen                # 域 = 基准对象（≠ param 的 tbd/frozen）
     return_basis:

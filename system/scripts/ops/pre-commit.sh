@@ -271,6 +271,12 @@ run_gate "scenario_tag_binding_guard" "$CODE_ROOT/scripts/checks/scenario_tag_bi
 #    于是"这条规则其实没被读"在**任何输出里都不可见**。
 #    两条断言：① 代码引用的规则文件必须存在；② 代码读的键必须在实有键里。
 #    ★ 与 `run_all_gates.py::GATES` **同时**登记（`G-07`）。
+#
+# ⑭′ 同一道门禁还含**方向 2**（`WS-D` / 张力 `T-18`）：**`rules/` 声明的记录列必须有消费者** ——
+#    `rules/` 里声明了语义、`scripts/**` 却零消费者 ⇒ 该声明**在机器上零效力**（死列）。
+#    域 = 记录集合 × 列（纯遍历 YAML）；消费者 = `scripts/**` 的**非 docstring 字符串字面量**；
+#    未登记的无消费者列 ⇒ **命中即 fail**（`G-01`）。方向 1 与方向 2 **共用本脚本**，故本行
+#    与 `run_all_gates.py::GATES` 的同一行**一次覆盖两个方向**（`G-07`：两处必须一致）。
 run_gate "rule_key_alignment_guard" "$CODE_ROOT/scripts/checks/rule_key_alignment_guard.py" "$CODE_ROOT"
 
 # ★ 卡 13-O：先把「输入错误」结掉 —— 它比违规更该先说（`2`：门禁没跑全，结论不成立）。

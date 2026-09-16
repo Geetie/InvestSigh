@@ -88,3 +88,11 @@ valuation_compute:
   entry: compute_valuation                  # §D.3 函数名逐字
   order_constraint: "baseline_version.system_time.analyzed_at < compute_time"   # §D.3 断言逐字（禁止倒填）
   method_version_field: method_version      # §D.2：「每个 price range → formula + operands + method_version + share_count + compute_date（N5.3-02 / N9.2-02）」
+  # ★ `T-19`（需求方 2026-09-17 裁定：`method_version` **进 `rules/`**，落点即本键）：
+  #   此键的**值**此前无 `rules/` 归属，而设计两处示例**互不一致**（`05/02:81` 作 `"v1"`、
+  #   `05/02:166` 作 `"val-v1"`）⇒ 设计未钉规范串。
+  #   按裁定**先落现有实现值**（不自行新造）：本文件 `valuation_compute.entry = compute_valuation`
+  #   在 `scripts/pricelayer/valuation.py`，其 `METHOD_VERSION = "pricelayer-valuation-v1"`。
+  #   ★ 求解器侧另有独立的 `scripts/pricelayer/solver.py::METHOD_VERSION = "pricelayer-solver-v1"`。
+  #   ★★ **规范串待需求方最终确认**（见 `reports/ws_d_pipeline_params_report.md`）：确认后改本值一行即可。
+  method_version: pricelayer-valuation-v1

@@ -105,27 +105,79 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     return out
 
 
+def _latest_version_row(rows: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
+    """在**同 `recommendation_id` 的多条版本行**里选出**当前版本**（`Ch9 §3.4.2`）。
+
+    排序键 = `(version, recorded_seq)`；同键取**文件中靠后**那条（`>=` 保证后者胜）。
+
+    ★ **为什么必须取"当前版本"**（本批次实测缺陷，`G-01` 恒红的一类）：
+
+      `facts/*.jsonl` 是**追加式不可变** —— 一次修正 = **追加新版本行**，而**不是**原地改写
+      （`Ch9 §3.4.2`）。于是同一个 `recommendation_id` 在文件里可能有**多条**
+      （v1 种子行 + v2 当前行）。四要素判据问的是"**当前**结论可否反查"，
+      故必须取 **`version` 最大**的那条。
+
+      原实现用 `next(...)` 取**第一条** ⇒ 永远读到 v1 种子行 ⇒ 即便 v2 已补齐
+      `evidence_version_ids`（含 `dv-…`）与 `assumptions`，判据仍恒报缺失。
+      本函数是**唯一**取"当前版本"的地方（`G-06` 唯一真源：不在别处重算）。
+
+    `version` 缺省视为 `1`、`recorded_seq` 缺省视为 `0`（与 `Recommendation` 的默认一致）。
+    """
+    best: Mapping[str, Any] | None = None
+    best_key: tuple[int, int] | None = None
+    for row in rows:
+        key = (int(row.get("version") or 1), int(row.get("recorded_seq") or 0))
+        if best_key is None or key >= best_key:
+            best_key = key
+            best = row
+    assert best is not None  # 调用方保证 rows 非空
+    return best
+
+
 def traceback(root: Path, conclusion_id: str) -> TraceabilityResult:
     """对一条建议/结论做结构化反查。
 
     - `evidence`：`recommendations.evidence_version_ids` / `baselines.evidence_claim_ids`
-    - `assumptions`：`baselines.driver_model[].assumptions`
+    - `assumptions`：该结论赖以成立的假设，取 **① 建议自身 `assumptions`**（`Ch2 §D.1`）
+      与 **② 基线估值假设投影 `baselines.driver_model[].assumptions`**（`§E`）的**并集**
     - `computation`：`derived/` 中该结论的 `DerivedValue`（需带 formula + operands + method_version）
     - `prev_version_id`：版本链上一个版本（`supersedes`）
+
+    ★ **版本解析**（本批次修复）：同一 `recommendation_id` 可能有多条版本行（追加式不可变），
+      本函数取 `version` 最大的那条（`_latest_version_row`）作为**当前结论**。
     """
     recs = _load_jsonl(root / "facts" / "recommendations.jsonl")
     baselines = _load_jsonl(root / "facts" / "baselines.jsonl")
-    target = next((r for r in recs if r.get("recommendation_id") == conclusion_id), None)
-    if target is None:
+    candidates = [r for r in recs if r.get("recommendation_id") == conclusion_id]
+    if not candidates:
         raise TraceabilityGap(f"未找到结论/建议: {conclusion_id}")
+    target = _latest_version_row(candidates)
 
     evidence = list(target.get("evidence_version_ids") or [])
     company_id = target.get("company_id")
+    # ── `assumptions`：该结论**赖以成立的假设**，取**两个已存在的真源**之**并集** ──
+    #   ① 建议自身声明的 `assumptions`（`Ch2 §D.1` 提前判断三要素之一；本批次 WS-B 补齐的正是它）；
+    #   ② 基线的**估值假设投影** `baseline.driver_model[].assumptions`（`§E` 原文
+    #      "`baseline.driver_model / valuation_inputs(three-source)`"）。
+    #
+    #   ★ 为什么必须并入 ①（本批次实测缺口）：仅读 ② 时，"假设"这一要素**没有任何**
+    #     建议侧可达链路 —— 真仓库的 `baseline.driver_model` 为空（基线深度未交付时），
+    #     即便建议已如实声明假设，判据仍恒报 `assumptions` 缺失（`G-01` 恒红）。
+    #     ① 与 ② 语义**不冲突**（都是"结论所依赖的假设"），故**并为并集**、按出现顺序去重，
+    #     而**不**用 ① 覆盖 ②（保持 `§E` 的基线来源不变，属**追加来源**而非改口径）。
+    #     ★ 口径解释（属"契约解释"而非"新增设计"）登记为**待需求方确认项**，随本流报告回传。
     assumptions: list[str] = []
+    for a in target.get("assumptions") or []:
+        text = str(a)
+        if text and text not in assumptions:
+            assumptions.append(text)
     for b in baselines:
         if b.get("company_id") == company_id:
             for driver in b.get("driver_model") or []:
-                assumptions.extend(driver.get("assumptions") or [])
+                for a in driver.get("assumptions") or []:
+                    text = str(a)
+                    if text and text not in assumptions:
+                        assumptions.append(text)
 
     computation = _find_derived(root, conclusion_id, evidence)
     return TraceabilityResult(
@@ -191,7 +243,16 @@ def check(root: Path, sample_size: int = 20) -> CheckReport:
         )
         return report
 
-    sample = [r["recommendation_id"] for r in recs[:sample_size] if r.get("recommendation_id")]
+    # ★ 按 `recommendation_id` **去重**后再截样本：追加式不可变 ⇒ 同一条建议可能有多条版本行，
+    #   若不去重，同一条"当前结论"会被**重复计数**（覆盖率分母失真）。去重后保持文件顺序。
+    ordered_ids: list[str] = []
+    seen: set[str] = set()
+    for r in recs:
+        cid = r.get("recommendation_id")
+        if cid and cid not in seen:
+            seen.add(cid)
+            ordered_ids.append(cid)
+    sample = ordered_ids[:sample_size]
     report.scanned["sample"] = len(sample)
     for cid in sample:
         result = traceback(root, cid)

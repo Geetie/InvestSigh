@@ -18,6 +18,12 @@ python system/scripts/orchestrate/pipeline.py [code_root] [--date YYYY-MM-DD] [-
 G1-05（8 步完整性守卫）：1–6 步产物对象齐备；7/8 步接口已注册（**未实现时显式标 gap，
 不得静默跳过**）；缺产物 → 编排器置 `blocked`，**不得报成功**。
 
+★ `T-18`（规则声明 ↔ 机器效力，需求方 2026-09-17 裁定）：`rules/pipeline.yaml` 把 step 7/8 声明为
+  `blocking: True` **+** `implemented_in_first_version: False`。裁定：**首版不把
+  `implemented_in_first_version: False` 的步计入 `blocking` 判定，但必须记 `gaps` 并显式标
+  `deferred_by_design`**。落地见 `_deferred_by_design()`（该列**唯一代码消费者**）与
+  `run_daily` / `resume` 的五个分支。
+
 ★ 为什么不做成纯 Prompt（`Ch1 §B`）：8 步闭环需要**断点续跑、幂等、可回放**，
   纯提示词无法保证跨天失败恢复与去重，故列 C 档。
 """
@@ -48,6 +54,34 @@ STATUS_SKIPPED = "skipped"
 
 class StepNotImplemented(RuntimeError):
     """步进处理器未注册 —— 必须显式记 gap，不得静默跳过。"""
+
+
+def _deferred_by_design(cfg: Mapping[str, Any]) -> bool:
+    """`T-18`：该步是否属"**设计上首版不做**"（`implemented_in_first_version: False`）。
+
+    ★★ 本函数是 `rules/pipeline.yaml::steps[*].implemented_in_first_version` 的
+    **唯一代码消费者**。此前它是本项目第三次出现的同一形态 —— **"写在声明里"≠"在机器上有效力"**
+    （`G-50`：判据没绑；`G-RC-12`：机制在真源上不生效；`T-18`：**声明在 `rules/` 里，代码零消费者**）：
+
+    | 检索式 | 改前实测 |
+    |---|---|
+    | 全仓 `implemented_in_first_version` | 8 处全在 `rules/pipeline.yaml` 声明本身；其余在注释/docstring/报告；**零 `cfg.get(...)` 读取点** |
+    | 同表另一列 `blocking` | 本文件 `cfg.get("blocking")` **6 处** —— 有真实消费者 |
+
+    ⇒ 后果：同一张表的两列，一列有人读、一列零人读 ⇒ `blocking` 说了算、`implemented_in_first_version`
+    说了不算 ⇒ step 7/8（`blocking: True` + `implemented_in_first_version: False`）永不注册
+    ⇒ `run_daily()` 恒记 gap 并令 `blocked=True` ⇒ **`status` 恒 `failed`** ⇒ `blocked` 失去判别力、
+    整条降级/幂等链**恒处告警态**（正是铁律「**卡死的信号 = 被关掉的信号**」最危险的形态）。
+
+    ★ 语义（需求方 2026-09-17 裁定，逐字）：**首版不把 `implemented_in_first_version: False` 的步
+      计入 `blocking` 判定，但必须记 `gaps` 并显式标 `deferred_by_design`。**
+      ⇒ 本函数只回答"这一步是否属'设计上首版不做'"；**是否记 gap / 是否标 `deferred_by_design`
+      由调用点负责**（`run_daily` / `resume` 的五个分支各自落实）。
+
+    ★ 只认**精确的 `False`**：`True` 与**缺键**（`None`）都表示"按 blocking 正常判定"
+      —— 缺键即"该步未声明首版状态"，**不得**被当成"设计上不做"而放松判定（宁可保守）。
+    """
+    return cfg.get("implemented_in_first_version") is False
 
 
 @dataclass
@@ -202,17 +236,26 @@ class Pipeline:
         for cfg in steps_cfg:
             no = int(cfg["step"])
             name = str(cfg["name"])
+            # ★ `T-18`：本步是否"设计上首版不做"。**在判定 blocking 之前先算它** ——
+            #   裁定要求此类步**不计入 blocking**（否则 `blocked` 恒真、失去判别力），
+            #   但**必须**记 gap 并显式标 `deferred_by_design`（不得静默消失）。
+            deferred = _deferred_by_design(cfg)
             handler = self._step_handlers.get(no)
             if handler is None:
                 gap = (
                     f"step {no} ({name}) 未注册处理器"
                     + (f"；预留 hook = {cfg['hook']}" if cfg.get("hook") else "")
                 )
+                if deferred:
+                    gap += (
+                        "；deferred_by_design（`implemented_in_first_version=False` —— "
+                        "**设计上首版不做**，非「忘了实现」；按 `T-18` 不计入 blocking）"
+                    )
                 result.steps.append(
                     StepResult(no, name, STATUS_GAP, gap=gap)
                 )
                 result.gaps.append(gap)
-                if cfg.get("blocking"):
+                if cfg.get("blocking") and not deferred:
                     result.blocked = True
                 continue
             try:
@@ -222,7 +265,7 @@ class Pipeline:
                     StepResult(no, name, STATUS_FAILED, error=f"{type(exc).__name__}: {exc}")
                 )
                 result.degraded = True
-                if cfg.get("blocking"):
+                if cfg.get("blocking") and not deferred:
                     result.blocked = True
                 continue
             # ★ `incomplete_reason` 非空 = 处理器已注册但**模型侧 / 上游组件未实现**（阶段②③）。
@@ -245,8 +288,13 @@ class Pipeline:
                 )
             )
             if outcome.incomplete_reason:
-                result.gaps.append(f"step {no} ({name}): {outcome.incomplete_reason}")
-                if cfg.get("blocking"):
+                marker = (
+                    "；deferred_by_design（`implemented_in_first_version=False` —— **设计上首版不做**）"
+                    if deferred
+                    else ""
+                )
+                result.gaps.append(f"step {no} ({name}): {outcome.incomplete_reason}{marker}")
+                if cfg.get("blocking") and not deferred:
                     result.blocked = True
             for k, v in (outcome.judgment_change or {}).items():
                 result.judgment_change[k] = bool(v) or result.judgment_change.get(k, False)
@@ -289,6 +337,8 @@ class Pipeline:
         steps_cfg = self.config.get("steps") or []
         for cfg in steps_cfg:
             no = int(cfg["step"])
+            # ★ `T-18`：与 `run_daily` 同一套语义（见 `_deferred_by_design`）。
+            deferred = _deferred_by_design(cfg)
             if no in done_steps:
                 result.steps.append(
                     StepResult(no, str(cfg["name"]), STATUS_SKIPPED, gap=None)
@@ -296,10 +346,21 @@ class Pipeline:
                 continue
             handler = self._step_handlers.get(no)
             if handler is None:
-                gap = f"step {no} 未注册处理器（断点续跑）"
+                # ★ 与 `run_daily` **逐字一致**地把"预留 hook 名"写进 gap：
+                #   `assert_steps_complete` 的 hook 判据要求"未注册 hook 必须在 gaps 里有痕迹"，
+                #   否则会记一条 G1-05 违例并把 `blocked` 置真 —— 那正好让 `T-18` 的效果在
+                #   `resume` 入口被抵消（两个入口对同一次运行必须给**同一结论**，批次 7 审计 `B2`）。
+                gap = f"step {no} 未注册处理器（断点续跑）" + (
+                    f"；预留 hook = {cfg['hook']}" if cfg.get("hook") else ""
+                )
+                if deferred:
+                    gap += (
+                        "；deferred_by_design（`implemented_in_first_version=False` —— "
+                        "**设计上首版不做**；按 `T-18` 不计入 blocking）"
+                    )
                 result.steps.append(StepResult(no, str(cfg["name"]), STATUS_GAP, gap=gap))
                 result.gaps.append(gap)
-                if cfg.get("blocking"):
+                if cfg.get("blocking") and not deferred:
                     result.blocked = True
                 continue
             outcome = handler(run_date, result.scope)
@@ -320,8 +381,13 @@ class Pipeline:
                 )
             )
             if outcome.incomplete_reason:
-                result.gaps.append(f"step {no} ({cfg['name']}): {outcome.incomplete_reason}")
-                if cfg.get("blocking"):
+                marker = (
+                    "；deferred_by_design（`implemented_in_first_version=False` —— **设计上首版不做**）"
+                    if deferred
+                    else ""
+                )
+                result.gaps.append(f"step {no} ({cfg['name']}): {outcome.incomplete_reason}{marker}")
+                if cfg.get("blocking") and not deferred:
                     result.blocked = True
             result.signals_emitted += int(outcome.signals_emitted or 0)
             result.degraded = result.degraded or bool(outcome.degraded)

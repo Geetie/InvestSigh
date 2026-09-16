@@ -39,6 +39,26 @@ Python 的 `dict.get()` **不会报错** —— 它返回 `None`，而 `None` �
 ① 的白名单（`KNOWN_ABSENT_RULE_FILES`）**只收"文件不存在"**；② 的白名单
 （`KNOWN_ZERO_KEY_READS`）**只收"文件在、键不在且被静默吞掉"**。两者不共用一张表。
 
+## 方向 2：`rules/` 声明的**记录列**必须有代码消费者（`T-18` 家族，反向绑定）
+
+方向 1 只做**单向**：代码**读**的键必须**存在**于 `rules/`。它的补集 ——
+**`rules/` 里声明了语义、代码区却从不读的键** —— 此前**无人守**，而这正是本项目
+第三次同形态事故（`G-50` / `G-RC-12` / `T-18`）的暴露面：一句话概括
+**「写在声明里」≠「在机器上有效力」**。
+
+| 被检对象 | 判据 | 为什么它能藏住 |
+|---|---|---|
+| **记录集合的列**：① 元素全是 mapping 的 `list`（如 `pipeline.yaml::steps`）② 值全是 mapping 的 `dict` | 该列名必须在 `scripts/**` 里以**非 docstring 的字符串字面量**出现（= 代码在**按名字**读它）。否则 = **无消费者** ⇒ 违例 | 上游方向 1 与 `rule_key_consumer_scan` 都只枚举**叶键**（`_leaf_paths` 把 list 当叶子）⇒ `steps[*].implemented_in_first_version` **根本不在它们的被检集合里**；而它的名字**只出现在 docstring**（`pipeline.py:152` 等）⇒ 文本口径的扫描器又会把它当成"已消费"。**两个盲区叠加 ⇒ 死列永久存在而两处门禁都看不见。** |
+
+★ **判据的可判定性与穷尽性（`R-06`）**：域 = `rules/*.yaml` 的**全部记录集合 × 全部列**
+（纯遍历 YAML，无名单、无关键词）；判据 = "列名是否作为**非 docstring 字符串字面量**出现在
+`scripts/**`"（纯 AST 常量比对）。两侧都是**可穷尽枚举 + 集合差**，不是关键词/名单枚举。
+★ **为什么剔掉 docstring**：死列 `implemented_in_first_version` 改前在 `pipeline.py` /
+`ingest_step.py` / `chain_steps.py` 的 docstring 里各出现一次 —— 把 docstring 当消费者，
+本方向就会**恰好漏掉它要抓的那一条**。
+★ **白名单**（`KNOWN_UNCONSUMED_RULE_COLUMNS`）：本仓确有若干"已声明、已知尚未接线"的记录列
+⇒ 按 `口径 13` 四字段逐条登记（**不是**放宽判据）。键 = `(规则文件名, "集合::列")`。
+
 ## 分析方法（有界 + fail-safe：**宁可少报，绝不误报**）
 
 `rules/` 的键是**嵌套**的、代码读法有六七种。故本守卫**不做**通用数据流分析，只认**能静态定死**的：
@@ -236,10 +256,165 @@ KNOWN_ABSENT_RULE_FILES: dict[tuple[str, str], _Waiver] = {
     ),
 }
 
+#: ★ 已登记的"**`rules/` 声明了记录列、但 `scripts/**` 零消费者**"（方向 2，`T-18` 家族）。
+#:
+#: 键 = `(规则文件名, "<集合点路径>::<列名>")`；集合为空时集合段写 `<root>`。
+#: ★ 与另两张表的键口径刻意不同（那两张是 `(代码文件, 规则键)`）：本方向**没有**单一代码文件可指，
+#:   "责任人"是**声明面**（规则文件）而非某个读点 —— 故键以规则文件为准。
+#:
+#: ★ **每条必备 `口径 13` 四字段**（`reason` / `owner` / `expected_consumer_by` / `review_by`），
+#:   缺一即**导入时响亮失败**（`_selfcheck_waivers`）。**写不出"预期何时有消费者"就不得入表。**
+#: ★★ 这张表**只收"已声明、已知尚未接线"的记录列**，**绝不用它放宽判据**：
+#:   新出现一条**未登记**的无消费者记录列 ⇒ 本方向**命中即 fail**（`G-01`）。
+#: ★★ 本表**逐条**登记（`(规则文件名, "<集合::列>")`，**不按规则文件整体豁免**）：新出现的
+#: 无消费者列若不在表里 ⇒ 命中即 fail。每条 = `(规则文件名, "<集合点路径>::<列名>", 理由)`；
+#: `owner` / `expected_consumer_by` / `review_by` 由下面的物化循环**逐条**写进每个 `_Waiver`
+#: （仍是四字段齐全 —— `_selfcheck_waivers` 逐条校验）。
+_KNOWN_UNCONSUMED_COLUMN_SPECS: tuple[tuple[str, str, str], ...] = (
+    (
+        "benchmark.yaml", "benchmark_objects::benchmark_semantics",
+        "**说明性列**（人读的基准语义描述，非机器契约）⇒ 本就不该有按名字的代码消费者。",
+    ),
+    (
+        "benchmark.yaml", "benchmark_objects::change_records",
+        "**变更治理载体列**：`change_governance` 的治理动作（追加版本 / 人工审批）由"
+        "第八章交付；首版 `return_guard` 只逐列读 `return_*` 与 `freeze_status`。",
+    ),
+    (
+        "benchmark.yaml", "benchmark_objects::return_basis_version",
+        "**返回口径版本号**：口径版本当前由 `return_basis.version` 承载并被读取，"
+        "记录级 `return_basis_version` 尚无读取点（同语义两载体，待接线或并轨）。",
+    ),
+    (
+        "data-sources.allowlist.yaml", "sources::may_enter_decision_logic",
+        "**准入策略列**（该数据源可否进入决策逻辑）：决策作用域（Ch7）首版未接线。",
+    ),
+    (
+        "data-sources.allowlist.yaml", "sources::may_enter_first_version",
+        "**准入策略列**（该数据源可否进入首版）：首版准入判定尚无按列的机器消费者。",
+    ),
+    (
+        "data-sources.allowlist.yaml", "sources::reassessment_rule",
+        "**复审规则列**：数据源复审链路首版未接线。",
+    ),
+    (
+        "freeze.yaml", "freeze_params::blocking_targets",
+        "**冻结参数的阻塞目标列**：`stage_gate` 的 `caliber_tbd_placeholder` 判据只读"
+        "`freeze_status`/`confirmed_*`，未按本列接线。",
+    ),
+    (
+        "freeze.yaml", "freeze_params::decision_owner",
+        "**决策责任人列**（人读的治理信息）⇒ 无机器消费者。",
+    ),
+    (
+        "freeze.yaml", "freeze_params::impact_note",
+        "**影响说明列**（人读）⇒ 无机器消费者。",
+    ),
+    (
+        "freeze.yaml", "freeze_params::option_set",
+        "**备选值集合列**：首版只读 `freeze_status` / `suggested_value` 的接线尚未落地。",
+    ),
+    (
+        "freeze.yaml", "freeze_params::param",
+        "**参数名列**：`stage_gate` 按 `param_id`（如 `p01`）索引，未按 `param` 列名读取"
+        "（同语义两载体，待并轨）。",
+    ),
+    (
+        "freeze.yaml", "freeze_params::param_tier",
+        "**参数分级列**：分级策略首版未接线。",
+    ),
+    (
+        "freeze.yaml", "freeze_params::source_capability",
+        "**数据源能力列**：`p09` 数据源参数冻结后的接线尚未落地。",
+    ),
+    (
+        "freeze.yaml", "freeze_params::source_state",
+        "**数据源状态列**：同 `source_capability`，接线待 `p09` 冻结。",
+    ),
+    (
+        "freeze.yaml", "freeze_params::suggested_value",
+        "**建议值列**：来源是 `00_待拍板项清单.md` 的建议值，首版代码不读它"
+        "（值面待需求方拍板后接线）。",
+    ),
+    (
+        "freeze.yaml", "freeze_params.option_set::basis",
+        "**备选值依据说明列**（人读）⇒ 无机器消费者。",
+    ),
+    (
+        "metric-sets.yaml", "metric_sets::basis",
+        "**指标集依据说明列**（人读）⇒ 无机器消费者。",
+    ),
+    (
+        "pipeline.yaml", "steps::gap_behavior",
+        "**缺口行为声明列**（`explicit_gap_when_hook_absent`）：`G1-05` 的缺口处理在当前"
+        "代码里以「显式记 gap」实现，但**未按本列名读取**（声明与实现同义、异载体）。",
+    ),
+    (
+        "publish.yaml", "three_layer_permission::restrictions",
+        "**三层权限策略列**：`publish.yaml` 属**第八章（发布）**，首版**不交付**该组 ⇒ 整组无消费者。",
+    ),
+    (
+        "publish.yaml", "three_layer_permission::must_show",
+        "**三层权限策略列**：同第八章，首版**不交付**。",
+    ),
+    (
+        "publish.yaml", "three_layer_permission::excludes",
+        "**三层权限策略列**：同第八章，首版**不交付**。",
+    ),
+    (
+        "publish.yaml", "three_layer_permission::implies_reshare_authorization",
+        "**三层权限策略列**：同第八章，首版**不交付**。",
+    ),
+    (
+        "publish.yaml", "three_layer_permission::whitelist",
+        "**三层权限策略列**：同第八章，首版**不交付**。",
+    ),
+    (
+        "publish.yaml", "three_layer_permission::rights_clearance_per_item",
+        "**三层权限策略列**：同第八章，首版**不交付**。",
+    ),
+    (
+        "publish.yaml", "three_layer_permission::auto_authorization",
+        "**三层权限策略列**：同第八章，首版**不交付**。",
+    ),
+    (
+        "scope.yaml", "coverage_scope.dimensions::per_node",
+        "**覆盖维度声明列**：首版覆盖守卫只读上层聚合，未按维度列读取。",
+    ),
+    (
+        "scope.yaml", "coverage_scope.dimensions::rollback_allowed",
+        "**覆盖维度声明列**：同 `per_node`，首版未按列读取。",
+    ),
+    (
+        "scope.yaml", "coverage_scope.dimensions::values",
+        "**覆盖维度声明列**：同 `per_node`，首版未按列读取。",
+    ),
+)
+
+#: `口径 13` 四字段里可**跨条共享**的两项（同一 owner / 同一复核窗口）；`reason` 逐条不同。
+_UNCONSUMED_OWNER = (
+    "**主理人**（安装/接线规则文件）；接线归阶段②③ 与第八/十章交付方；"
+    "人读列的处置归声明面维护方"
+)
+_UNCONSUMED_EXPECTED_BY = (
+    "预期消失条件 = 该列出现**按名字的代码读取点**（如 `T-18` 的 `_deferred_by_design()` 范式）；"
+    "**人读列**（说明/依据/责任人）永不需机器消费者 ⇒ 届时改 `review_by` 并写明**它为何是终态**"
+)
+_UNCONSUMED_REVIEW_BY = "2026-10-31"
+
+KNOWN_UNCONSUMED_RULE_COLUMNS: dict[tuple[str, str], _Waiver] = {
+    (file_name, dotted): _Waiver(
+        reason=reason,
+        owner=_UNCONSUMED_OWNER,
+        expected_consumer_by=_UNCONSUMED_EXPECTED_BY,
+        review_by=_UNCONSUMED_REVIEW_BY,
+    )
+    for file_name, dotted, reason in _KNOWN_UNCONSUMED_COLUMN_SPECS
+}
+
 
 def _selfcheck_waivers() -> None:
     """`口径 13` 的**机器绑定**：四个字段缺一 / 日期不可解析 ⇒ **导入时**响亮失败。
-
     ★ 为什么放在导入时而不是 `check()` 里：白名单是**本守卫的判据本身**。
       一份字段残缺的白名单只要还能跑，它就已经在"把门禁关掉"了 ——
       那种状态不该等到某人恰好跑门禁才暴露。**破口当场红**（纪律 2：禁 warn-only）。
@@ -248,6 +423,7 @@ def _selfcheck_waivers() -> None:
     for name, table in (
         ("KNOWN_ZERO_KEY_READS", KNOWN_ZERO_KEY_READS),
         ("KNOWN_ABSENT_RULE_FILES", KNOWN_ABSENT_RULE_FILES),
+        ("KNOWN_UNCONSUMED_RULE_COLUMNS", KNOWN_UNCONSUMED_RULE_COLUMNS),
     ):
         for key, waiver in table.items():
             for field in ("reason", "owner", "expected_consumer_by", "review_by"):
@@ -280,6 +456,7 @@ def _expired_waivers(today: date) -> list[tuple[str, tuple[str, str], _Waiver]]:
     for name, table in (
         ("KNOWN_ZERO_KEY_READS", KNOWN_ZERO_KEY_READS),
         ("KNOWN_ABSENT_RULE_FILES", KNOWN_ABSENT_RULE_FILES),
+        ("KNOWN_UNCONSUMED_RULE_COLUMNS", KNOWN_UNCONSUMED_RULE_COLUMNS),
     ):
         for key, waiver in table.items():
             if waiver.is_expired(today):
@@ -518,6 +695,9 @@ class _ModuleReads:
         self.unresolved_reads = 0
         #: 经**多值返回**取得的文档变量数（盲区，见 `_AMBIGUOUS`）
         self.ambiguous_doc_vars = 0
+        #: ★ 方向 2 用：本模块里**非 docstring 的字符串字面量**取值集合
+        #:   （= "代码按**名字**提到了哪些键"）。见 `_code_string_literals`。
+        self.literals: set[str] = set()
 
 
 def _analyze_module(
@@ -530,6 +710,9 @@ def _analyze_module(
     out = _ModuleReads()
     tree = ast.parse(text)
     out.refs = _relpaths_referenced(tree, consts)
+    # ★ 方向 2：本模块的**非 docstring 字符串字面量**（键名的"代码消费者"证据）。
+    #   复用同一棵 AST（不额外 parse 一次）⇒ 对方向 1 的开销几乎为零。
+    out.literals = _code_string_literals(tree)
 
     # ★ 每个作用域**各扫一次、互不重叠**（见 `_scopes` / `_walk_ordered` 的说明）。
     #   跨作用域的闭包变量**不传递** ⇒ 内层函数里解析不出出处的读一律进 `unresolved`
@@ -684,8 +867,84 @@ def _resolve_read(
     return _NOT_A_RULE_DOC
 
 
-# ───────────────────────── 检查主体 ─────────────────────────
+# ───────────────────────── 方向 2：记录集合的"列"（`T-18` 家族的暴露面） ─────────────────────────
 
+
+def _code_string_literals(tree: ast.AST) -> set[str]:
+    """模块里**非 docstring** 的字符串字面量取值集合。
+
+    ★ 为什么必须剔掉 docstring（这是实测盲区、不是洁癖）：死列
+      `implemented_in_first_version` 改前在 `scripts/orchestrate/pipeline.py:152` /
+      `ingest_step.py:4` / `chain_steps.py:6` **各出现一次，全部在 docstring 里** ——
+      若把 docstring 也算成"消费者"，本方向就会**恰好漏掉它要抓的那一条**（假阴性）。
+      注释不是字符串字面量（它是 `tokenize.COMMENT`，不进 AST）⇒ 天然不计入。
+    """
+    docstring_ids: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            body = getattr(node, "body", None)
+            if not body:
+                continue
+            first = body[0]
+            if (
+                isinstance(first, ast.Expr)
+                and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)
+            ):
+                docstring_ids.add(id(first.value))
+    out: set[str] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and id(node) not in docstring_ids
+        ):
+            out.add(node.value)
+    return out
+
+
+def _record_columns(doc: Any) -> list[tuple[str, str]]:
+    """枚举一份规则文档里所有**记录集合**的**列**：`[(集合点路径, 列名), ...]`。
+
+    一个「记录集合」定义为：
+    ① 元素**全是 mapping** 的 `list`（例：`pipeline.yaml::steps`）；或
+    ② 值**全是 mapping** 的 `dict`（例：`publish.yaml::three_layer_permission`）。
+    其「列」= 集合内所有元素/值的键的**并集**。
+
+    ★★ 为什么方向 2 必须覆盖这一层（这是 `T-18` 能长期藏住的**唯一原因**）：
+      上游方向 1 与既有 `rule_key_consumer_scan` 都只枚举**叶键**（`_leaf_paths` 把 list 当叶子）
+      ⇒ `steps: [ {…, implemented_in_first_version: …} ]` 的**列**根本不在它们的被检集合里。
+    """
+    out: list[tuple[str, str]] = []
+
+    def visit(node: Any, path: tuple[str, ...]) -> None:
+        if isinstance(node, dict):
+            values = list(node.values())
+            if len(values) >= 2 and all(isinstance(v, dict) for v in values):
+                columns: set[str] = set()
+                for value in values:
+                    columns |= set(value.keys())
+                for column in columns:
+                    out.append((".".join(path), column))
+            for key, value in node.items():
+                visit(value, path + (str(key),))
+        elif isinstance(node, list):
+            mappings = [e for e in node if isinstance(e, dict)]
+            if len(mappings) >= 2 and len(mappings) == len(node):
+                columns = set()
+                for mapping in mappings:
+                    columns |= set(mapping.keys())
+                for column in columns:
+                    out.append((".".join(path), column))
+            for element in node:
+                visit(element, path)
+
+    visit(doc, ())
+    # 去重（同一集合/列在多处出现时只保留一次）并稳定排序，使输出可复核。
+    return sorted(set(out))
+
+
+# ───────────────────────── 检查主体 ─────────────────────────
 
 def check(root: Path) -> CheckReport:
     report = CheckReport(checker="rule_key_alignment_guard")
@@ -699,6 +958,9 @@ def check(root: Path) -> CheckReport:
     whitelisted = 0
     whitelisted_absent = 0
     ref_pairs = 0
+    # ★ 方向 2：`scripts/**` 全域里**非 docstring 字符串字面量**的取值并集
+    #   （= "代码按名字提到过哪些键"）。由下面的既有遍历顺带累积（不额外 parse）。
+    code_literals: set[str] = set()
 
     for path in walk_files(root, SCAN_SUBDIR):
         rel = path.relative_to(root).as_posix()
@@ -721,6 +983,7 @@ def check(root: Path) -> CheckReport:
         mr = _analyze_module(rel, text, consts, producers)
         unresolved += mr.unresolved_reads
         ambiguous += mr.ambiguous_doc_vars
+        code_literals |= mr.literals
         if mr.reads:
             report.scanned[f"reads::{rel}"] = len(mr.reads)
         if mr.unresolved_reads:
@@ -791,8 +1054,49 @@ def check(root: Path) -> CheckReport:
                 )
             )
 
+    # ── 方向 2：`rules/` 声明的「记录列」必须有代码消费者（`T-18` 家族） ──
+    #   域 = 全部记录集合 × 全部列（纯遍历 YAML）；消费者 = `code_literals`（纯 AST 常量）。
+    #   两侧都是可穷尽枚举 + 集合差，故命中即 fail（`G-01`；禁 warn-only）。
+    reverse_columns = 0
+    reverse_unconsumed = 0
+    reverse_waived = 0
+    for rule_name in sorted(docs):
+        for collection, column in _record_columns(docs[rule_name]):
+            reverse_columns += 1
+            if column in code_literals:
+                continue
+            reverse_unconsumed += 1
+            coll = collection or "<root>"
+            shown = f"rules/{rule_name}::{coll}::{column}"
+            waiver = KNOWN_UNCONSUMED_RULE_COLUMNS.get((rule_name, f"{coll}::{column}"))
+            if waiver:
+                reverse_waived += 1
+                report.notes.append(
+                    f"KNOWN(已登记·无消费者记录列) {shown} "
+                    f"[owner={waiver.owner}；预期消失={waiver.expected_consumer_by}；"
+                    f"review_by={waiver.review_by}] —— {waiver.reason}"
+                )
+                continue
+            report.violations.append(
+                Violation(
+                    "13-pre/方向2",
+                    f"记录列 {shown} **在 `scripts/**` 里没有任何按名字的消费者**："
+                    f"它的名字既不出现在任何**非 docstring 的字符串字面量**里，也不作为键被读取。"
+                    "⇒ 这份声明**在机器上零效力**（`T-18` 家族：『写在声明里』≠『在机器上有效力』）。"
+                    "处置：① 给该列**接一个消费者**（推荐，见 `T-18` 的 `_deferred_by_design()` 范式）；"
+                    "或 ② 若它是「**已声明、尚未接线**」的已知列，按 `口径 13` 四字段登记到本守卫的 "
+                    "`KNOWN_UNCONSUMED_RULE_COLUMNS`（**四个字段都写**：reason / owner / "
+                    "预期何时有消费者 / review_by），**不得**靠「没被扫到」过关。",
+                    f"rules/{rule_name}", 0,
+                )
+            )
+
     report.scanned["py_files"] = scanned_files
     report.scanned["rule_files"] = len(docs)
+    report.scanned["reverse_record_columns"] = reverse_columns
+    report.scanned["reverse_unconsumed_columns"] = reverse_unconsumed
+    report.scanned["whitelisted_unconsumed_columns"] = reverse_waived
+    report.scanned["code_literal_names"] = len(code_literals)
     report.scanned["resolved_key_reads"] = total_reads
     report.scanned["unresolved_reads"] = unresolved
     report.scanned["ambiguous_doc_vars"] = ambiguous
@@ -819,12 +1123,33 @@ def check(root: Path) -> CheckReport:
     report.scanned["waiver_ratio_absent_files_permille"] = (
         1000 * whitelisted_absent // file_total
     ) if file_total else 0
+    report.scanned["waiver_ratio_reverse_permille"] = (
+        1000 * reverse_waived // reverse_columns
+    ) if reverse_columns else 0
     report.notes.append(
         f"白名单比值（`口径 13` 第 3 条）：键 {whitelisted} / {key_total}"
         f"（{100.0 * whitelisted / key_total:.1f}%）· "
         f"规则文件 {whitelisted_absent} / {file_total}"
         f"（{100.0 * whitelisted_absent / file_total:.1f}%）。"
         "★ 比值只作**可见性**用：它变高不自动等于缺陷，但**必须有人看过**。"
+    )
+    # ★ 方向 2（`T-18` 家族）的覆盖面与方法 —— **必须进输出**（读者要能判"这个数能不能用"）。
+    report.notes.append(
+        "覆盖面（方向 2 · 反向绑定）：域 = `rules/*.yaml` 的**记录集合 × 列**"
+        "（元素/值全为 mapping 的 list/dict；纯遍历 YAML，无名单无关键词）；消费者 = `scripts/**` 里"
+        "**非 docstring 的字符串字面量**（纯 AST 常量比对）。"
+        f"本树：记录列 {reverse_columns} / 无消费者 {reverse_unconsumed} / 已登记 {reverse_waived} / "
+        f"代码侧字面量名 {len(code_literals)}。"
+        f"白名单比值（`口径 13` 第 3 条）：记录列 {reverse_waived} / {reverse_columns}"
+        f"（{(100.0 * reverse_waived / reverse_columns) if reverse_columns else 0.0:.1f}%）。"
+    )
+    report.notes.append(
+        "★ 方向 2 的**已知边界（如实登记，不静默）**：① 它只覆盖**记录集合的列** ——"
+        "**顶层标量键**（如 `spec_anchor`）与**深层普通键**不在本方向域内（那部分由 "
+        "`rule_key_consumer_scan.py` 的 ③ 候选覆盖，后者**只报 note、不阻断**）；"
+        "② 消费者判据是「**按名字出现**」，故「整组通用消费」（`for k, v in group.items()`）"
+        "下**未被点名的列**会被判成无消费者 —— 这类已按 `口径 13` 登记在 "
+        "`KNOWN_UNCONSUMED_RULE_COLUMNS`（**不是**放宽判据）。"
     )
     if ambiguous:
         report.notes.append(
