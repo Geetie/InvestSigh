@@ -1,0 +1,120 @@
+# rule-candidates/valuation-methods.yaml —— 估值**方法路由表** + 离散粒度（Ch5 §D）
+#
+# ┌── 候选元信息（**安装进 rules/ 时应删除本块**）──────────────────────────────
+# │ spec_anchor    : "Ch5 §D.1"（并见 §D.5 / §D.6 / §I.2 / §J2）
+# │ install_target : rules/valuation-methods.yaml
+# │ install_note   : 由**主理人**安装。代码路径按 `rules/valuation-methods.yaml` 读
+# │                  （`00_交付施工图 §...`：`scripts/pricelayer/valuation.py` **只**读本文件）。
+# │                  安装 = `cp` → `chmod u+w rules` → `python scripts/ops/lock_rules.py` 重锁。
+# └────────────────────────────────────────────────────────────────────────────
+#
+# 权威出处：
+#   `Ch5 §D.1` 估值方法按商业模式路由（方法路由表 + "方法注册表驱动；未注册类型归入 generic 并标注"）
+#   `Ch5 §D.5` 事实输入 / 模型估计 / 人工设定**三类分开存**（`input_source`）+ 冲突不加权
+#   `Ch5 §I.2` 反解搜索空间的控制手段（离散粒度 + 网格搜索上界 + 解集上限 N）
+#   `Ch5 §J2` 每类假设离散粒度 ｜ `Ch5 §J3` 解集展示上限 N
+#   `00_待拍板项清单 B13`（**已确认**）：增长率 ±1 个百分点 / 利润率 ±0.5 / 折现率 ±0.5
+#
+# ⚠️ **译名登记（必读）**：设计的方法名是**中文**（`正常化利润` / `含再投资现金流` /
+#    `分部估值` / `同行比较` / `简化底稿`），而项目规范要求枚举 token **英文小写 + 下划线**
+#    （卡片 13-R 约束 5）⇒ 本文件的 token 是**译名，非设计原文**。每个 token 旁注了中文原词。
+#    **译名需需求方确认**（见报告"需拍板"表）—— 若需求方给出别的英文名，只改本文件即可。
+#
+# ★ 单一真源纪律：方法路由**只在本文件**；`scripts/pricelayer/valuation.py` 不得内置路由表。
+# ★ 情景概率的默认值**不在本文件**（真源 = schema `Valuation.probability`，默认空；
+#   规则见 `rule-candidates/scenario.yaml::probability_rule`）—— 防双写漂移。
+# 只读（安装后）：0444 + SHA256（`Ch9 §3.10 J9`；施工图 §8 纪律 9-10）。
+
+version: 1
+spec_anchor: "Ch5 §D.1"
+
+# ── 方法路由（§D.1）──────────────────────────────────────────────────────────
+# §D.1 逐字："`rules/valuation-methods.yaml`：`method_class → business.model_class` 绑定
+#            （复用第四章 C 的路由思路）" ＋ "方法注册表驱动；未注册类型归入 generic 并标注。"
+routing:
+  key: model_class                 # §D.1 表头列名（`business.model_class`）
+  binding_field: method_class      # §D.1 表头列名
+  fallback_method_class: generic   # §D.1 逐字"未注册类型归入 generic 并标注"
+  # §D.1 表逐行转写；括号内为**设计中文原词**
+  method_registry:
+    - model_class: hardware
+      method_class:
+        - normalized_earnings       # 正常化利润
+        - reinvestment_cash_flow    # 含再投资现金流
+        - segment_valuation         # 分部估值
+        - peer_comparison           # 同行比较
+    - model_class: cloud
+      method_class:
+        - reinvestment_cash_flow    # 含再投资现金流（订阅/用量）
+        - segment_valuation         # 分部
+    - model_class: software
+      method_class:
+        - normalized_earnings       # 正常化利润
+        - cash_flow                 # 现金流
+        - retention_metrics         # 留存指标
+    # §D.1 表该行 `model_class` 原文为 "ETF（基准）"；`method_class` 原文"简化底稿（E）"
+    - model_class: etf
+      method_class:
+        - simplified_worksheet      # 简化底稿（§E AGIX 基准的特殊处理）
+  # ★ 待确认（见报告）：`software` 行的"现金流"与 `hardware` 行的"含再投资现金流"
+  #   是否**同一方法**？设计分别写作两个词（且 software 行未带"含再投资"限定）
+  #   ⇒ 本文件按**两个 token** 转写，不自作合并。
+
+# ── 三类输入分开存（§D.5）────────────────────────────────────────────────────
+# §D.5 逐字："`input_source ∈ {fact, model_estimate, manual}`；`fact`=来自 `claim` 的原始数据；
+#            `model_estimate`=模型产出假设；`manual`=人工设定。"
+#            ＋ "**谁有权写 manual**：授权用户（需求方/研究员），须留痕（`author` + `modified_at`）"
+#            ＋ "**冲突处理**：**不用加权**（承第六章禁加权、C45-4）——分别保留并**并列展示**，
+#              冲突时标 `conflict_status="unresolved"`"
+input_handling:
+  input_source_values: [fact, model_estimate, manual]
+  # 注：`fact` 的取值来源是 `claim`（§D.5 逐字）；字段名 `input_source` 的**落位**已在
+  #     schema 上实现为 `AssumptionInput.input_source`（`Ch5 §D.5` / `N5.3-04`），
+  #     而设计 `Ch5 §0 表` 把它写在 `baselines.valuation` 上 ⇒ 落位差异已登记（见报告 §缺口）。
+  manual_requires_trace: [author, modified_at]
+  conflict_handling:
+    weighting: forbidden            # §D.5 "不用加权"（承第六章禁加权 / C45-4）
+    mode: keep_and_display_side_by_side   # §D.5 "分别保留并**并列展示**"
+    status_token: unresolved        # §D.5 逐字 `conflict_status="unresolved"`
+
+# ── 反解搜索空间控制（§I.2 / §J2 / §J3；粒度值来自 B13 已确认）────────────────
+# §I.2 逐字："限制每类假设的离散粒度 + 网格搜索上界（`rules/valuation-methods.yaml`）"
+# `00_待拍板项清单 B13`（**已确认**）逐字："**增长率 ±1 个百分点 / 利润率 ±0.5 / 折现率 ±0.5**；
+#                                        参数化 `rules/valuation-methods.yaml`"
+discretization:
+  growth_rate:
+    step: 1
+    unit: percentage_point          # 设计原文单位"个百分点"
+  margin:
+    step: 0.5
+    # ⚠️ 设计只写了"±0.5"，**未给单位**（百分点 / 比率）⇒ 不猜
+    unit: tbd
+    unit_basis: "00_待拍板项清单 B13 原文「利润率 ±0.5」未标单位；需需求方拍板是「个百分点」还是「比率」"
+  discount_rate:
+    step: 0.5
+    unit: tbd
+    unit_basis: "00_待拍板项清单 B13 原文「折现率 ±0.5」未标单位；同上"
+
+# §I.2 逐字："设网格上限告警；必要时用单调性剪枝/二分替代网格"
+# `Ch5 §J1` 逐字："反解数值方法 ｜ 网格搜索 / 二分 / 优化器 ｜ **网格 + 单调剪枝**（可单测、可控）"
+grid_search:
+  method: grid_with_monotonic_pruning   # §J1 建议值（"网格 + 单调剪枝"）
+  max_grid_upper_bound: tbd
+  max_grid_upper_bound_basis: "Ch5 §I.2 逐字「网格搜索上界（rules/valuation-methods.yaml）」，具体值设计未给"
+
+# §I.2 逐字："只保留**代表解 + 区间包络**（`solution_set` 上限 N，超出折叠）"
+# `Ch5 §J3` 逐字："解集展示上限 N ｜ 待定 ｜ 上限 + 区间包络折叠"
+solution_set:
+  max_displayed: tbd
+  max_displayed_basis: "Ch5 §J3 明示「待定」；§I.2 给出手段（上限 + 区间包络折叠），数值设计未给"
+  overflow_action: fold_into_envelope   # §I.2 "超出折叠" / §J3 "区间包络折叠"
+
+# ── 追溯链（§D.2，供 `valuation.py` 组装 `DerivedValue`）────────────────────
+# §D.2 逐字：`DerivedValue(value, formula, operands, method_version="val-v1",
+#            inputs={forecast_assumptions, valuation_params, share_count, compute_date})`
+#           ＋ "每个 price range → formula + operands + method_version + share_count + compute_date"
+# ★ 本块只**登记需要哪些追溯字段**（设计已给），**不复制** `DerivedValue` 的 schema
+#   （真源 = `schema/models.py::DerivedValue`，防双写漂移）。
+traceability:
+  required_fields: [formula, operands, method_version, share_count, compute_date]
+  method_version_example: val-v1    # §D.2 原文示例值 `method_version="val-v1"`

@@ -1,0 +1,96 @@
+# rule-candidates/metric-sets.yaml —— 多业务多指标集**路由注册表**（Ch4 §C.1）
+#
+# ┌── 候选元信息（**安装进 rules/ 时应删除本块**）──────────────────────────────
+# │ spec_anchor    : "Ch4 §C.1"（并见 §C.2 / §C.3 / §C.4）
+# │ install_target : rules/metric-sets.yaml
+# │ install_note   : 由**主理人**安装。`registry/rule-candidates/` **不是**读取路径；
+# │                  代码路径按 `rules/metric-sets.yaml` 读。
+# │                  安装 = `cp` → `chmod u+w rules` → `python scripts/ops/lock_rules.py` 重锁。
+# └────────────────────────────────────────────────────────────────────────────
+#
+# 权威出处：
+#   `Ch4 §C.1` 可配置的指标集定义（`rules/metric-sets.yaml`）
+#   `Ch4 §C.2` "混合公司防指标串味"的程序约束（`route_guard.validate_binding`）
+#   `Ch4 §C.3` 三类是否穷举 → 扩展机制（注册表驱动）
+#   `Ch4 §C.4` 指标 → 财务科目 → 每股指标的三层映射
+#
+# ★ 注册表驱动（§C.3 逐字）："新增第 4 类（广告/代工/游戏内购…）｜**只改
+#   `rules/metric-sets.yaml`**（注册新 `metric_set` + 路由）｜**否**（注册表驱动）"
+#   ⇒ 本文件是**唯一**扩展点：新增 `model_class` 一律**不得**改代码。
+#
+# ★ 路由与归属（§C.1 逐字）：
+#   · 路由键 = `business.model_class`；绑定字段 = `businesses.metric_set_id`；
+#   · "**`business_id → indicator_set` 绑定**：指标**挂在 `business_id`
+#     （非 `company_id`）**"。
+#
+# ★ 防串味（§C.2；由 `scripts/valuelayer/route_guard.py` 执行，**不是**本文件）：
+#   ① 外键一致性 `business.model_class == metric_set.model_class`，否则 `MetricSetMismatch`；
+#   ② `metric.owner_business_id == business.business_id`（分部财务独立，禁跨业务引用）。
+#
+# ★ 单一真源：`model_class → metric_set_id` 的映射只在本文件；
+#   `facts/businesses.jsonl::metric_set_id` 是**引用**，不复制映射。
+# 只读（安装后）：0444 + SHA256（`Ch9 §3.10 J9`；施工图 §8 纪律 9-10；模型对 `rules/` 无写权）。
+
+version: 1
+spec_anchor: "Ch4 §C.1"
+
+# ── 路由（§C.1 + §C.3）──────────────────────────────────────────────────────
+# 四个键名均取自设计原文：`model_class`（路由键，§C.1）、`metric_set_id`（绑定字段，§C.1）、
+# `MS-GENERIC` 与 `unregistered_model_class`（兜底与标注，§C.3 逐字）。
+routing:
+  key: model_class
+  binding_field: metric_set_id
+  fallback_metric_set_id: MS-GENERIC
+  fallback_flag_field: unregistered_model_class
+
+# ── 指标集注册表（§C.1）──────────────────────────────────────────────────────
+metric_sets:
+  # §C.1 **逐字给出的完整一条**：id / model_class / currency / 六段 stages / linked_accounts 前五项
+  - metric_set_id: MS-HW-6STAGE
+    model_class: hardware
+    currency: n/a
+    stages: [order, production_schedule, shipment, acceptance, revenue, collection]
+    # §C.1 只给了条目的**形状** `metrics: [{name, unit, source_class, linked_account}]`，
+    # 未给任何一条具体指标 ⇒ `tbd`（"设计未给条目"，不是"空即无"）。
+    metrics: tbd
+    # §C.1 原文 `linked_accounts: [revenue, cogs, capex, inventory, receivables, ...]`
+    # —— 末尾 `...` 表示**未穷举**：下列五项是设计逐字给出的部分，不是全集。
+    linked_accounts: [revenue, cogs, capex, inventory, receivables]
+
+  # §C.1 该段原文以 `...` 结尾 ⇒ 除下表字段外一切未给
+  - metric_set_id: MS-CLOUD-5STAGE
+    model_class: cloud
+    currency: tbd
+    stages: [contract, energized, online, utilization, billing]
+    metrics: tbd
+    linked_accounts: tbd
+
+  # §C.1 该段原文以 `...` 结尾 ⇒ 同上
+  - metric_set_id: MS-SW-5STAGE
+    model_class: software
+    currency: tbd
+    stages: [usage, paid, renewal, retention, upsell]
+    metrics: tbd
+    linked_accounts: tbd
+
+  # §C.3 逐字："未注册类型 ｜ 归入 `MS-GENERIC` 并显式标注 `unregistered_model_class=true`"
+  # ★ 诚实登记：设计**只给了** `metric_set_id`（`MS-GENERIC`）与标注字段名，
+  #   **未给**兜底集自身的 `model_class` / `currency` / `stages` / `metrics` / `linked_accounts`
+  #   ⇒ 一律 `tbd`，**不自创**（例如不得径自写 `model_class: generic`）。
+  - metric_set_id: MS-GENERIC
+    model_class: tbd
+    currency: tbd
+    stages: tbd
+    metrics: tbd
+    linked_accounts: tbd
+
+# ── 引用（不复制，防双写漂移）────────────────────────────────────────────────
+# ★ `metrics[].source_class` 的**取值域**在驱动侧定义（`Ch4 §D.1` 逐字）：
+#     `source_class: demand_expansion|share|price|product_mix|unit_usage|penetration|new_business|mixed`
+#     （注："7 类 + `mixed` 兜底"）
+#   §C.1 的 `metrics[].source_class` **复用**同一取值域 ⇒ 本文件**不复制**该枚举。
+#   ⚠️ 设计**未明说**二者同域（这是从"同名字段 + §C.1 只说形状"推出的）⇒ 已登记
+#      为待需求方确认项（见报告"设计未给 / 需拍板"表，**不是我自创的取值**）。
+# ★ 三层映射 `driver.financial_link`（§C.4）落 `facts/drivers.jsonl`，不在本文件。
+# ★ 跨节引用一致性（§C.4 末句："驱动必须出现在财务连接里"）由 `Ch4 §G` 形式校验器检查，
+#   对应 `rule-candidates/baseline.yaml::form_completeness`。

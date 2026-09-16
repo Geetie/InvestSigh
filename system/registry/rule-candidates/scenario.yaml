@@ -1,0 +1,102 @@
+# rule-candidates/scenario.yaml —— **情景定义** + `scenario_method_status`（Ch5 §E）
+#
+# ┌── 候选元信息（**安装进 rules/ 时应删除本块**）──────────────────────────────
+# │ spec_anchor    : "Ch5 §E.4"（并见 §D.6 / §E.3 / §E.5 / §J4 / §J5）
+# │ install_target : rules/scenario.yaml
+# │ install_note   : 由**主理人**安装。代码路径按 `rules/scenario.yaml` 读。
+# │                  安装 = `cp` → `chmod u+w rules` → `python scripts/ops/lock_rules.py` 重锁。
+# └────────────────────────────────────────────────────────────────────────────
+#
+# 权威出处：
+#   `Ch5 §E.3` 情景口径一致性检查（`scenario_guard.assert_scenario_match`，可直接写单测）
+#   `Ch5 §E.4` `scenario_method_status = pending` 的落地（含默认值与转正流程）
+#   `Ch5 §E.5` 未建模部分覆盖率（不声称完整预测）
+#   `Ch5 §D.6` 区间宽度表达 + 概率字段默认 null（"**情景概率默认 `null`**（不默认 50/50）"）
+#   `Ch5 §J4` 情景标签体系 ｜ `Ch5 §J5` `scenario_method_status` 转正条件
+#   `00_待拍板项清单 B11`（**已确认**）：`probability` 须为 `DerivedValue` 且标注来源；
+#                                        否则默认 `null`（**不是 50/50**）
+#
+# ★ 单一真源纪律（**本文件刻意不复制两处值**）：
+#   ① `probability` 的**默认值**真源 = `schema/models.py::Valuation.probability`（默认空）。
+#      本文件**不复写该默认值**，只声明**规则**（不得默认 0.5、须为 DerivedValue）——
+#      否则同一事实落两处（双写漂移）。
+#   ② `scenario_method_status` 的**当前状态值**只在本文件（§E.4 逐字"写 `rules/scenario.yaml`"）。
+# 只读（安装后）：0444 + SHA256（`Ch9 §3.10 J9`；施工图 §8 纪律 9-10）。
+
+version: 1
+spec_anchor: "Ch5 §E.4"
+
+# ── 情景标签体系（§J4）───────────────────────────────────────────────────────
+# `Ch5 §J4` 逐字："情景标签体系 ｜ 枚举 ｜ 定义 `{bear, neutral, bull, custom}`，
+#                  **首版仅用一致标签**"
+scenario_tag:
+  values: [bear, neutral, bull, custom]
+  first_version_requires_consistent_label: true   # §J4 "首版仅用一致标签"
+
+# ── 情景口径一致性（§E.3）────────────────────────────────────────────────────
+# §E.3 伪码逐字：
+#   def assert_scenario_match(stock, benchmark):
+#       if stock.scenario_tag != benchmark.scenario_tag:
+#           raise ScenarioMismatch(stock.scenario_tag, benchmark.scenario_tag)   # 拒绝生成相对判断
+# §E.3 单测逐字："个股乐观 + 基准悲观 → 断言 `ScenarioMismatch`（N5.4-08）——
+#                 **不能比较个股乐观情景与基准悲观情景**。"
+match_rule:
+  compare_field: scenario_tag
+  on_mismatch: reject_relative_judgment      # §E.3 "拒绝生成相对判断"
+  guard_ref: scripts/pricelayer/scenario_guard.py
+
+# ── 方法状态与默认值（§E.4）──────────────────────────────────────────────────
+# §E.4 逐字："`scenario_method_status: pending | neutral | probability_weighted    # 默认 pending`"
+#            ＋ "首版方法（中性情景 vs 概率加权）未定 → **显式 `pending`，不静默默认**"
+#            ＋ "`scenario_method_status=pending` 时，`assert_scenario_match` 无法建立一致口径
+#               → **阻塞相对判断生成**"
+scenario_method_status:
+  values: [pending, neutral, probability_weighted]
+  default: pending                  # §E.4 逐字"默认 pending"
+  # §E.4 "**显式 `pending`，不静默默认**" ⇒ 未显式赋值时也必须体现为 pending（不得靠缺省掩盖）
+  must_be_explicit: true
+  # §E.4 阻塞行为：pending 时第七章前置门收不到可用的 `benchmark_forecast`，
+  #                 输出"待判断"而非建议
+  blocks_relative_judgment_when_pending: true
+
+# §E.4 逐字："**待定转正流程**：样例确定后 → 写 `rules/scenario.yaml`（版本化）→
+#            `status` 转 `neutral`/`probability_weighted` + 记 `method_version`。"
+# `Ch5 §J5` 逐字："`scenario_method_status` 转正条件 ｜ 待样例 ｜ 样例通过 + `rules/scenario.yaml` 版本化"
+promotion:
+  versioned: true                   # §E.4 "（版本化）" / §J5 "`rules/scenario.yaml` 版本化"
+  requires: [sample_approved]       # §J5 "样例通过"（= §E.4 "样例确定后"）
+  targets: [neutral, probability_weighted]     # §E.4 转正目标
+  records_method_version: true      # §E.4 "+ 记 `method_version`"
+
+# ── `probability` 规则（§D.6 / §E.4 / B11 / §J9）★ 不复制默认值 ────────────────
+# §D.6 逐字："**情景概率默认 `null`**（不默认 50/50）：`probability: null`；
+#            仅当有依据才填（N5.3-07 / C45-2）。"
+# ★ **默认值的单一真源 = schema**（`Valuation.probability` 默认空），本文件**不复写该值**。
+probability_rule:
+  field_ref: baselines.valuation.probability   # 值/默认值的真源在 schema
+  must_not_default_to: 0.5                     # §D.6 / B11 逐字"（不是 50/50）"
+  # B11 逐字："须为 `DerivedValue` 且标注来源；否则默认 `null`"
+  # Ch5 §J9 逐字："`probability` 有依据才填的"依据"标准 ｜ 待定 ｜ 须为 DerivedValue 且标注来源"
+  requires_derived_value: true
+  requires_source_annotation: true
+  evidence_standard: tbd
+  evidence_standard_basis: "Ch5 §J9 明示「待定」：只给了要求（须为 DerivedValue 且标注来源），未给判定标准"
+
+# ── 未建模部分覆盖率（§E.5 / §J10）───────────────────────────────────────────
+# §E.5 逐字："`benchmarks.modeled_coverage` + `unmodeled_parts[]`：未建模部分**显式标注**；
+#            `modeled_coverage < 1` 时不得声称"完成整个基金预测"（N5.4-05）。"
+# `Ch5 §J10` 逐字："未建模覆盖率阈值 ｜ 待定 ｜ 参数化，低于阈值禁止称"完整预测""
+unmodeled_coverage:
+  field_ref: benchmarks.modeled_coverage       # §E.5 逐字给出的字段
+  unmodeled_list_field: unmodeled_parts        # §E.5 逐字给出的字段
+  threshold: tbd
+  threshold_basis: "Ch5 §J10 明示「待定」；§E.5 只给了行为（< 1 时不得声称完整预测）"
+  claim_complete_forecast_below_threshold: forbidden    # §E.5 / §J10 逐字禁止
+
+# ── 引用（不复制，防双写漂移）────────────────────────────────────────────────
+# ★ ETF/AGIX 专属字段（§E.1：`non_listed_assets` / `holdings_disclosure_lag` /
+#   `unverifiable_forecasts[]` / `sensitivity[]`）是 `facts/benchmarks.jsonl` 的 **schema 字段**，
+#   真源 = `schema/models.py`，本文件**不重复定义**。
+# ★ 历史外推检测（§E.2）是 `scripts/pricelayer/history_guard.py` 的**程序逻辑**，不是配置。
+# ★ ⚠️ 消歧登记（`Ch2 §C.2 R-15 ③`）：`scenario_tag` 与 `scenario_method_status` 两个**不同域**
+#   都含取值 `neutral` ⇒ 同名不同域必须可区分（报告中登记，未在本文件解决）。

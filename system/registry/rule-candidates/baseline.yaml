@@ -1,0 +1,144 @@
+# rule-candidates/baseline.yaml —— `baselines` 底稿的**上限 / 阈值参数化**（Ch4 §B / §G）
+#
+# ┌── 候选元信息（**安装进 rules/ 时应删除本块**）──────────────────────────────
+# │ spec_anchor    : "Ch4 §B"（并见 §D.2 / §G.2 / §G.4）
+# │ install_target : rules/baseline.yaml
+# │ install_note   : 由**主理人**安装。`registry/rule-candidates/` **不是**读取路径；
+# │                  代码路径按 `rules/baseline.yaml` 读（`Ch11 §D.2` 单一真源）。
+# │                  安装 = `cp` → `chmod u+w rules` → `python scripts/ops/lock_rules.py` 重锁。
+# └────────────────────────────────────────────────────────────────────────────
+#
+# 权威出处：
+#   `Ch4 §B.2` 每段证据要求（`evidence` 空 → `pending_evidence`，不阻止建模、阻止财务连接）
+#   `Ch4 §D.2` "少量关键驱动"上限 / 超限处理 / 可持续时长（含 `validate_driver_count` 伪码）
+#   `Ch4 §G.2` "不是六个空标题"的可程序校验（`completeness.form_complete` 伪码）
+#   `Ch4 §G.4` 未盈利 vs 盈利公司的必填项差异
+#   `00_交付施工图 §...` / `Ch4 §J.2 J2` 关键驱动上限默认值 = 5（可配）
+#
+# ★ 单一真源纪律（`Ch11 §D.2`）：**阈值只在本文件**，`scripts/valuelayer/completeness.py`
+#   等消费方**不得**在代码里内置阈值（卡片 13-A 硬要求："`cfg` 的阈值只从
+#   `rules/baseline.yaml` 读"）。
+# ★ 与 `rules/freeze.yaml` 的关系（**已实测排除双真源**）：`freeze.yaml` 的 11 个
+#   `freeze_param`（p01–p11）**不含**本文件的任何键 —— 二者是**不同概念**
+#   （freeze = 待需求方拍板的口径/范围；本文件 = 已定的上限/阈值）。
+#   ⇒ 本文件**不**写 `param_ref` 指针（无对应 freeze 参数）。
+# ★ 未定的值一律 `tbd` 并给 `basis`（**不得编数**）；设计根本没写的如实标注。
+# 只读（安装后）：0444 + SHA256（`Ch9 §3.10 J9`；施工图 §8 纪律 9-10）。
+
+version: 1
+spec_anchor: "Ch4 §B"
+
+# ── 驱动上限与超限处理（§D.2 + `Ch4 §J.2 J2`）────────────────────────────────
+# §D.2 逐字："上限 ｜ `rules/baseline.yaml: max_primary_drivers_per_business`（默认 5，可配）"
+# `Ch4 §J.2 J2` 逐字："关键驱动上限默认值 ｜ 3 / 5 ｜ **5**（可配），超限分级"
+limits:
+  max_primary_drivers_per_business: 5
+
+# §D.2 逐字："超限处理 ｜ 校验器**拒绝直接入库**；须先分级：`primary_drivers(≤5)`
+#            + `secondary_watchlist`（或按 `importance_class` 取 top-N，其余归档）"
+# §D.2 伪码逐字：`primary = [d for d in drivers if d.tier == "primary"]`
+driver_tiering:
+  tier_field: tier                       # §D.2 伪码 `d.tier`
+  primary_value: primary                 # §D.2 伪码 `== "primary"`
+  overflow_container: secondary_watchlist # §D.2 逐字
+  overflow_action: reject_direct_insert   # §D.2 "校验器拒绝直接入库"
+  alternative_selection: importance_class_top_n   # §D.2 "或按 importance_class 取 top-N，其余归档"
+  # §D.1 逐字：`importance_class: high|medium|low`
+  importance_class_values: [high, medium, low]
+
+# §D.2 逐字："可持续时长 ｜ `duration.mode ∈ {point, range}`；未披露用 `mode=range`
+#            + 定性标注（**不给伪精确点值**）"
+# `Ch4 §J.4 J4` 逐字："`duration` 未披露表达 ｜ 区间 / 定性 ｜ **区间 + 定性标注**，禁伪精确"
+duration:
+  mode_values: [point, range]
+  undisclosed_mode: range
+  undisclosed_requires_qualitative_note: true
+
+# ── 分段证据（§B.2）──────────────────────────────────────────────────────────
+# §B.2 逐字："`evidence` 空 → 标 `pending_evidence`，展示为"待补证"，
+#            **不阻止**业务建模但**阻止**该段进入财务连接（C）"
+segment_evidence:
+  evidence_field: evidence
+  pending_flag_field: pending_evidence
+  empty_blocks_modeling: false
+  empty_blocks_financial_link: true
+
+# ── 形式完备性（§G.2；`completeness.form_complete` 的 `cfg`）──────────────────
+# §G.2 伪码逐字：
+#   def form_complete(baseline, cfg) -> CheckResult:
+#       checks = [sections_nonempty(baseline, cfg),
+#                 nonnull_rate(baseline) >= cfg.min_nonnull_rate,
+#                 has_locator(baseline) >= 1,
+#                 has_derivation(baseline) >= 1,
+#                 cross_section_consistent(baseline)]
+form_completeness:
+  # §G.1 六项深度 → 字段映射（**逐字转写 §G.1 表的"字段"列**）
+  #
+  # ⚠️ 跨对象提醒（实测，见报告 §缺口）：六项**并非全部**落在 `Baseline` 单对象上 ——
+  #    ③ 的四个字段在 `Driver` 上（经 `driver_refs[]` 可达）；
+  #    ① 的 `relations` 是**独立事实表**（`facts/relations.jsonl`）；
+  #    ⑥ 的 `expectation` / `implied` 分别在 `facts/expectations.jsonl` /
+  #       `facts/implied_requirements.jsonl`。
+  #    故 `sections_nonempty(baseline, cfg)` 的**单对象签名不足以判定六节非空**，
+  #    需要跨对象解析（登记为待办，未在本文件解决）。
+  sections:
+    - depth: 1                      # §G.1① 业务与产业位置
+      fields: [business_refs]       # §G.1 原文"`business_refs[]` + `relations`（N9.1-06）"
+    - depth: 2                      # §G.1② 增长驱动
+      fields: [driver_refs]         # §G.1 原文"`driver_refs[]`（含 financial_link、duration、cost_of_growth）"
+    - depth: 3                      # §G.1③ 增长确定性（字段在 Driver 上）
+      fields: [realization_stage, timeline, confidence, dependencies]
+    - depth: 4                      # §G.1④ 护城河
+      fields: [moat]
+    - depth: 5                      # §G.1⑤ 财务与估值
+      # §G.1 原文"`valuation_inputs` + `historicals` + `DerivedValue` 引用"；
+      # ⚠️ `historicals` 是**行文简称**：schema 实际字段名为 `historical_numeric_claims`
+      #    （`schema/models.py::Baseline`，扩表批次已裁定**不新增** `historicals`，避免一概念两名）；
+      # ⚠️ "`DerivedValue` 引用"设计**未给字段名** ⇒ 未列入本行，见报告"设计未给"表。
+      fields: [valuation_inputs, historical_numeric_claims]
+    - depth: 6                      # §G.1⑥ 价格与行动（跨对象，见上方提醒）
+      # §G.1 原文"引用第五章三份判断 + 第七章建议"；三份判断的字段名取自
+      # `Ch5 §C.1` 表首列：`expectation` / `implied` / `independent`。
+      fields: [expectation, implied, independent]
+  # §G.2 伪码 `nonnull_rate(baseline) >= cfg.min_nonnull_rate`
+  # `Ch4 §J.3 J3` 逐字："形式完备性最低阈值 ｜ 非空率/定位数/推导数 ｜ **占位 + 参数化**
+  #                      `rules/baseline.yaml`" ⇒ 设计给的是"占位"，**具体值未给**。
+  min_nonnull_rate: tbd
+  min_nonnull_rate_basis: "Ch4 §G.2 伪码 `cfg.min_nonnull_rate`；`Ch4 §J.3 J3` 明示为占位 + 参数化，具体值设计未给，需需求方拍板"
+  # §G.2 人工表逐字："六项 section 非空且达**最小字段数**" ⇒ 具体数设计未给
+  min_fields_per_section: tbd
+  min_fields_per_section_basis: "Ch4 §G.2 人工表「六项 section 非空且达最小字段数」；具体数设计未给"
+  # §G.2 伪码 `has_locator(baseline) >= 1` —— 值**设计已给**（1）
+  min_locator_count: 1
+  # §G.2 伪码 `has_derivation(baseline) >= 1` —— 值**设计已给**（1）
+  min_derivation_count: 1
+  # §G.2 伪码 `cross_section_consistent(baseline)`；§C.4 末句逐字：
+  # "**跨节引用一致性**由 G 的形式校验器检查（**驱动必须出现在财务连接里**）"
+  cross_section_consistent: true
+  cross_section_rule: "driver 必须出现在 financial_link 里（Ch4 §C.4 / §G.2）"
+
+# ── 未盈利 vs 盈利的必填增量（§G.4）──────────────────────────────────────────
+# §G.4 逐字："未盈利 ｜ `business_model_note`、`path_to_profitability`（里程碑）、
+#            `cash_runway`、`funding_need`、`unit_economics`
+#            盈利 ｜ `margin_persistence`、`fcf_persistence`、`reinvestment_return`、
+#            `share_dilution_impact`"
+# §G.4 末句："校验器按 `is_profitable` 分支要求对应必填项非空（N4.2-04/05）。"
+required_field_increments:
+  branch_field: is_profitable
+  is_profitable_false:
+    - business_model_note
+    - path_to_profitability
+    - cash_runway
+    - funding_need
+    - unit_economics
+  is_profitable_true:
+    - margin_persistence
+    - fcf_persistence
+    - reinvestment_return
+    - share_dilution_impact
+
+# ── 引用（不复制，防双写漂移）────────────────────────────────────────────────
+# ★ `Ch4 §G.3` 逐字："复用第九章 `gap` 对象（**不新建**）" ⇒ 本文件**不重复定义** gap 结构。
+# ★ 护城河反误判规则（§F.2）与增长质量分档（§D.3 `growth_quality ∈ {high, medium, low}`）
+#   是 `scripts/valuelayer/moat_guard.py` / `growth_quality.py` 的**程序逻辑与枚举**，
+#   不是本文件的阈值参数 ⇒ 不在此重复声明（避免双写）。
