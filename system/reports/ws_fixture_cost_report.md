@@ -1156,7 +1156,9 @@ e63a4e3  docs(report): 6.5-⑩ 关掉「exit 0 vs rc=1」争议 …      ← 6.5
   `ws-degrade-contract` 做的 `11968b2`，**我只复核，不改**。
 - 按 `V-07`：`merge --no-edit` 后**立刻** `bootstrap_worktree.sh` ⇒ `BOOTSTRAP_EXIT=0`、
   `已把 14 个 rules 文件置为 0444`、`rules_lock_guard … RESULT: PASS（0 violations）`；
-  `HEAD..main = 0`。
+  `HEAD..main = 0`（**合并当时**的读数；★ 该数是**瞬时**的 —— 本轮消息发出后 `main` 又前进了 18，
+  见 §7 的既有提醒「落后是瞬时判断不是结论」。**只要它不同时包含"我这边的改动已被收走"这件事，
+  就不构成问题**：本分支相对 `main` **只差报告一个文件**）。
 - `git status --short` **空**（`verify.py` 写的 `reports/verify_<批>_latest.log` **未污染工作树** ⇒ 已被忽略）。
 - ★ **本轮为取 6.6 全表，跑了 23 次 `verify.py --batch`（生产配置）+ 2 次单文件 pytest**，
   **全部零 env 覆盖**；分若干组在**同一 shell 内顺序**执行（组内无并发）。
