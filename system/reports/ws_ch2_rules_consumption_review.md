@@ -2430,3 +2430,129 @@ POSIX BRE 自身的 `\.` `\{n\}` `\{n,m\}` `\(\)` `\1` **全部正常**（我 8 
 
 **任何"零命中"在下结论前必须先做三候选区分实验**：①真没有 ②语法/方言不支持 ③路径或参数错。
 ⇒ 并且 **广播/报告里每一格都必须带"地板真值列"，没有真值的格子不许进结论**。
+
+---
+
+### §17.15 ★★ 独立复核 `auditor-batch11` 的 `G-64`：**确认，并把它推进了两层**（`gap_to_task` 的豁免谓词）
+
+对象（`口径 10`）：本树 `ws/ch2-rules`；本节**期间 `main` 移动了三次**，逐次留痕：
+`98d0c32`（23:17:44，落 `V-10`/`V-11`）→ `3653c7c`（23:21:44，E 第三道闸门）→ `439e8d0`（23:23:24）；
+我已 merge 到 **`4fed1ac`**（含 `98d0c32` 与 `3653c7c` 两次合并，零冲突）。
+★ 取样 **2026-09-16 23:4x**。★ **`main` 的取值时刻必须随读数一起报**（`V-11`）——
+本节正是"`main` 在一条 5 分钟的工作窗口里前进 3 次"的现场，**这也正是卡 13-O 要治的病**。
+仪器：`/tmp/g64_probe2.py`（**每态一个全新 root**；`/tmp` 为独立低桶 ⇒ **零仓库写入、零删除配额**）。
+全部行由**唯一写入方** `Pipeline._write_check_record` 产出，**不手工拼行**（`G-06`）。
+
+#### 17.15.1 四态实测（`gap_to_task.py` 的 exit）
+
+| 态 | `check_record.changed` | `check_record.degraded` | `last_valid_result_ref` | `output_refs` | **exit** | 应然 |
+|---|---|---|---|---|---|---|
+| **A** 无变化日 | `False` | `False` | `None` | `[]` | **0** ✅ | 0（设计合法） |
+| **B** 降级（此前有成功） | `True` | `True` | `check_2026-09-16_full` | `[]` | **1** ❌ | 0 |
+| **B2** 降级（此前**无**成功） | `True` | `True` | **`None`** | `[]` | **1** ❌ | 0 |
+| **C** 真违规（有变化、未降级） | `True` | `False` | `None` | `[]` | **1** ✅ | 1 |
+
+★★ 这**确认**了他的两条核心断言：① 降级行被误判空执行（`B`/`B2` 都是**假红**）；
+② `A` 与 `C` 的对照正常 ⇒ **不是判据整体坏了，是"降级"这一态在豁免谓词里没有表达**。
+
+#### 17.15.2 ★ 我补的第一条（**决定修法该 predicate 谁**）：`B2` 与 `C` **在行上字段逐一相同**
+
+```
+B2-降级(此前无成功)   degraded=True   last_valid_result_ref=None   changed=True   output_refs=[]   exit=1
+C -真违规(未降级)     degraded=False  last_valid_result_ref=None   changed=True   output_refs=[]   exit=1
+                      ↑ 唯一差异    ↑ 相同        ↑ 相同            ↑ 相同          ↑ 相同
+```
+
+⇒ **`check_record.degraded` 是唯一能把"降级"与"真违规"分开的字段。**
+⇒ ★ 由此**排除一个看似合理、实际不可用的候选修法**：
+把谓词写成 `last_valid_result_ref is not None` **不行** —— `B2`（降级且此前无成功运行）该字段为 **`None`**，
+用它做豁免**会漏掉 `B2`**，把假红从 `B` 挪到 `B2`（**换个字段复发**，正是本仓 `G-43` 的形状）。
+⇒ **他的修法（`changed is False` **或** `degraded is True`）经此检查是正确的那一支。**
+
+#### 17.15.3 ★ 我补的第二条（层判断）：**状态映射不是缺陷，别改错了层**
+
+`pipeline.py:412`：`status=TaskStatus.failed if result.blocked else TaskStatus.done`
+—— **`degraded` 不参与状态判定**（只有 `blocked` 才 `failed`）。
+而 `TaskStatus`（`schema/models.py:240`）是 **`Ch1 §C.3` 的五态**（`queued/researching/pending_evidence/done/failed`），
+**没有 degraded 槽位**。
+
+⇒ **"降级行却标 `done`"不是本缺陷的根因**：在五态机里 `degraded → done` 是**唯一可选映射**，
+   降级只能由 `check_record.degraded`（+ `last_valid_result_ref`）表达。
+⇒ 因此**改状态映射 = 改设计**（要加第六态），**不属本卡**；本缺陷在**谓词层**。他定位的层是对的。
+
+#### 17.15.4 ★★ 我补的第三条（**根因再上一层**）：这是 **`G-06` 单一真源违反**
+
+```
+$ /usr/bin/grep -nE 'degrade|holds_valid_result|is_valid_run_record' system/scripts/tasks/gap_to_task.py
+（零命中）
+```
+⇒ `gap_to_task.py` **完全不引用** `scripts/daily/degrade.py`。两个模块**各自**回答"这一行算不算一次合法运行"：
+
+| 模块 | 谓词 | **看哪个字段** |
+|---|---|---|
+| `tasks/gap_to_task.py:54` | `is_no_change_day()` | **`check_record.changed is False`** |
+| `daily/degrade.py:98` | `is_valid_run_record()` | **`status != "failed"` 且 `not check_record.degraded`** ← ★ **它看 `degraded`！** |
+
+⇒ ★★ **正确的那半已经存在**（`degrade.py:98`），只是**豁免谓词没有复用它**。
+`degrade.py:95` 的 docstring 还自称是首日豁免判定的「**唯一真源**」——
+于是"唯一真源"与"另一个同题谓词"**对同一行给出相反结论**：
+`B2` 在 `is_valid_run_record()` 下 `degraded=True` ⇒ 判为"不是一次成功运行"（对），
+在 `is_no_change_day()` 下却因为只读 `changed` ⇒ 判为"空执行"（错）。
+
+⇒ **修法建议（比"加一个 `or`"更根本）**：`is_no_change_day()` 应**从 `degrade` 的真源派生**
+（复用同一份"降级/失败"语义），而**不是**再加第 4 个同族局部谓词；并按他的建议**分列计数**。
+★ 我给"分列计数"补一条**硬证据**：当前单一计数器下，**`B2` 与 `C` 都记 `no_change_day_exempt=0`**
+（实测）⇒ 一个**合法态**与一个**违规态**在读数上**完全合并**。
+
+#### 17.15.5 ★ 我补的第四条（顺带，属他的 `G-63`）：**同一个引用完整性缺口有第二个落点**
+
+他报 `stage_gate.py:600` 只判 `last_valid_result_ref` 的**真值性**。我实测（1 行、零夹具）同一个缺口
+**也落在 `daily/degrade.py:130`（`holds_valid_result()` 的载体 ①）**：
+
+```
+failed 行 + last_valid_result_ref = …        holds_valid_result
+None                                          False
+''                                            False
+'garbage'                                     True   ← ★
+'self'                                        True   ← ★
+'check_不存在'                                 True   ← ★
+```
+
+⇒ **`G-63` 至少两个落点，不是一个**；且第二个落点更重 —— 它所在的函数自称「**唯一真源**」。
+   （★ 口径：本格是**实测**，但**只证明谓词可被垃圾字符串穿过**；我**未**验证"生产数据里会出现这种行"
+   —— 唯一写入方填的是真 `check_id`。按 `G-03`，**可达性未证**，如实标注。）
+
+#### 17.15.6 ★ 我自己在本节的两次失误（如实）
+
+1. **探针污染**：`v1` 让四态**共用同一个 root** ⇒ `B` 的 `last_valid_result_ref` 指向了 `A` 那一行，
+   看起来像"降级行的引用被正确填了" ⇒ **假证据**。改成**每态一个全新 root** 后 `B2` 才暴露
+   （此前无成功 ⇒ `None`），**而这一格恰恰是决定修法的那一格**。
+   ⇒ 又一次 `G-62`：**用被前一态污染过的现场，去回答"这一态是什么"**。
+2. **`\|` 再犯**：本轮我在主仓 `CONVENTIONS.md` 里查 `V-10`/`V-11` 时写了
+   `grep -n 'V-10\|V-11'` ⇒ **toybox 静默零** ⇒ 我一度得出"我的树里没有 V-10"的**错误结论**，
+   直到 `git grep` 把它找出来。**`V-10` 落地不到 10 分钟，我就是第 1 个中招者**
+   （它自己那段"5 处报告写错根因 / 多人多次中招"的代价表，现在应当 +1）。
+3. ★ **我差点误读一次"合并方向"**：我用 `git diff --name-status HEAD main` 看到
+   `M system/scripts/ops/pre-commit.sh`、`M install_hooks.sh`，第一反应是"**main 也改了这两个文件**"。
+   实际上 `3653c7c` 只动了 6 个文件、**不含**这两个 ⇒ 那个 `M` **完全是"我方有改动"造成的**，
+   **不是"对方改了"**。
+   ⇒ **tip-to-tip 差分的每一行都不携带"谁改的"方向信息** —— 这正是 `口径 11 扩展之四`
+   （`main..b` 判不出合并会做什么）的**孪生形态**：连"**差异归属谁**"它也答不了。
+   我在落纸前用 `git show main --stat` 复核了，**未把误读写进本节**（如实登记这次自查）。
+4. ★★ **第四次，而且这次污染了产物本身**：我用 `git commit -m "…"` 提交本节，
+   消息里含反引号（`` `degraded is True` `` 等 **4 处**）⇒ **shell 把它们当命令替换执行**：
+   ```
+   (eval):1: command not found: degraded
+   (eval):1: command not found: last_valid_result_ref
+   (eval):1: command not found: failed
+   (eval):1: command not found: or
+   ```
+   ⇒ 于是提交信息里出现 4 处**语义空缺**：`⇒ 修法**必须** predicate ；`、
+   `⇒ **排除**候选 ：`、`pipeline.py:412  ⇒ …`、`⇒ 修法不能只加一个 （…）`
+   —— 而**屏幕上看不出**（行仍然"读得通"）。
+   ★ 与我早前在 `pre-commit.sh` 里踩过的**完全同型**（当时是 `echo` 里的反引号，
+   `line 161: G-61: command not found` 且那个词被静默吞掉），**我今天在 `git commit -m` 上再犯**。
+   ⇒ **纪律：提交信息一律 `git -F <file>`（或 `-m` 里零反引号/零 `$()`）**；
+     我当天给 13-O 那条长信息用的就是 `-F`（**同一手法，一处做对一处做错**）。
+   ★ 处置：该提交**未被任何其他 ref 引用**（`git show-ref` 只列本分支）⇒ 用 `-F` 重写其信息，
+     **未用 `--no-verify`、未改任何文件内容以求脱身**。
