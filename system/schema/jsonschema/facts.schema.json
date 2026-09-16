@@ -975,7 +975,7 @@
       "type": "object"
     },
     "ClaimStatus": {
-      "description": "主张五态（`Ch6 §E.1` 状态机，逐字）。\n\n★ **初始态由设计写死为 `pending_verification`** —— `Ch6 §E` 状态机首行：\n  `[*] --> pending_verification : ②③④ 提取完成（初始态）`。\n  初版把它写成自由字符串 `\"active\"`，而 **`active` 根本不在五态内**，\n  于是**真实链路写出的 claim 带着违约状态**（与我修过的\"五类时间全为 None\"\n  同类：**只有真跑一次才暴露**）。\n  改用**封闭枚举**（`R-06`：可穷尽）—— pydantic 直接拒绝越界值，\n  此类缺陷无法再静默复发。",
+      "description": "主张五态（`Ch6 §E.1` 状态机，逐字）。\n\n★ **初始态由设计写死为 `pending_verification`** —— `Ch6 §E` 状态机首行：\n  `[*] --> pending_verification : ②③④ 提取完成（初始态）`。\n  初版把它写成自由字符串 `\"active\"`，而 **`active` 根本不在五态内**，\n  于是**真实链路写出的 claim 带着违约状态**（与我修过的\"五类时间全为 None\"\n  同类：**只有真跑一次才暴露**）。\n\n★ 基类必须是 **`StrEnum`**（而非 `(str, Enum)`）：\n  后者下 `str(ClaimStatus.pending_verification)` 返回 **`'ClaimStatus.pending_verification'`**\n  而不是五态值 —— 任何 `str(status)` 都会被误判（`ws/claim` 工作流实测踩到：\n  状态机把每次合法迁移都判成 `UnknownClaimStatus`）。\n  `StrEnum` 使 `str(member) == member.value`，**两种写法都对**，陷阱从类型层面消除。",
       "enum": [
         "pending_verification",
         "supported",
@@ -4418,7 +4418,7 @@
       "type": "object"
     },
     "ClaimStatus": {
-      "description": "主张五态（`Ch6 §E.1` 状态机，逐字）。\n\n★ **初始态由设计写死为 `pending_verification`** —— `Ch6 §E` 状态机首行：\n  `[*] --> pending_verification : ②③④ 提取完成（初始态）`。\n  初版把它写成自由字符串 `\"active\"`，而 **`active` 根本不在五态内**，\n  于是**真实链路写出的 claim 带着违约状态**（与我修过的\"五类时间全为 None\"\n  同类：**只有真跑一次才暴露**）。\n  改用**封闭枚举**（`R-06`：可穷尽）—— pydantic 直接拒绝越界值，\n  此类缺陷无法再静默复发。",
+      "description": "主张五态（`Ch6 §E.1` 状态机，逐字）。\n\n★ **初始态由设计写死为 `pending_verification`** —— `Ch6 §E` 状态机首行：\n  `[*] --> pending_verification : ②③④ 提取完成（初始态）`。\n  初版把它写成自由字符串 `\"active\"`，而 **`active` 根本不在五态内**，\n  于是**真实链路写出的 claim 带着违约状态**（与我修过的\"五类时间全为 None\"\n  同类：**只有真跑一次才暴露**）。\n\n★ 基类必须是 **`StrEnum`**（而非 `(str, Enum)`）：\n  后者下 `str(ClaimStatus.pending_verification)` 返回 **`'ClaimStatus.pending_verification'`**\n  而不是五态值 —— 任何 `str(status)` 都会被误判（`ws/claim` 工作流实测踩到：\n  状态机把每次合法迁移都判成 `UnknownClaimStatus`）。\n  `StrEnum` 使 `str(member) == member.value`，**两种写法都对**，陷阱从类型层面消除。",
       "enum": [
         "pending_verification",
         "supported",
