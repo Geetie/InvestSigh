@@ -2,8 +2,11 @@
 
 ## 为什么需要这条测试
 
-`tests/injection` 原先是一个批次（`_pytest("tests/injection")`，165 个用例）。
-夹具是**每用例复制一份 `system/`**（`conftest.py::code_root`，完整夹具实测每份 **273 项**），
+`tests/injection` 原先是一个批次（`_pytest("tests/injection")`）。
+★ 当时是 **165 个用例** —— **这是历史观测值，不是当前真源**：目录用例数每加一条用例就变，
+**现值一律现算**（`test_shard_case_counts_within_quota` 的 `--collect-only` 输出），本文件不写死任何用例数。
+夹具是**每用例复制一份 `system/`**（`conftest.py::code_root`，完整夹具实测每份
+**`COPIED_ITEMS_PER_CASE` 项** —— 真源是该常量，不在此处重抄），
 且**每个用例用完即删**。宿主对**单轮（turn）**的删除操作有**累积配额**，
 耗尽后**连单个用例目录都被拒删**，之后所有夹具 setup 直接报 `E`
 —— **看起来像"测试坏了"**，实际是这一整批被**静默关掉**。
@@ -17,7 +20,8 @@
 ```
 
 被拒之后 78 个**建夹具**的用例集体 `E`，而**不建夹具**的用例照常通过
-（`test_shard_coverage.py` 4 passed，本文件正是"不建夹具"的那些）——
+（本文件正是"不建夹具"的那些 —— ★ 那一轮 4 passed，**4 是当时的条数**，本文件现有多少条
+**不在此处写死**，现算见 `--collect-only`）——
 **这一对照证明那些 `E` 不是代码缺陷**。
 
 修法 = 按**显式文件路径**分片（`R-06 ①` 禁止 `-k` / 关键词 / 名单式判据）。
@@ -68,8 +72,10 @@
 ★ **收集结果不受影响**：`tests/conftest.py` 里**没有** `pytest_generate_tests` /
 `pytest_collection_modifyitems` 之类参与**收集**的钩子（只有 `pytest_sessionstart` /
 `pytest_sessionfinish` 与 fixture 定义），故"关掉 conftest"只去掉会话钩子、不去掉任何用例。
-实测对照（两种跑法得出**相同**数字，见 `reports/ws_verify_shard_report.md`）：
-`test_stage_gate.py + test_wiring_guards.py` → 都 25；`test_guards_reject_{a,b}.py` → 都 41。
+实测对照（两种跑法得出**相同**数字，逐条读数见 `reports/ws_verify_shard_report.md`）：
+`test_stage_gate.py + test_wiring_guards.py` 与 `test_guards_reject_{a,b}.py` 都各自一致。
+（★ 具体条数**不在此处重抄**：它会随用例增长而漂移；现值现算 —— 见
+`test_shard_case_counts_within_quota` 的输出。）
 """
 
 from __future__ import annotations
@@ -88,9 +94,19 @@ VERIFY_REL = "scripts/ops/verify.py"
 
 # ── 用例数上限：**授权上限**，其原始推导已被实测证伪（见下）────────────────────
 #
+# ★★ 读本段前必读（与 `verify.py` 散文同一口径，卡 13-N / #89）：
+#   **本段出现的数字全部是"某次实测的读数"或"某条已被推翻的推导的原文"（= 留档）**，
+#   它们**不是"当前事实的真源"**。凡描述**当前**状态的量，一律**现算或取常量**：
+#     用例数 = 现跑 `--collect-only`（`test_shard_case_counts_within_quota`）·
+#     夹具项数 = `COPIED_ITEMS_PER_CASE` · 每片上限 = `MAX_CASES_PER_SHARD` ·
+#     片名单/各片归属 = `verify.py::INJECTION_SHARDS` / `BATCHES`。
+#   ⇒ **别把留档里的数字当现值去改代码**；也别在别处再抄一份（`G-28`）。
+#
 # ★★ 诚实的口径（本单实测，2026-09-16）：
 #
 # 原始推导（主理人任务书）：「夹具副本 271 项 × 用例数 ≤ 宿主单轮配额 9999 ⇒ 上限 32」。
+# ★ 这是**引用原文**，故其中数字原样保留 —— 注意 **271 与真源 `COPIED_ITEMS_PER_CASE` 并不相等**，
+#   而这本身就是该推导被推翻的一环（计数单位不是"夹具项数"）。
 # **该推导不成立**，两个前提都被实测推翻：
 #
 #   ① **计数的单位不是"夹具项数"**：本单同轮累计到 `count: 102044` 时被拒，
@@ -103,19 +119,22 @@ VERIFY_REL = "scripts/ops/verify.py"
 #     按 9999 阈值 + 792 计数/例 ⇒ 安全上限只有 ≈**12 例**
 #     （即完整覆盖 `tests/injection` 需 ≈**14 片** / **14 个轮次**）；
 #     按本机当前的 99999 阈值 ⇒ 安全上限 ≈**126 例**。
+#   （以上都是**条件推导**：结论只在"阈值 = 9999"这个前提成立时成立，见下。）
 #
 #   ★★ 保留 32 的**定位 = 「实测可跑的当前配置」，不是「已证明安全」**：
 #   它成立的**前提是阈值处于观测到的较高值（99999）**。
 #   保留它的理由：① 32 是主理人在分片任务书里给的**授权上限**
 #   （**片数是主理人决策**，本文件不擅自改）；
-#   ② 它**有工作树实测支持** —— `a` 27 例 / `b` 28 例 / `d` **31 例** / `f` 31 例
-#   各自单轮 `exit=0` 跑完（`d` 是最接近上限的一片）。
-#   ★ **若宿主阈值回落到 9999，6 片立刻不成立**（目录现有 171 例，需要 ≈14 片）：
-#   请按 `9999 ÷ 792 ≈ 12` 重排，并把 `verify.py::INJECTION_SHARDS` 扩到 ≈14 片。
+#   ② 它**有工作树实测支持** —— 各片都能单轮 `exit=0` 跑完（含当时最接近上限的那一片）。
+#   ★ 当时**逐片的条数与"哪一片最接近上限"不在此处写死**：它们随用例增长而变，
+#   现值现算（见 `test_shard_case_counts_within_quota` 的输出）。
+#   ★ **若宿主阈值回落到 9999，当前分片立刻不成立**（按 `9999 ÷ 792 ≈ 12 例/片` 折算，
+#   需要 ≈14 片 —— 当前的**片数与各片用例数**请现算，本段不抄）：
+#   请按该折算重排，并把 `verify.py::INJECTION_SHARDS` 扩到 ≈14 片。
 #   —— 但**不要为了"更安全"就先去改 14 片**：14 轮没人会跑，那等于把门禁关掉
 #   （`CONVENTIONS.md` 铁律：「卡死的门禁 = 被关掉的门禁」）。**改片数要主理人定。**
-HOST_TURN_DELETE_QUOTA = 9999
-COPIED_ITEMS_PER_CASE = 273
+HOST_TURN_DELETE_QUOTA = 9999   # ★ 观测到的**较低**取值（另有 99999）；仅用于文案，判据不依赖它
+COPIED_ITEMS_PER_CASE = 273     # ★ 夹具项数的**真源**：散文里要引用就引用本名，不要抄 273
 MAX_CASES_PER_SHARD = 32
 COLLECT_TIMEOUT_S = 120.0
 
@@ -239,7 +258,7 @@ def _collect_count(targets: tuple[str, ...]) -> int:
 def test_shard_targets_are_explicit_test_file_paths() -> None:
     """片目标一律 `tests/injection/test_*.py` —— **不许目录、不许 `-k`**。
 
-    - **目录式目标**会一次拉起整个目录的用例 ⇒ 夹具副本数 = 目录用例数 × 271
+    - **目录式目标**会一次拉起整个目录的用例 ⇒ 夹具副本数 = 目录用例数 × `COPIED_ITEMS_PER_CASE`
       ⇒ 正是 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` 的成因；
     - **`-k` / 关键词式分片**违反 `R-06 ①`（判据不可穷尽）：**新用例不会出现在任何名单里**，
       会静默落进 `not <关键词>` 分支，而"漏测"与"测过没问题"在报告里长得一样。
@@ -310,7 +329,7 @@ def test_shard_case_counts_within_quota() -> None:
 
     **不写死各片的用例数** —— 写了就是第二个存放处，加一条用例就会过期。
     上限的来历与它**已被实测证伪的原始推导**见 `MAX_CASES_PER_SHARD` 上方注释
-    （简言之：它是**授权上限**，不是 `9999 ÷ 271` 算出来的）。
+    （简言之：它是**授权上限**，不是 `HOST_TURN_DELETE_QUOTA ÷ COPIED_ITEMS_PER_CASE` 算出来的）。
     """
     specs = _shard_specs()
     counts = {name: _collect_count(spec["targets"]) for name, spec in specs.items()}
@@ -323,7 +342,8 @@ def test_shard_case_counts_within_quota() -> None:
     assert not over, (
         f"以下片的用例数超过上限 {MAX_CASES_PER_SHARD}: {over}（现算值）\n"
         "→ 超限 ⇒ 该片单轮跑不完 ⇒ 又是一次「门禁被静默关掉」。\n"
-        "处置：把该片再拆一片，并在 `verify.py::INJECTION_SHARDS` 登记。\n"
+        "处置（两种都可，**不必新增片**）：① 把一个文件**迁到有余量的片**"
+        "（`#89` 的先例）；② 把该片再拆一片，并在 `verify.py::INJECTION_SHARDS` 登记。\n"
         "★★ 该上限是**授权上限**（片数由主理人定），**不是**由"
         f"「宿主配额 {HOST_TURN_DELETE_QUOTA} ÷ 每例 {COPIED_ITEMS_PER_CASE} 项」算出来的 ——"
         "那个推导已被实测证伪（计数单位实为 ≈792/例；阈值观测到 9999 与 99999 两种）。\n"

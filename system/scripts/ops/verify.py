@@ -442,16 +442,25 @@ BATCHES: Mapping[str, Batch] = {
     ),
     "injection-g": Batch(
         # ★ 新增分片（主理人，批次 13 集成期）：合并 `ws/real-collect-2` 带进了
-        #   `tests/injection/test_quote_provenance.py`（17 例），而 `V-06` **如实变红**：
+        #   `tests/injection/test_quote_provenance.py`，而 `V-06` **如实变红**：
         #   「以下测试文件不被任何批次覆盖（写了却永远不被验证）」—— 机器绑定按设计生效。
         #   ★ 为什么**不能**塞进既有分片：**当时各片的余量都装不下本文件**（各片用例数都贴着
         #     每片上限）⇒ 只能**新开一片**。（各片当时的用例数**不在此处写死**：现算与
         #     "≤ 上限"的断言见 `tests/injection/test_shard_coverage.py`。）
+        #   ★ 重平衡（2026-09-16，主理人裁定 #89）：`tests/injection/test_shard_coverage.py`
+        #     由 `injection-f` **移入本片**。原因：f 的用例数**越过了每片上限**，而那个文件
+        #     自己那条 `test_shard_case_counts_within_quota` **如实变红**并报出片名与现算值
+        #     （机器绑定按设计生效，不是假红）。★ 当时**只有本片有余量**装得下它（其余各片的
+        #     余量都小于该文件的用例数）—— 迁后**涉及的片都 ≤ 上限**（**各片现值不在此处写死**：
+        #     现算与"≤ 上限"的断言同在 `tests/injection/test_shard_coverage.py`）。
+        #     ★ 选它当迁移对象的**额外**理由：该文件是**零夹具**文件（不复制 `system/`，
+        #     见其模块 docstring）⇒ 迁入**不增加**本片的单轮删除量（`V-08` 预算不受影响）。
         #   ★ 超时：**真值见本批 `Batch.timeout`**，不在此处重复；
         #     当前值的理由写在本批参数之后的注释里（**沿革与理由分开存放，别把旧理由当现值**）。
-        "injection-g", "tests/injection/ 分片 G（反编造：引用溯源守卫）",
+        "injection-g", "tests/injection/ 分片 G（反编造：引用溯源守卫 + 分片绑定）",
         _pytest(
             "tests/injection/test_quote_provenance.py",
+            "tests/injection/test_shard_coverage.py",   # ← 由 `injection-f` 移入（#89，见本片注释）
         ),
         # ★ 超时（主理人裁定）：与**其余各片**齐平（同族一致性优先；片名单不在散文里枚举，
         #   真源 = `INJECTION_SHARDS`）。**当前真值见下一行的 `Batch.timeout`**，本段只留沿革。
@@ -460,11 +469,16 @@ BATCHES: Mapping[str, Batch] = {
         300.0, _exit_zero,
     ),
     "injection-f": Batch(
-        "injection-f", "tests/injection/ 分片 F（阶段闸门 + 接线守卫 + 分片绑定）",
+        # ★ 重平衡记录（2026-09-16，主理人裁定 #89）：`tests/injection/test_shard_coverage.py`
+        #   由本片**移入** `injection-g`。原因：本片用例数**越过了每片上限**，而该文件自己那条
+        #   `test_shard_case_counts_within_quota` **如实变红**并报出片名与现算值
+        #   （机器绑定按设计生效，不是假红）。
+        #   ⇒ 各片的用例数**不在此处写死**（`G-28`）：它随用例增长而变，而现算 + "≤ 上限"的
+        #     断言都在 `tests/injection/test_shard_coverage.py`（`--collect-only` 逐片现量）。
+        "injection-f", "tests/injection/ 分片 F（阶段闸门 + 接线守卫）",
         _pytest(
             "tests/injection/test_stage_gate.py",
             "tests/injection/test_wiring_guards.py",
-            "tests/injection/test_shard_coverage.py",
         ),
         300.0, _exit_zero,
     ),
