@@ -44,12 +44,15 @@
 |---|---|---|
 | `_SAFE_DELETE_ENABLED = os.environ.get("CODEBUDDY_SAFE_DELETE_ENABLED") != "0"` | `sitecustomize.py:35` | **默认开**，只有显式 `=0` 才关 |
 | `if _SAFE_DELETE_ENABLED:` ⇒ 替换 `os.remove/os.unlink/os.rmdir/shutil.rmtree/Path.unlink/Path.rmdir` | 同上 `:1205-1211` | 与 `_BROKERED_FS_HOOK_ENABLED`（`:36-39`）是**两套互不相干的开关** |
-| `run_pytest.sh` / `_child_env()` 只设 `CODEBUDDY_SAFE_DELETE_SANDBOX=0` + `CODEBUDDY_BROKERED_FS_HOOK_ENABLED=0` | `run_pytest.sh:22-23`、`verify.py:565-569` | ⇒ **只关掉了 broker（`copytree` 的 IPC），守卫照旧生效** |
-| `_try_trash()` 第一行就是 `_check_bulk_delete_guard(abs_path)` | `sitecustomize.py:963-964` | ⇒ **每次删除调用 spawn 一个 node 守卫 CLI** |
+| `run_pytest.sh` / `_child_env()` **当时只设** `CODEBUDDY_SAFE_DELETE_SANDBOX=0` + `CODEBUDDY_BROKERED_FS_HOOK_ENABLED=0` | `run_pytest.sh:27-28`、`verify.py:645-646`（**当前行号**） | ⇒ ★ **当时**："只关掉了 broker（`copytree` 的 IPC），守卫照旧生效" |
+| ★★ **补第 5 行（`#102` 收尾时加，非本轮发现）**：`3653c7c` 之后**两处都补了第三道闸门** `CODEBUDDY_SAFE_DELETE_ENABLED="0"` | `run_pytest.sh:35`、`verify.py:647-649` | ⇒ **上一条现在不成立了**：`verify.py`/`run_pytest.sh` 派生的子进程**守卫是关的**（6.5-⑫）⇒ **本节的"守卫照旧生效"只适用于"绕过包装器直接跑 pytest"** |
+| `_try_trash()` 第一行就是 `_check_bulk_delete_guard(abs_path)` | `sitecustomize.py:966-967`（★ **订正**：原文写 `:963-964`，那两行其实是 `except Exception: pass` —— 我引偏了 3 行；守卫调用点实测在 `966/967`） | ⇒ **每次删除调用 spawn 一个 node 守卫 CLI** |
 | 闸门 `totalCount = request.count + deleteCount >= threshold`；`deleteCount===0` 放行；`toolApprovals[toolCallId].approved` 放行 | `safe-delete-bulk-guard.cjs:339-364` | 计数按 `conversationRequestId` 累计（见 6.5-②） |
 
 ⇒ **`run_pytest.sh` 写的"在沙箱外跑"只兑现了一半**。这不是别人的漏：是我上一轮读了
 `_broker_enabled()` 就收工、没顺着 `_SAFE_DELETE_ENABLED` 再走一步。
+★ **时点说明（`#102` 收尾补）**：半小时后 `3653c7c` 把第三道闸门补进了这两处 ⇒
+**句中的"只兑现了一半"现在只对"当时"成立**；当前状态见上表第 5 行与 6.5-⑫。
 
 ### 6.2 效果（同机、同 commit、同批）
 
@@ -161,7 +164,7 @@
 | 红 | 内容 | 归属 |
 |---|---|---|
 | ① `test_shard_case_counts_within_quota` | **`injection-f` 现算 33 例 > 上限 32** | **主干真红**（归属与 `MAX_CASES_PER_SHARD=32` 在两支逐字相同，`test_shard_coverage.py` 也无差异） |
-| ② `test_missing_pytest_attribution_never_passes` | 期望归因含「环境」+「pytest」，实测 `why='exit=1'` | **我这条分支的落后产物**（主干已有 `PYTEST_MISSING_MARKER`，见 `verify.py:140/168-171`；本轮 `git merge main` 后**已消除**） |
+| ② `test_missing_pytest_attribution_never_passes` | 期望归因含「环境」+「pytest」，实测 `why='exit=1'` | **我这条分支的落后产物**（主干已有 `PYTEST_MISSING_MARKER`，见 `verify.py:141`/`169-170`；本轮 `git merge main` 后**已消除**） |
 
 **①的起因是我自己**：`git show 90e58b0^` 时 `test_shard_coverage.py` 有 **4** 个用例，
 `90e58b0`（我 Phase-A 的提交，标题就是"归因分支加机器绑定"）把它加到 **6** 个 ⇒
@@ -573,6 +576,25 @@ f 片 31 ⇒ **33 > 32**。**我在自己的卡里破了自己那条授权上限
      —— 我**没有**动它（改 `CONVENTIONS.md` 需先声明，见 §7 纪律），**在此声明并请求授权**改成
      "（`#91` 当时现算）**183**"。★ 顺便说明：**这条不是新缺陷，是 `#91` 那条政策的自我验证** ——
      "写死例数"这个做法本身**在任何时间点都会过期**，唯一稳的写法是**指真源**。
+
+⑭ **我自己报告里的行号引用自查（`#102` 收尾，抽查 6 处）**
+
+   ★ 起因：我这轮往 `verify.py` 插了约 30 行 ⇒ **本报告里所有 `verify.py:NNN` 都可能已经偏了**。
+   抽查结果（**逐条现读，不是回忆**）：
+
+   | 报告里的引用 | 现读 | 判定 |
+   |---|---|---|
+   | `sitecustomize.py:35`（`_SAFE_DELETE_ENABLED` 定义） | 同一行 | ✅ |
+   | `sitecustomize.py:1205-1211`（`if _SAFE_DELETE_ENABLED:` 换函数） | 同一段 | ✅ |
+   | `safe-delete-bulk-guard.cjs:339-364`（闸门三条件） | `340/344/345/350` 都在此区间内 | ✅ |
+   | `system/tests/conftest.py:352`（`_release_session_lock`） | 352 | ✅ |
+   | `verify.py:565-569`（`_child_env` 的 env 块） | **已漂到 `645-649`** | ❌ **已订正** |
+   | `sitecustomize.py:963-964`（`_try_trash` 首行） | 那两行是 `except Exception: pass`；真值 **`966-967`** | ❌ **已订正**（★ 这条**不是**我这轮插行造成的，是我第六轮就引偏了 3 行） |
+
+   ⇒ ★ **结论：行号引用是"高过期率"证据** —— 抽查 6 处，**2 处错**（33%），且其中 1 处与我这轮的改动无关。
+   与 ⑬ 的例数漂移**同一族**：**凡是"另一份文件里的位置/数字"，写进报告就会腐坏。**
+   ★ 我**没有**再做一次全量行号审计（那需要把本报告所有位置引用逐条现读）——
+   **如实登记为未做**，并建议：若要做，应由**别人**以**当前 HEAD** 为对象做（`V-11`：我自己在语料之内）。
 
 ---
 
