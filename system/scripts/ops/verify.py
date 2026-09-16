@@ -26,7 +26,7 @@ python system/scripts/ops/verify.py --batch all            # 逐批跑，每批�
 | `unit`       | `tests/unit/`（契约 + 作用域匹配器） |
 | `conflict`   | `tests/conflict/`（P-03/P-05/P-07 schema 断言） |
 | `guards`     | `tests/guards/`（门禁退出码契约 + 验证规范） |
-| `injection-a`…`injection-g` | `tests/injection/` 的 **7 个分片**（每片一组显式文件路径） |
+| `injection-*` | `tests/injection/` 的**分片**（每片一组显式文件路径）★ **片名单与片数**的唯一真源 = `INJECTION_SHARDS`，此处刻意不写 |
 | `root`       | `tests/test_ch11_invariants.py` |
 | `gates`      | `run_all_gates.py`（全部门禁逐项退出码） |
 | `stage`      | `stage_gate.py --stage all`（阶段判据 + 退出码自洽） |
@@ -41,7 +41,7 @@ python system/scripts/ops/verify.py --batch all            # 逐批跑，每批�
 超时值的**判据**见 `CONVENTIONS.md::V-02`（现行判据：`0 < timeout <= 300s`，且余量要能区分
 "慢"与"卡死"——慢批次 4~8× 即可；倍数在慢批次上会撞 300s 上限，此时取不超过上限的最大值）。
 
-## ★ 为什么 `tests/injection/` 必须切成 6 片（**门禁曾被静默关掉**）
+## ★ 为什么 `tests/injection/` 必须切成多个分片（**门禁曾被静默关掉**）
 
 实测（细节与原始输出见 `reports/ws_verify_shard_report.md §2`；规范见 `CONVENTIONS.md::V-08`）：
 
@@ -69,8 +69,8 @@ python system/scripts/ops/verify.py --batch all            # 逐批跑，每批�
 
 ⇒ 故 `32 × 271 = 8,672 < 9,999` **不能**用来论证"32 例是安全的"。
 片大小取 **≤32** 的理由是：① 主理人的**授权上限**；② 有**实测支持**
-（27 / 28 例的片在本机当前阈值下单轮跑完、`exit=0`）。
-**若宿主阈值回落到 9999**，按 `9999 ÷ 785 ≈ 12` 例/片重排（≈14 片）——
+（当次观测下**最接近授权上限的那片**也单轮跑完、`exit=0`；★ **片内例数不要照抄本文档，用现算值**）。
+**若宿主阈值回落到 9999**，按 `9999 ÷ 785 ≈ 12` 例/片重排（片数 = ⌈该目录**现算例数** ÷ 12⌉）——
 判据落点见 `tests/injection/test_shard_coverage.py::MAX_CASES_PER_SHARD` 上方注释。
 
 修法**只能**是分片（**不靠缩小夹具副本**，理由见下）。
@@ -89,10 +89,12 @@ python system/scripts/ops/verify.py --batch all            # 逐批跑，每批�
 ★ 三条都有**机器绑定**：`tests/injection/test_shard_coverage.py`
 （穷尽性 · 两两不相交 · 每片用例数 `--collect-only` 现算 ≤ 32 · 目标必须是显式测试文件路径）。
 
-★ **代价（如实写明）**：完整覆盖 `tests/injection` 现在需要 **6 个轮次**（每轮跑一片）。
+★ **代价（如实写明）**：完整覆盖 `tests/injection` 需要**与 `INJECTION_SHARDS` 等量**的轮次
+（每轮跑一片；★ **片数不在本文档重复**，见该常量）。
 这是**宿主单轮删除配额决定的，不是设计选择** —— 同一轮里连跑多片会重新耗尽配额，
 表现为"某片在几秒内突然红 + 一堆 `E`"（`scope: "turn"`）。
-`--batch all` 会把六片连着跑完，因此它**不能**用来做 `tests/injection` 的完整覆盖。
+`--batch all` 会把 `INJECTION_SHARDS` 里的**每一片**连着跑完，因此它**不能**用来做
+`tests/injection` 的完整覆盖。
 
 ## 退出码
 `0` 该批通过 / `1` 该批不合格（含超时）/ `2` 环境异常（批次名非法等）。
@@ -245,9 +247,10 @@ def _pytest(*targets: str) -> tuple[str, ...]:
 #   **关键词式判据**（改个名就静默退出该判据的覆盖范围）。
 #   故这里给一份**显式**名单：改名忘改名单 ⇒ 绑定测试立刻红。
 #
-# 为什么分 6 片（**不是设计选择，是宿主配额决定的**，见模块 docstring 与 `V-08`）：
-#   `tests/injection` 共 165 例 × 每例一份夹具副本 ≈ 44,715 项/轮 ≫ 宿主单轮配额。
-#   完整覆盖该目录现在需要 **6 个轮次**（每轮一片）。
+# 为什么必须分片（**不是设计选择，是宿主配额决定的**，见模块 docstring 与 `V-08`）：
+#   `tests/injection` 的**例数 × 每例一份夹具副本**已远超宿主单轮配额
+#   （★ **例数不写死在这里**：用 `--collect-only` 现算，口径见 `test_shard_coverage.py`）。
+#   完整覆盖该目录需要**与 `INJECTION_SHARDS` 等量**的轮次（每轮一片）。
 #   ★ 卡 13-F（`G-54`）实测更正两处**写死的数**（这类数必然漂移，别把它们当常量读）：
 #     ① 每例副本 **271 项 → 275 项**（2026-09-16 静态实测：`_COPY_SKIP` 口径下 275 个文件条目 /
 #        2.69 MB；`scripts/` 113 + `tests/` 86 就占 72%）。**它会随目录增长而涨**，
@@ -256,8 +259,9 @@ def _pytest(*targets: str) -> tuple[str, ...]:
 #        `CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD`（本会话实测 `99999`；此前观测到 `9,999`）。
 #        9,999 还同时是 bulk-guard 里 `DISPLAY_COUNT_LIMIT` 的**显示上限**，两者容易混。
 #        ⇒ **安全上界必须按当次实测的阈值算**：阈值 99999 时 ≈360 例/轮，阈值 9999 时 ≈36 例/轮。
-#        6 片（每片 ≤32 例）在 **9,999** 这个较低阈值下**不成立**（需 ≈14 片）；
-#        维持 6 片是"按观测到的较高阈值 + 风险登记"的口径，详见 `reports/ws_verify_shard_report.md`。
+#        当前这个分片方式（片数与片名单见下方常量；每片 ≤32 例）在 **9,999** 这个较低阈值下
+#        **不成立**（需 ⌈该目录**现算例数** ÷ ≈12⌉ 片）；
+#        维持现状是"按观测到的较高阈值 + 风险登记"的口径，详见 `reports/ws_verify_shard_report.md`。
 INJECTION_SHARDS: tuple[str, ...] = (
     "injection-a", "injection-b", "injection-c",
     "injection-d", "injection-e", "injection-f",
@@ -347,7 +351,7 @@ BATCHES: Mapping[str, Batch] = {
     #     `tests/guards` 与 `injection-c` 的夹具残留 ⇒ **同一个工作树里有第二个 pytest 会话**
     #     （`V-05` 禁止的情形）。取上沿正是 `V-02` 说的"让偶发抖动不误报"。
     #     ⇒ 见到本批超时的**第一步**不是改断言，而是先确认有没有第二个会话在同一工作树里跑。
-    #   ★ **最终取值 = 六片统一 300s**（`V-02` 允许的上限）；理由与上面那条相反方向的取舍：
+    #   ★ **最终取值 = 各 injection 片统一 300s**（`V-02` 允许的上限）；理由与上面那条相反方向的取舍：
     #     ① 作为**故障探测器**，300s 对**工作树实测**是 2.7~4.7×：
     #        实测（工作树内 `verify.py --batch <片>`）a 70.74~80.92s · b 63.72s · f 110.13s；
     #     ② `V-02` 的"4~8×"对 f（110.13s × 4 = 440s）**越过了 300s 上限** ⇒ 与 `daily`
@@ -432,9 +436,9 @@ BATCHES: Mapping[str, Batch] = {
             "tests/injection/test_quote_provenance.py",
             "tests/injection/test_shard_coverage.py",   # ← 由 `injection-f` 移入（见上）
         ),
-        # ★ 超时 90s → **300s**（主理人裁定）：与 `injection-a..f` **齐平**（同族一致性优先），
+        # ★ 超时 90s → **300s**（主理人裁定）：与 `INJECTION_SHARDS` 的**其它各片齐平**（同族一致性优先），
         #   并吸收一个**已复现**的宿主状态 —— 子进程若落回沙箱内，本片单次实测可达 **247s ≫ 90s**
-        #   会被判 `[TIMEOUT]`，而同期 `a..f`（300s）不会。⇒ 只是让本片**不比邻片更早红**。
+        #   会被判 `[TIMEOUT]`，而同期**其它 injection 片**（同为 300s）不会。⇒ 只是让本片**不比邻片更早红**。
         300.0, _exit_zero,
     ),
     "injection-f": Batch(
@@ -568,9 +572,9 @@ BATCHES: Mapping[str, Batch] = {
 
 ORDER = (
     "unit", "conflict", "guards",
-    # ★ `tests/injection/` 的 6 片必须**逐片单独跑**（见 `INJECTION_SHARDS` 上方的理由）。
+    # ★ `tests/injection/` 的**每一片**必须**逐片单独跑**（片名单与理由见 `INJECTION_SHARDS` 上方）。
     #   `--batch all` 会把它们连着跑完 —— 那**恰好**会重新越过宿主单轮删除配额，
-    #   在某一处突然变红（`V-08`）。要完整覆盖该目录，请分 6 个轮次跑。
+    #   在某一处突然变红（`V-08`）。要完整覆盖该目录，请按片数分**等量**的轮次跑。
     "injection-a", "injection-b", "injection-c",
     "injection-d", "injection-e", "injection-f",
     "injection-g",
