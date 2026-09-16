@@ -46,6 +46,11 @@ GATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("stage_gate.py --stage prep", "scripts/delivery/stage_gate.py", ("--stage", "prep")),
     ("injection_guard.py", "scripts/checks/injection_guard.py", ()),
     ("verification_policy_guard.py", "scripts/checks/verification_policy_guard.py", ()),
+    ("shell_var_guard.py", "scripts/checks/shell_var_guard.py", ()),
+    # ── 批次 6 集成新增：并行工作流交付但当时无生产调用方的守卫（G-20 / G-21）──
+    # 由主理人集成时注册（各 WS 按纪律不得自行改本文件）。
+    ("graph_integrity_guard.py", "scripts/graph/graph_integrity_guard.py", ()),
+    ("locator_check.py", "scripts/validators/locator_check.py", ()),
 )
 
 TIMEOUT_MARK = "TIMEOUT"

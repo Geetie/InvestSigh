@@ -39,10 +39,13 @@ FAILED=0
 
 run_gate() {
   label="$1"; shift
-  echo "pre-commit → $label"
+  echo "pre-commit → ${label}"
   "$PY" "$@" || {
     rc=$?
-    echo "pre-commit ✗ $label 阻断（exit=$rc）" >&2
+    # ★ 变量一律加花括号：`$rc` 紧跟全角括号 `）` 时，多字节首字节会被并进变量名
+    #   → `set -u` 下报 `rc<乱码>: unbound variable`，脚本**当场中止**，
+    #   于是 `FAILED=1` 没设上、**后续门禁（⑤–⑧）根本没跑**（实测踩到，已修）。
+    echo "pre-commit ✗ ${label} 阻断（exit=${rc}）" >&2
     FAILED=1
   }
 }
@@ -70,6 +73,13 @@ run_gate "injection_guard" "$CODE_ROOT/scripts/checks/injection_guard.py" "$CODE
 
 # ⑧ 验证规范：禁止全量验证 / 每批必带超时 / 超时不算通过 / 沙箱外跑（`CONVENTIONS.md §一`）
 run_gate "verification_policy_guard" "$CODE_ROOT/scripts/checks/verification_policy_guard.py" "$CODE_ROOT"
+
+# ⑨ shell 变量紧邻多字节字符（`$rc` 紧跟全角括号会被并名 → `set -u` 下**中止脚本**，
+#    实测曾使本文件的后续 4 道门禁全部未执行 —— 一个门禁失败竟让别的门禁不被检查）
+run_gate "shell_var_guard" "$CODE_ROOT/scripts/checks/shell_var_guard.py" "$CODE_ROOT"
+
+# ⑩ 图结构完整性（命中即 fail）：自环 / 重复边 / 陈旧缓存（`Ch2 §B.3`）
+run_gate "graph_integrity_guard" "$CODE_ROOT/scripts/graph/graph_integrity_guard.py" "$CODE_ROOT"
 
 if [ "$FAILED" -ne 0 ]; then
   echo "pre-commit: 有门禁阻断，提交被拒。" >&2

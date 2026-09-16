@@ -55,7 +55,7 @@ python system/scripts/ops/verify.py --batch all                 # 逐批跑，�
 | `graph` | `tests/graph/`（依赖图与 T12 传播） | 60s | 3.8s |
 | `validators` | `tests/validators/`（locator 定位校验器） | 30s | 3.8s |
 | `claim` | `tests/claim/`（主张五态状态机） | 30s | 3.6s |
-| `gates` | `run_all_gates.py`（20 项门禁） | 60s | 2.3s |
+| `gates` | `run_all_gates.py`（23 项门禁） | 60s | 2.3s |
 | `stage` | `stage_gate.py --stage all` | 30s | 0.2s |
 
 ★ 后 4 个批次由**主理人在集成时统一加入**（`reports/parallel_workstreams.md §5 I-3`）——
@@ -131,6 +131,28 @@ python system/scripts/ops/verify.py --batch <名>       # 已内置同一环境�
 
 ---
 
+### V-07 **新建工作树后，第一步必须跑 `bootstrap_worktree.sh`**
+
+```sh
+sh system/scripts/ops/bootstrap_worktree.sh
+```
+
+**为什么**（系统性伪影，不是谁的代码错）：纪律 9 要求 `rules/` 全 `0444`，但
+**git 只跟踪可执行位、不跟踪只读位** → 任何 `git worktree add` / 新 clone 出来的
+`rules/*.yaml` 都是 `0644` → `rules_lock_guard` **必红**（实测：`fix/claim-propagation`
+与 `fix/compute-silent-defects` 两个工作树首次提交各被拦下 10 条）。
+
+**天天误报的门禁一定会被关掉**（`G-01`）→ 必须在流程层根治，而不是让每个工程师各自 `chmod`，
+更**不是**用 `--no-verify` 绕过。
+
+**边界**：该脚本**只改权限位** —— 不碰内容、**不碰 `registry/rules.lock.json`**
+（用 `lock_rules.py` 代替会重写该被跟踪清单的 `locked_at` 与 SHA 台账 → 产生与任务无关的提交噪音）。
+因此它的效果在 `git status` / `git diff` 上**恒为空**，不污染任何提交。
+
+**强制手段**：`scripts/ops/bootstrap_worktree.sh`（自带 `rules_lock_guard` 自检，失败即 `exit 1`）。
+
+---
+
 ## 二、守卫与检查器规范（G 系列）
 
 | # | 规范 | 强制手段 |
@@ -152,6 +174,7 @@ python system/scripts/ops/verify.py --batch <名>       # 已内置同一环境�
 | **P-03** | 包 `__init__` **惰性导入**（PEP 562）；守卫**不得**在模块级急切导入 pydantic | `D-21`：pydantic ≈0.3s/次，曾拖慢每个守卫 |
 | **P-04** | 带全局副作用的加载器必须 `try/finally` 恢复 `sys.path` / `sys.modules` | `D-23`：曾致进程内测试 16 条集体失败 |
 | **P-05** | 新守卫单次耗时 **< 0.5s**（门禁在 pre-commit 里跑，慢门禁会被关掉） | 实测基线 |
+| **P-06** | ★ **shell 脚本里变量引用一律加花括号 `${var}`**，**即使**后面跟的是 ASCII | 实测故障：`pre-commit.sh` 的 `"…（exit=$rc）"` 中 `$rc` 紧跟全角括号 `）`，shell 把 `）` 的 UTF-8 首字节并进变量名 → `set -u` 下报 `rc<乱码>: unbound variable` **并中止脚本**。崩点在 `FAILED=1` 之前，**其后 4 道门禁（`conflict_scan`/`no_placeholder_guard`/`injection_guard`/`verification_policy_guard`）根本没跑** —— 一个门禁失败竟让别的门禁不被检查（假绿灯面）。<br>**为什么"一律加"而不是"仅在多字节前加"**：`${var}` 对 shell **永远等价**，成本为零；靠肉眼判断"下一个字符是不是多字节"则不可穷尽。守卫：`scripts/checks/shell_var_guard.py`（`run_all_gates` 第 21 项 + pre-commit 第 ⑨ 项） |
 
 ## 四、引用与文档规范（R 系列）
 

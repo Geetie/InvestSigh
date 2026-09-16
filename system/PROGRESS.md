@@ -64,7 +64,7 @@ sh system/scripts/ops/run_pytest.sh tests/<子目录>                # 直接跑
 | `guards` | `tests/guards/`（20 守卫契约 + 验证规范） | 60s | 3.3s |
 | `injection` | `tests/injection/` | 120s | 13.3s |
 | `root` | `tests/test_ch11_invariants.py` | 30s | 0.4s |
-| `gates` | `run_all_gates.py`（20 项门禁） | 60s | 4.3s |
+| `gates` | `run_all_gates.py`（23 项门禁） | 60s | 4.3s |
 | `stage` | `stage_gate.py --stage all` | 30s | 0.3s |
 
 ★ **7 批全绿，合计 ≈23.5s**。证据留档 `reports/verify_<批次>_latest.log`（**引用证据读该文件，不必重跑**）。

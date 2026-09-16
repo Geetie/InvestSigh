@@ -145,7 +145,7 @@ BATCHES: Mapping[str, Batch] = {
         _pytest("tests/decision"), 30.0, _exit_zero,
     ),
     "gates": Batch(
-        "gates", "run_all_gates.py（20 项门禁）",
+        "gates", "run_all_gates.py（23 项门禁）",
         ("scripts/ops/run_all_gates.py", "{root}", "--timeout", "30"), 60.0, _exit_zero,
         note="门禁内部已有逐项 30s 硬超时（卡死也算不合格）",
     ),
