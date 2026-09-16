@@ -395,3 +395,55 @@ def test_cli_flags_keep_original_judgment_time_drift(scratch: Path, real_rules, 
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "DAILY-RULE-BINDING" in proc.stdout
     assert "keep_original_judgment_time" in proc.stdout
+
+
+# ── 第四轮：缺键要么**响亮失败**、要么**门禁红**，不许"值撞成同一个数"就静默 ──
+
+
+def test_missing_on_hit_key_is_flagged_by_binding(
+    scratch: Path, real_rules, run_script
+) -> None:
+    """★ 第四轮反例：删 `on_hit.keep_original_judgment_time` ⇒ CLI **exit 1**。
+
+    ★ 这条**必须靠"判存在性"**而不是"比值"：加载器在缺键时回落**设计值 `True`**，
+      而"应该有的值"**也是 `True`** ⇒ `trigger.keep != DESIGN_…` **恒为假**，
+      门禁**永远判不出来**（值撞成同一个数）。故改按**文档原文**单独判存在性。
+    """
+    import yaml
+
+    real_rules(scratch, "review.yaml")
+    path = scratch / "rules" / "review.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["forced_recheck"]["on_hit"].pop("keep_original_judgment_time")
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    # 先确证"比值"这条路确实判不出来：加载器仍报 rules 且值仍为 True（与"应该有的值"相同）
+    trigger = load_recheck_trigger(scratch)
+    assert trigger.value_source == "rules"
+    assert trigger.keep_original_judgment_time is True
+    proc = run_script("scripts/pricelayer/daily_explain.py", scratch, "--no-report")
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "DAILY-RULE-BINDING" in proc.stdout
+    assert "keep_original_judgment_time 缺失" in proc.stdout
+
+
+def test_missing_threshold_key_fails_loudly_without_claiming_fallback(
+    scratch: Path, real_rules
+) -> None:
+    """★ 第四轮：删阈值键 ⇒ **加载器响亮失败**（`DailyExplainError`），**不是**"回落 + note"。
+
+    ★ 这条同时锁住一处**已删的死代码**：旧实现末段对"阈值键缺失"记 `NO_FORCED_RECHECK_KEY`
+      note，声称"该阈值取设计逐字回落值（B2）"—— 但上面的 `Decimal(str(None))` **先抛错**，
+      那段 note **一行都执行不到**，且文字**与真实行为相反**（真实=响亮失败）。
+      故此处断言的是"抛错"，而不是"拿到回落值 + note"。
+    """
+    import yaml
+
+    from scripts.pricelayer.daily_explain import DailyExplainError
+
+    real_rules(scratch, "review.yaml")
+    path = scratch / "rules" / "review.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["forced_recheck"].pop("single_day_drop_pct")
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(DailyExplainError, match="不静默兜底"):
+        load_recheck_trigger(scratch)
