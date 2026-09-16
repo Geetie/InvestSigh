@@ -214,5 +214,15 @@ blocked = True
 - 但 **`blocked` 仍为 `True`** —— 因为模型侧组件确实不存在，产物不齐。**这是真话，不是失败**：
   A 方案要求的是"显式"，不是"假装完成"。
 
+---
+
+## 批次 7 · 收口阶段新增缺口（`G-28` ~ `G-30`）
+
+| # | 缺口 | 设计锚点 | 严重度 | 状态 |
+|---|---|---|---|---|
+| **G-28** | ★ **新门禁逃逸"退出码契约"矩阵**：`tests/guards/test_exit_code_contract.py` 的 `GUARDS` 是文件内的**手写清单**，**不从 `run_all_gates.GATES` 派生** → 本批次把门禁从 20 扩到 23（`+shell_var_guard` / `+graph_integrity_guard` / `+locator_check`），**新增的 3 项完全没被契约矩阵覆盖**（矩阵仍只测原 20 项）。<br>★ 这正是本项目**自己写的铁律第 5 条**："**'声明'与'实现'必须有机器绑定**：任何手工台账都能被一行数据编辑绕过。" | `CONVENTIONS.md::G-01`（"各守卫统一走 `run_checker`；`test_exit_code_contract.py` **逐守卫**断言"）· 铁律 5 | **中** | `OPEN`（**未动**：改动测试文件需跑 pytest 验证，而 pytest 通道当时被批次 7 审计员独占 → 待审计结束。修法：`GUARDS` 改为从 `run_all_gates.GATES` 派生 + 加一条"两者同步"断言） |
+| **G-29** | **无"报告成品审计门"**：现有 **23 项门禁管代码与真源**（追加式 / schema 同步 / 注入防护 / 占位符 / 验证规范…），**对产出的报告文字没有审计门**；而 `§一 底线 3` 要求"结论可追溯四要素"，在**报告层面无守卫** | `§一 底线 3` · `§八 N-3` | 中 | `OPEN`（外部同题作业的 Phase 6 是硬门槛："不过审的只能算草稿"。见 `reports/nvda_task_lessons_for_investsigh.md §2.5` 建议 `S-6`） |
+| **G-30** | **`DependencyEdge` 缺"强度 / 时滞"两列**：外部同题作业把"传导关系矩阵（**方向 / 强度 / 时滞**）"称为**排序的主要输入**，并为此建三张矩阵（上游→原点 / 竞争者→原点 / 原点→下游）；本项目 `schema/models.py::DependencyEdge` 只有 `{edge_id, from_ref, to_ref, kind}` | `Ch7 §C`（传导）· `Ch9 §3.4.3` | 中 | `OPEN`（改 `schema` 属**跨阶段契约变更** → 须需求方裁定，**主理人不自裁**。见 `nvda_task_lessons_for_investsigh.md §2.2` 建议 `S-2`） |
+
 
 
