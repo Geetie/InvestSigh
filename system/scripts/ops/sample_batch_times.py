@@ -63,6 +63,12 @@ PY="${HOME}/.workbuddy/binaries/python/envs/default/bin/python"
 "$PY" scripts/ops/sample_batch_times.py --scheduled --json    # 机器可读
 ```
 
+★ **取样必须在 `E`（生产/门禁口径）下跑**，否则脚本**拒绝开跑**（`exit=2`）：
+
+```bash
+CODEBUDDY_SAFE_DELETE_ENABLED=0 "$PY" scripts/ops/sample_batch_times.py --scheduled --max-cells 2
+```
+
 ★ **开工前**会做**配额预检**（`--quota` 的同一读数）：余量 < 本格所需 ⇒ **拒绝开跑并 `exit=2`**，
 **不重试、不降 `repeat`、不拿旧值代替**。宿主未注入诊断所需环境变量时预检**不可用** ⇒
 同样**拒绝开跑**（`--no-quota-check` 可显式跳过，但读数里会如实标注 `skipped`，**不得**当成"预检通过"）。
@@ -70,10 +76,30 @@ PY="${HOME}/.workbuddy/binaries/python/envs/default/bin/python"
 ★ 本脚本**不写任何文件**（结果打到 stdout，需要留档就 `> /tmp/...`）——
 避免在 `system/reports/` 里堆无人消费的产物（`verify.py` 自己的日志已经够用）。
 
-## 前置（卡 `#83` 的硬前置，脚本**不**代为判断）
+## ★ 前置：已由主理人解除（裁定记录在 `batch13_taskbook.md`）
 
-新宿主回合 / `/tmp` 方案验证通过 / 用户授权 —— 三者任一满足才可**执行取样**。
-`--plan` 不受此限（它不跑任何批次）。
+原硬前置（新宿主回合 / `/tmp` 方案验证通过 / 用户授权，三者任一）**已因裁定「`E` = 合法配置」而解除** ——
+`E`（`CODEBUDDY_SAFE_DELETE_ENABLED=0`）下 `verify.py` 可正常跑夹具，且**CI/门禁就是这个配置**
+⇒ **`#83` 应在 `E` 下取样**。`--plan` / `--quota` 不受任何前置限制（它们不跑批次）。
+
+## ★★ 「被测配置」也是仪器的一部分（`口径 21` 的延伸）
+
+`口径 21` 说"给 `Batch.timeout` 定值只认门禁口径"。**但门禁口径本身依赖两件配置** ——
+换个配置跑出来的数，**不是同一个仪器的读数**：
+
+| 配置维度 | 合法值 | 非法/不可比的值 | 后果 |
+|---|---|---|---|
+| 守卫开关 | `CODEBUDDY_SAFE_DELETE_ENABLED=0`（= 生产/门禁口径） | 未设 ⇒ 守卫开 | 夹具 teardown **每项 spawn 一个 node CLI** ⇒ 实测慢约 **30×**（`58s → 2s`，`ws-verify-shard` 实测） |
+| 夹具根位置 | **仓库内**（`<worktree>/system/tests/.work/…`） | `/tmp` 副本 | 见下 |
+
+**故本脚本把这两项也当"仪器读数"**：每行都记 `profile`（守卫开关）与 `fixture_mode`（夹具根位置），
+**两者都不合法时拒绝开跑**（`exit=2`，理由是"这一轮不是生产口径的读数"）。
+
+- `E` 未关 ⇒ 默认**拒绝**（那种数只能当**对照**）；确要跑对照时用 `--profile-baseline`，
+  读数会**逐行**标注 `BASELINE` 并写明"**不得据以定值**"。
+- ★ **`#83` 不得在 `/tmp` 夹具模式下取样**（主理人裁定）：`/tmp` 方案（若验证通过）只解决
+  `G-60` **配额**这一件事；而 `Batch.timeout` 对应的是**仓库内夹具**的耗时 ⇒
+  **换到 `/tmp` 会让 `code_root` 位置改变，读数与生产口径不可比**。这是**硬拒绝**，**不提供覆盖开关**。
 """
 
 from __future__ import annotations
@@ -104,9 +130,20 @@ TIMEOUT_MARKER = "[TIMEOUT]"
 #: `V-03`：`exit=124` 一律不合格。
 TIMEOUT_EXIT = 124
 
-#: 一个夹具用例 teardown 的配额消耗（项）。出处 `13-F §2.6`：修后 **250 项/例**（修前 255）。
+#: 一个 `code_root` 型夹具用例 teardown 的配额消耗（项）。出处 `13-F §2.6`：修后 **250 项/例**（修前 255）。
 #: ★ 引用值，会随 `system/` 树体积漂移 ⇒ 用前请重新量（`13-F §①` 的静态实测口径）。
+#: ★★ **本仓有两个读数，未对齐，不要静默挑一个**（`口径 10`）：
+#:   `13-F §2.6` = **250 项/例**（teardown 删除的项数）；`verify.py:48` 自述 = **271 项**
+#:   （每用例复制一份 `system/` 的项数）。**复制项数 ≠ 删除项数**（`_COPY_SKIP` 与 `raw/` 清理会改这个差），
+#:   故两者可能都"对"；但**差 8%** 会直接放大到总预算 ⇒ **实测前按大的那个（271）想**，别按小的想。
+#: ★★ **不是所有夹具都这个量级** —— 轻量夹具（只建几个空目录）要小一个数量级，见 `Cell.quota_per_case`。
 QUOTA_PER_FIXTURE_CASE = 250
+
+#: `pricelayer` 夹具的每例配额消耗（项）。★ 它的夹具是**轻量工程根**（`tests/pricelayer/conftest.py:29`
+#: `make_minimal_root()` 只建 `facts/ derived/ rules/ registry/ index/ reports/` 六个**空目录**，
+#: 用例再自写少量 jsonl/yaml）⇒ teardown 删的是 `1 + 6 + N` 项，**不是** 130 文件副本的 250 项。
+#: ★ 这是**估算值**（`7 + N`，取 `N≈3`）；**真值请在取样时补测**，但即使乘 2 也仍比 `250` 小一个数量级。
+PRICELAYER_QUOTA_PER_CASE = 10
 
 #: 只读配额诊断所需的环境变量（宿主注入；缺任一 ⇒ 诊断不可用，**如实返回原因，不猜**）。
 _QUOTA_ENV_KEYS = (
@@ -140,31 +177,64 @@ class Cell:
     note: str = ""
     #: 夹具用例数是否为**假设值**（未知批次用保守上界）⇒ 预检按"宁可高估"处理，且**标注**出来。
     assumed: bool = False
+    #: **每例**的配额消耗（项）。默认 `QUOTA_PER_FIXTURE_CASE`（`code_root` 型重型夹具）；
+    #: 轻量夹具（只建几个空目录）显式给更小的值 —— 用一个全局常量套所有夹具会把轻夹具**高估 25 倍**，
+    #: 那是"假阻断"的配方（`G-61` 同族：判据与对象不同源）。
+    quota_per_case: int = QUOTA_PER_FIXTURE_CASE
+
+    @property
+    def quota_per_run(self) -> int:
+        """本格**一次**的配额消耗（≈项）。"""
+        return self.fixture_cases * self.quota_per_case
 
 
 #: 卡 `#83` 的取样清单 —— 机械抄自 `13-F 报告 §⑤` 的填表清单，**不自行增删**：
 #: 「`evidence` · `daily` · `valuelayer` · `injection-a`…`f`；并**重测**
 #:   `unit` / `guards` / `conflict` / `pricelayer`」
+#:
+#: ★★ 主理人已裁定**格数以「覆盖面」为准 = 13 格**，并**把 `injection-g` 并入为第 14 格**
+#:   （它已有 1 次门禁读数 `15.37s/300s` ⇒ 只需补第 2 次）。**不删格**（`conflict` 保留）。
+#:   理由（原样采纳）：**标题里的数字是"当初的计数"，清单是"覆盖面"；两者不一致时以覆盖面为准**。
 SCHEDULED_CELLS: tuple[Cell, ...] = (
+    # ---- P0：薄余量 / 读数从未取得（最需要复测）----
     Cell("valuelayer", "P0", 28, "13-F §3-4 表", "1.76× 薄余量；★ 带一条**可证预测**：修后应显著 < 170.15s"),
     Cell("evidence", "P0", 40, "13-F §3-4 表（轮换值）", "读数**从未取得**（13-F 撞配额）"),
     Cell("daily", "P0", 40, "13-F §3-4 表（轮换值）", "读数**从未取得**（13-F 撞配额）"),
     Cell("injection-c", "P0", 27, "V-02 批次表", "读数**从未取得**（V-02 标「未取得（配额触顶）」）"),
     Cell("injection-e", "P0", 27, "V-02 批次表", "读数**从未取得**（V-02 标「未取得（配额触顶）」）"),
+    # ---- P1：已登记值待收紧 / 只需补第 2 次 ----
     Cell("unit", "P1", 13, "13-F §3-4 表", "合并前读数；13-F §④.2 明确要求**满负载**复测（现登记 300s）"),
-    Cell("guards", "P1", 20, "13-F §3-4 表", "合并前读数（现登记 300s）"),
-    Cell("pricelayer", "P1", 0, "13-F §3-4 表", "用例数已变（127 → 168）；本格**配额成本为 0**，只吃墙钟"),
+    Cell("guards", "P1", 20, "13-F §3-4 表", "合并前读数（现登记 300s；主理人裁「纳入 #83 统一收紧」）"),
+    Cell(
+        "injection-g", "P1", 24, "taskbook 裁定：分片再平衡后 `f 27 / g 24`（≤32）",
+        "★ 第 14 格（裁定并入）；**已有 1 次**门禁读数 `15.37s/300s`（余量 19.5×）⇒ 只需补第 2 次",
+        assumed=True,
+    ),
+    Cell(
+        "pricelayer", "P1", 100, "`ast` 实测（本单）：`tests/pricelayer/` 共 188 用例，其中 **100** 例带 `scratch`",
+        "用例数已变（127 → 168 → 188）；★ 更正「0 夹具用例」（真值 **100**），"
+        "但它是**轻量根**夹具 ⇒ 每例 ≈10 项而非 250 项 ⇒ 本格 ≈1,000 项/次，**仍然几乎不吃配额**",
+        quota_per_case=PRICELAYER_QUOTA_PER_CASE,
+    ),
+    # ---- P2：有读数但为合并前 ----
     Cell("injection-a", "P2", 27, "V-02 批次表", "有读数（63.67s）但为**合并前**"),
     Cell("injection-b", "P2", 28, "V-02 批次表", "有读数（63.72s）但为**合并前**"),
     Cell("injection-d", "P2", 31, "V-02 批次表", "有读数（136.80s，2.2×）但为**合并前**"),
-    Cell("injection-f", "P2", 31, "V-02 批次表", "有读数（110.13s，2.7×）但为**合并前**"),
-    Cell("conflict", "P3", 0, "13-F §3-4 表", "0 夹具用例、18.3× 余量、**无可证风险** ⇒ 建议删除此格以对上「12 格」"),
+    Cell("injection-f", "P2", 31, "V-02 批次表", "有读数（110.13s，2.7×）但为**合并前**；#89 再平衡后 27 例"),
+    # ---- P3：搭车末位 ----
+    Cell("conflict", "P3", 0, "13-F §3-4 表",
+         "**真 0 夹具用例**（主理人已核）；登记 30s 对旧读数 1.64/1.53s = 18.3×、**无余量风险** ⇒ "
+         "批准为「搭车末位」（只吃墙钟、几乎不耗配额）"),
 )
 
 
-#: 未知批次的**保守**夹具用例数上界（取清单里的最大值）。
+#: 未知批次的**保守**夹具用例数上界：取**重型夹具**（`code_root` 型）格里的最大值。
+#: ★ 只看重型格：轻量夹具格的用例数（`pricelayer` 100）乘 `250` 会**高估 25 倍** ⇒
+#:   那不是"保守"，是**另一个错误**（用错的系数）。未知批次按重型格的上界估。
 #: ★ 这是**假设值**：配额预检**宁可高估**（高估 ⇒ 更容易拒绝开跑 ⇒ 不会盲跑）。
-UNKNOWN_FIXTURE_CASES = max(c.fixture_cases for c in SCHEDULED_CELLS)
+UNKNOWN_FIXTURE_CASES = max(
+    c.fixture_cases for c in SCHEDULED_CELLS if c.quota_per_case == QUOTA_PER_FIXTURE_CASE
+)
 
 _BY_NAME = {c.name: c for c in SCHEDULED_CELLS}
 
@@ -191,6 +261,65 @@ def _main_sha(root: Path) -> str:
         return out.stdout.strip() or "unknown(rev-parse 无输出)"
     except OSError as exc:  # git 不在 PATH 等
         return f"unknown({exc.__class__.__name__})"
+
+
+def _env_profile() -> dict[str, str]:
+    """本轮的**被测配置**（守卫开关）—— 它是**仪器的一部分**，必须逐行记录。
+
+    `E`（`CODEBUDDY_SAFE_DELETE_ENABLED=0`）= **生产/门禁口径**（CI 跑 `verify.py` 就是这个配置）。
+    未设 ⇒ 守卫开 ⇒ 夹具 teardown **每项 spawn 一个宿主 node CLI** ⇒ 实测慢约 **30×**
+    （`58s → 2s`；出处 `ws-verify-shard` 的 A/B 三点对照，主理人已采纳入册）。
+
+    ★ 为什么必须在**每一行**都记：`verify.py::_child_env()` 是 `{**os.environ, SANDBOX=0, BROKERED=0}`
+    —— 它**继承调用者的 `E`**，自己**不设** `E`。故"这一轮是不是生产口径"取决于**谁怎么调的**，
+    属**外部条件**、代码里看不出来 ⇒ 只能靠记录（否则就是混用两个仪器，`口径 21` 要防的事）。
+    """
+    return {
+        "CODEBUDDY_SAFE_DELETE_ENABLED": os.environ.get("CODEBUDDY_SAFE_DELETE_ENABLED", "<unset>"),
+        "CODEBUDDY_SAFE_DELETE_SANDBOX": os.environ.get("CODEBUDDY_SAFE_DELETE_SANDBOX", "<unset>"),
+        "CODEBUDDY_BROKERED_FS_HOOK_ENABLED": os.environ.get("CODEBUDDY_BROKERED_FS_HOOK_ENABLED", "<unset>"),
+    }
+
+
+def _profile_tag(env: dict[str, str]) -> str:
+    """把 env 折成一个**可判定**的短标签：`E=0`（生产口径）/ `NON_E`（对照口径）。"""
+    return "E=0(生产口径)" if env["CODEBUDDY_SAFE_DELETE_ENABLED"] == "0" else "NON_E(对照口径)"
+
+
+def _fixture_mode(root: Path) -> str:
+    """判定**夹具根**是否在**工作树内**（`V-02`：标定超时必须在工作树内测）。
+
+    `root` 是 `verify.py` 的 `code_root`（= `<toplevel>/system`，与 `verify.py:114` 的 `ROOT` 同源）。
+
+    ★ 主理人裁定：**`#83` 不得在 `/tmp` 夹具模式下取样** —— `/tmp` 方案只解决 `G-60` 配额，
+    但 `Batch.timeout` 对应的是**仓库内夹具**的耗时；换位置 ⇒ **读数与生产口径不可比**。
+
+    返回 `"repo-internal"`（唯一可用于定值的值）或**带原因的**其它字符串
+    （★ 不返回 `None`/`False` —— 静默的"假"和"没查"不可区分，同 `_read_log_header` 的既有教训）。
+
+    ★ 本函数首版把 `code_root` 直接与 `git rev-parse --show-toplevel` 比 ⇒
+    `.../system` ≠ `.../<worktree>` ⇒ **恒假警报**（"判据与对象不同源"，`G-61` 同族）。
+    正确形状是**包含**关系：`code_root == toplevel/"system"`。
+    """
+    try:
+        top = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=str(root), capture_output=True, text=True, check=False,
+        )
+    except OSError as exc:  # git 不在 PATH 等
+        return f"git_unavailable({exc.__class__.__name__})"
+    if top.returncode != 0:
+        return f"not_a_git_worktree(exit={top.returncode}):{top.stderr.strip()[:80]}"
+    toplevel = Path(top.stdout.strip()).resolve()
+    s = str(toplevel)
+    if s.startswith("/tmp") or s.startswith("/private/tmp"):
+        return f"tmp-copy:{s} ⇒ ★ 不得据以定值（读数与生产口径不可比）"
+    if root.resolve() != (toplevel / "system"):
+        return (f"unexpected_layout:code_root={root.resolve()} toplevel={toplevel} ⇒ "
+                f"不是「<仓库根>/system」的形状，读数与生产口径不可比")
+    if not (root / "tests" / "conftest.py").exists():
+        return f"no_tests_conftest:{root} ⇒ 不像是本仓的 system/"
+    return "repo-internal"
 
 
 def _concurrency() -> int:
@@ -269,11 +398,12 @@ def _read_log_header(root: Path, name: str) -> tuple[float, float, int] | str:
     return float(m.group("elapsed")), float(m.group("timeout")), int(m.group("code"))
 
 
-def sample_one(name: str, repeat: int, root: Path, preflight: str) -> tuple[list[dict], str]:
+def sample_one(name: str, repeat: int, root: Path, preflight: str, profile: str) -> tuple[list[dict], str]:
     """对单个批次取样 `repeat` 次。
 
     返回 `(rows, stop_reason)`；`stop_reason` 非空 ⇒ **整轮取样必须停止**（不重试）。
-    `preflight` 是开跑前的配额预检结论，**原样写进每一行**（读数必须能自证当时的配额条件）。
+    `preflight` 是开跑前的配额预检结论，`profile` 是本轮的被测配置标签 ——
+    两者都**原样写进每一行**（读数必须能自证当时的条件，否则不同条件下的数会被当成同一条序列）。
     """
     rows: list[dict] = []
     for run in range(1, repeat + 1):
@@ -312,6 +442,10 @@ def sample_one(name: str, repeat: int, root: Path, preflight: str) -> tuple[list
             "started_at_local": started.isoformat(timespec="seconds"),
             "started_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
             "main_sha": _main_sha(root),
+            # ★★ 「被测配置」也是仪器的一部分（口径 21 延伸）⇒ 逐行记录，不靠上下文记性
+            "env_profile": profile,
+            "env_vars": _env_profile(),
+            "fixture_mode": _fixture_mode(root),
             "concurrency_before": before,
             "concurrency_after": _concurrency(),
             "elapsed_s": elapsed,                      # ★ 门禁口径
@@ -370,6 +504,13 @@ def _render(rows: list[dict], stop_reason: str) -> str:
         lines.append(f"★ **已停止整轮取样** —— {stop_reason}")
     lines.append("")
     lines.append(f"main SHA: `{rows[0]['main_sha']}` ｜ 首格时刻: {rows[0]['started_at_local']}")
+    # ★ 仪器条件的"抬头"必须跟读数**同框**打印：读数脱离配置就没有可比性（口径 21 延伸）。
+    prof = rows[0]["env_profile"]
+    lines.append(f"被测配置（仪器）: **`{prof}`** ｜ 夹具模式: `{rows[0]['fixture_mode']}`"
+                 f"（逐行同值，已在 JSON 里逐行记录）")
+    if prof != "E=0(生产口径)":
+        lines.append("★★ **本表不是生产/门禁口径的读数** ⇒ **不得据以给 `Batch.timeout` 定值**"
+                     "（只能当「守卫开」的对照；守卫开时夹具 teardown 实测慢约 30×）。")
     return "\n".join(lines)
 
 
@@ -377,22 +518,22 @@ def _print_plan(cells: tuple[Cell, ...], repeat: int) -> None:
     total_quota = 0
     print("## 取样计划（`--plan`：**不执行任何批次**）")
     print()
-    print("| 优先级 | 批次 | 登记超时（★ 真源 `BATCHES`） | 夹具用例（引用值） | 本格一次 ≈配额项 | 理由 |")
-    print("|---|---|---|---|---|---|")
+    print("| 优先级 | 批次 | 登记超时（★ 真源 `BATCHES`） | 夹具用例（引用值） | 项/例 | 本格一次 ≈配额项 | 理由 |")
+    print("|---|---|---|---|---|---|---|")
     for c in cells:
         timeout = BATCHES[c.name].timeout if c.name in BATCHES else None
         t = "—" if timeout is None else f"{timeout:.0f}s"
-        cost = c.fixture_cases * QUOTA_PER_FIXTURE_CASE
+        cost = c.quota_per_run
         total_quota += cost * repeat
         cases = f"{c.fixture_cases}" + ("（假设）" if c.assumed else "")
-        print(f"| {c.priority} | `{c.name}` | {t} | {cases} | ≈{cost:,} | {c.note} |")
+        print(f"| {c.priority} | `{c.name}` | {t} | {cases} | {c.quota_per_case} | ≈{cost:,} | {c.note} |")
     print()
     print(f"- 单元格数：**{len(cells)}** ｜ 每格重复：**{repeat}** 次 ⇒ 共 **{len(cells) * repeat}** 次批次运行")
     print(f"- ★ 估算总配额消耗：**≈{total_quota:,} 项**"
-          f"（= Σ 夹具用例 × {QUOTA_PER_FIXTURE_CASE} 项/例 × {repeat}；出处 `13-F §2.6`）")
+          f"（= Σ 夹具用例 × 每例项数 × {repeat}；重型夹具的 `250` 出处 `13-F §2.6`）")
     print("- ★ **该估算必须与「全流共享的回合级配额」比**（本会话实测阈值 `99,999`）⇒"
           " 一轮**装不下**，须跨多轮并与其它流**互斥**（卡 `13-M` 不得并发跑批）。")
-    print("- ★ 夹具用例数为**引用值**（出处见 `source`），会随用例增删漂移 ⇒ 用前请重新量。")
+    print("- ★ 夹具用例数与「项/例」都是**引用值**（出处见 `source`），会随用例增删与夹具形状漂移 ⇒ 用前请重新量。")
     st = _quota_state()
     if isinstance(st, str):
         print(f"- ⚠ **本回合余量读不到**（{st}）⇒ 开工前预检会**拒绝开跑**（不盲跑）。")
@@ -400,6 +541,13 @@ def _print_plan(cells: tuple[Cell, ...], repeat: int) -> None:
         print(f"- ★ **当前余量（瞬读，可能不成立）**："
               f"`used={st['used']} / threshold={st['threshold']}` ⇒ **余量={st['remaining']}**"
               f"（只读诊断，`13-F §⑥-7`）")
+    # ★ 零成本地暴露"这一轮到底算不算生产口径"——否则要到跑完才发现仪器不对。
+    env = _env_profile()
+    print(f"- ★ **本轮被测配置**：`{_profile_tag(env)}`（`E={env['CODEBUDDY_SAFE_DELETE_ENABLED']}`）"
+          f" ｜ **夹具模式**：`{_fixture_mode(ROOT)}`")
+    if _profile_tag(env) != "E=0(生产口径)":
+        print("  ★★ 该配置**不是**生产/门禁口径 ⇒ 默认**拒绝开跑**"
+              "（对照用 `--profile-baseline`，读数会逐行标注且**不得据以定值**）。")
 
 
 def _quota_gate(cell: Cell, repeat: int, skip: bool) -> str:
@@ -415,10 +563,10 @@ def _quota_gate(cell: Cell, repeat: int, skip: bool) -> str:
     st = _quota_state()
     if isinstance(st, str):
         return f"QUOTA_PREFLIGHT_UNAVAILABLE：{st} ⇒ 不得盲跑"
-    need = cell.fixture_cases * QUOTA_PER_FIXTURE_CASE * repeat
+    need = cell.quota_per_run * repeat
     if st["remaining"] < need:
         return (f"QUOTA_PREFLIGHT_FAIL（**保守建议，非判决**）：瞬读余量 {st['remaining']} "
-                f"< 本格所需 ≈{need}（= {cell.fixture_cases} 例 × {QUOTA_PER_FIXTURE_CASE} 项/例 "
+                f"< 本格所需 ≈{need}（= {cell.fixture_cases} 例 × {cell.quota_per_case} 项/例 "
                 f"× {repeat}） ⇒ 建议**换轮次**（不重试、不降 `repeat`、不拿旧值代替）。"
                 f"★ 该读数是**瞬读、可能不成立**（本单实测同一 rid 数分钟后从 `99998` 变为"
                 f"**不在表里**）；若你确知环境已变，用 `--no-quota-check` 显式覆盖"
@@ -438,6 +586,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="跳过开工前配额预检（★ 仅当宿主未注入诊断所需环境变量时用；"
                          "读数会如实标注为 skipped，**不得**当成「预检通过」）")
     ap.add_argument("--json", action="store_true", help="输出 JSON")
+    ap.add_argument("--profile-baseline", action="store_true",
+                    help="★ 允许在**非生产口径**（`E` 未关 ⇒ 守卫开）下取样，只作**对照**；"
+                         "读数会逐行标注 `NON_E`，**不得据以给 `Batch.timeout` 定值**")
     args = ap.parse_args(argv)
 
     if args.quota:
@@ -466,6 +617,32 @@ def main(argv: list[str] | None = None) -> int:
         print("★ 已显式跳过配额预检（`--no-quota-check`）—— 读数里会如实标注 `skipped`，"
               "**不得**把它当成「预检通过」。", file=sys.stderr)
 
+    # ★★ 两条**仪器**前置（口径 21 延伸：仪器不止测量工具，还包括**被测量的配置**）。
+    #    这两条检查**必须在跑任何批次之前**做 —— 跑完才发现仪器不对，那一轮的配额就白烧了。
+    fmode = _fixture_mode(ROOT)
+    if fmode != "repo-internal":
+        print(f"★ 拒绝开跑：**夹具模式不可用于定值** —— `{fmode}`", file=sys.stderr)
+        print("  硬规则（主理人裁定）：`#83` **不得在 `/tmp` 夹具模式下取样** —— "
+              "`Batch.timeout` 对应的是**仓库内夹具**的耗时，换位置即与生产口径不可比。"
+              "（本规则**不提供覆盖开关**。）", file=sys.stderr)
+        return 2
+
+    env = _env_profile()
+    profile = _profile_tag(env)
+    if profile != "E=0(生产口径)" and not args.profile_baseline:
+        print(f"★ 拒绝开跑：**本轮不是生产/门禁口径** —— 被测配置 `{profile}`"
+              f"（`CODEBUDDY_SAFE_DELETE_ENABLED={env['CODEBUDDY_SAFE_DELETE_ENABLED']}`）。", file=sys.stderr)
+        print("  裁定：`#83` **应在 `E`（`CODEBUDDY_SAFE_DELETE_ENABLED=0`）下取样** —— "
+              "那是 CI/门禁的配置；守卫开时夹具 teardown 实测慢约 **30×**（`58s → 2s`）⇒ "
+              "两者**不可混比**（`口径 21`）。", file=sys.stderr)
+        print("  跑法：`CODEBUDDY_SAFE_DELETE_ENABLED=0 … sample_batch_times.py …`；"
+              "确要一份**对照**用 `--profile-baseline`（读数会逐行标注 `NON_E`，**不得据以定值**）。",
+              file=sys.stderr)
+        return 2
+    if profile != "E=0(生产口径)":
+        print(f"★★ 已显式采用**对照口径** `{profile}` —— 本轮读数**不得**用来给 "
+              "`Batch.timeout` 定值（只能回答「守卫开时慢多少」）。", file=sys.stderr)
+
     all_rows: list[dict] = []
     stop_reason = ""
     for c in cells:
@@ -480,7 +657,9 @@ def main(argv: list[str] | None = None) -> int:
         if gate:
             stop_reason = f"{c.name} → {gate}"
             break
-        rows, reason = sample_one(c.name, args.repeat, ROOT, gate or "ok")
+        rows, reason = sample_one(c.name, args.repeat, ROOT,
+                                  "skipped(--no-quota-check)" if args.no_quota_check else "ok",
+                                  profile)
         all_rows.extend(rows)
         if reason:
             stop_reason = f"{c.name} → {reason}"
