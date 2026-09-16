@@ -6,6 +6,7 @@
 | 工作树 | `.worktrees/ws-ch4-valuelayer`（分支 `ws/ch4-valuelayer`） |
 | **开工基线** | `ed9687b23f18f4b2b03a497e35a3aaea3603bb89`（= 当时的 `main`，已 `git merge main --ff-only` 对齐） |
 | **交付基线** | `7917ea9`（= `main` `0346b87` 的合并点）；首个提交 `10b6de1` 的基线是 `56fd637` |
+| **分支尖端** | `947ebf2`（= 再并入一个 **docs-only** 提交 `0346b87` 的合并点；`main` 是它的祖先 ⇒ **0 落后**）。全部验证读数都是在 `7917ea9` 基线上取得的；其后只有 `batch13_taskbook.md` 的文档改动，**不影响任何判据**。 |
 | **合并次数 / 冲突数** | **2 次合并**（`G-61` 幽灵门禁的持久形态 ×1 + `main` 改了同一文件 ×1）；`verify.py` 冲突 **1 处**（见下） |
 | 改动对象 | `system/scripts/ops/verify.py`（**散文**：模块 docstring + 注释） |
 | 新增 | `system/tests/guards/test_verify_prose_binding.py`（守卫 + 反向对照） |
