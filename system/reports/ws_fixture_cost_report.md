@@ -468,9 +468,42 @@ EOF
 
 ## ⑥ 提交与仓库状态
 
-见本报告所在提交（自指，故 hash 用下面命令查）：
+**本报告首次随提交 `49ce681` 落地**（分支 `ws/fixture-cost`；合并 `main` 后 `HEAD == 65cef01`）：
+
+```
+49ce681 fix(conftest)+fix(verify): 卡13-F/G-54 共享夹具每例≈4.2s 的根因已定位并修掉 + 5 个批次超时按 V-02 上调
+65cef01 docs(batch13): 13-A 八项裁定 …（= main，merge 前 fast-forward 到位）
+```
+
+改动面（**只 `git add` 这三个显式路径，没有 `git add -A`**）：
+
+```
+A  system/reports/ws_fixture_cost_report.md      ← 本文件
+M  system/scripts/ops/verify.py                  （超时 + 注释更正）
+M  system/tests/conftest.py                      （`raw` 进 `_COPY_SKIP` + docstring 成本模型）
+```
+
+提交后 `git status --short`：**空**（工作树干净）。
+
+```
+$ git status --short
+(无输出)
+```
+
+`pre-commit`（**无 `--no-verify`**）：**11 门全 PASS（0 violations）**，末行 `pre-commit ✓ 全部门禁放行`：
+
+| 门 | 结果 |
+|---|---|
+| `append_only_guard` / `rules_lock_guard` / `registry_schema_guard` / `schema_sync_guard` | PASS |
+| `conflict_scan(L1-L5)` / `no_placeholder_guard` / `injection_guard` | PASS |
+| `verification_policy_guard` | PASS（`batches: 22` · `max_timeout_s: 300` · `test_files: 74` · `test_files_uncovered: 0`） |
+| `shell_var_guard` / `graph_integrity_guard` / `criterion_effectiveness_guard` | PASS |
+
+★ **自指说明**：本段（§⑥）是**在 `49ce681` 之后**补写入的 ⇒ 本文件的**最新一次**提交 hash 与上表不同。
+取最新一次请用：
 
 ```bash
 git log --oneline -1 -- system/reports/ws_fixture_cost_report.md
+git log --oneline -1 -- system/tests/conftest.py
 git status --short
 ```
