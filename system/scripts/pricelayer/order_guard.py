@@ -410,29 +410,76 @@ NOTE_NO_BASELINE_ROWS = "NO_BASELINE_ROWS"
 
 
 def _multi_solution_violations(root: Path) -> tuple[list[str], list[str], int]:
-    """`Ch5 §B.1` 多解不变式：同一 `solution_set_id` **必须**有多组解。
+    """`Ch5 §B.1` 多解不变式：同一 `solution_set_id` **必须**有多组**可行**解。
 
     返回 `(violations, notes, scanned_solution_sets)`。空样本 → 显式 note（`G-03`）。
+
+    ★ **第四轮订正三处**（原实现三处分别是"口径冲突 / 内置参数 / 静默跳过"）：
+
+    ① **只数可行解**（`feasible` 为真）：原实现数**全部**行 ⇒ 同解集里只要有一行
+       `feasible=false`，就会被算成"2 组"而**漏报**单解集；且与 `solver.check` 的**同名判据**
+       （只数 `feasible`）**口径冲突** —— 同一不变式两个口径，等于谁都不是真源
+       （`Ch5 §B.1`："展示**解集**"指的是使当前价格成立的那些解）。
+    ② **下限读规则**（`solution_set_display.must_show_multiple` ⇒ `min_count`，与 `solver`
+       **同一个读口**）：原实现硬编码 `count < 2`，违反 `Ch11 §D.2`「参数只能住 `rules/`，
+       代码不得内置」（`P-09`；这也是主理人修 2 的**同一族**）。
+    ③ **缺 `solution_set_id` 的行不再静默跳过**：该字段是 `schema.models.ImpliedRequirement`
+       的**必填**字段 ⇒ 缺即违例；原实现 `continue` 掉，且当"所有行都缺"时 note 会说
+       "无可用解集"，把"**数据在、只是键缺**"误报成"**没有数据**"。
     """
     from schema.store import read_records
 
+    # 下限的**唯一**来源：与 `solver` 共用同一读口（规则缺 → 设计逐字回落 + note，见其 docstring）。
+    from scripts.pricelayer.solver import load_solution_set_display
+
+    display = load_solution_set_display(root)
+    min_count = display.min_count
     rows = read_records(root, "implied_requirements")
     groups: dict[str, int] = {}
+    missing_sid = 0
+    infeasible = 0
     for row in rows:
         sid = str(row.get("solution_set_id") or "")
         if not sid:
+            missing_sid += 1
+            continue
+        if not row.get("feasible"):
+            infeasible += 1
             continue
         groups[sid] = groups.get(sid, 0) + 1
     violations: list[str] = []
+    if missing_sid:
+        violations.append(
+            f"facts/implied_requirements.jsonl 有 {missing_sid} 行**缺必填 `solution_set_id`** —— "
+            "这些行无法归入任何解集、被排除在多解不变式之外（`schema.models.ImpliedRequirement` "
+            "该字段必填；`G-03`：静默跳过不是通过）"
+        )
     for sid, count in sorted(groups.items()):
-        if count < 2:
+        if count < min_count:
             violations.append(
-                f"solution_set {sid!r} 只有 {count} 组解 —— 欠定方程必须展示多组解"
-                "（Ch5 §B.1：否则会把某一解误当市场的唯一真相）"
+                f"solution_set {sid!r} 只有 {count} 组**可行**解 —— 下限 {min_count} 由 "
+                "`rules/valuation-methods.yaml::solution_set_display.must_show_multiple` 派生"
+                "（Ch5 §B.1：欠定方程必须展示多组解，否则会把某一解误当市场的唯一真相）"
             )
     notes: list[str] = []
+    # ★ 裁定 ③-2：下限这个参数**来自规则**还是**来自设计回落**，必须在 report 面可见
+    #   （`load_solution_set_display` 的 note 在此转发，不让"值其实来自回落"这件事静默）。
+    notes.extend(display.notes)
     if not groups:
-        notes.append(f"{NOTE_NO_IMPLIED_ROWS}: facts/implied_requirements.jsonl 无可用解集（非'已验证'）")
+        detail = [f"{len(rows)} 行"] if rows else ["真源无行"]
+        if missing_sid:
+            detail.append(f"{missing_sid} 行缺 solution_set_id")
+        if infeasible:
+            detail.append(f"{infeasible} 行 feasible=false")
+        notes.append(
+            f"{NOTE_NO_IMPLIED_ROWS}: facts/implied_requirements.jsonl 无**可用**解集"
+            f"（{'；'.join(detail)}）（非'已验证'）"
+        )
+    elif infeasible:
+        notes.append(
+            f"IMPLIED_INFEASIBLE_ROWS: 有 {infeasible} 行 feasible=false，不计入多解下限"
+            "（与 solver.check 同口径；计数可见，不静默）"
+        )
     return violations, notes, len(groups)
 
 
@@ -445,21 +492,37 @@ def _baseline_backfill_violations(root: Path) -> tuple[list[str], list[str]]:
 
     ★ 为什么不是关键词判据（`R-06 ①`）：判据的对照物是**本仓库真源里实际存在的解 id**
       （动态集合），不是"某几个词形"；换一种写法只要引用的还是那些 id，就照样命中。
+
+    ★ **第四轮（修 8）**：缺必填 `implied_id` 的行**不再静默排除**出黑名单 —— 该字段是
+      `schema.models.ImpliedRequirement` 的**必填**字段，缺它就是脏数据（且方向上是**漏报**：
+      少一个 id 就少一个该被拦住的引用）。★ 该违例**必须放在任何早退之前** ——
+      `baselines` 为空时下面会 `return`，放后面就会被**静默吞掉**（与 `valuation.check`
+      的 D-1 是同一形状的坑）。
     """
     from schema.store import read_records
 
-    implied_ids = {
-        str(row.get("implied_id"))
-        for row in read_records(root, "implied_requirements")
-        if row.get("implied_id")
-    }
+    implied_ids: set[str] = set()
+    missing_implied_id = 0
+    for row in read_records(root, "implied_requirements"):
+        iid = row.get("implied_id")
+        if not iid:
+            missing_implied_id += 1
+            continue
+        implied_ids.add(str(iid))
     baselines = read_records(root, "baselines")
     notes: list[str] = []
     violations: list[str] = []
+    if missing_implied_id:
+        violations.append(
+            f"facts/implied_requirements.jsonl 有 {missing_implied_id} 行**缺必填 `implied_id`** —— "
+            "这些行无法进入'反解 id 黑名单'，本判据对它们**没有管**"
+            "（`schema.models.ImpliedRequirement` 该字段必填；`G-03`：静默跳过不是通过）"
+        )
     if not baselines:
         notes.append(f"{NOTE_NO_BASELINE_ROWS}: facts/baselines.jsonl 无行（非'已验证'）")
     if not implied_ids:
-        notes.append(f"{NOTE_NO_IMPLIED_ROWS}: 无反解 id 可比对，本判据真空成立")
+        detail = f"（其中 {missing_implied_id} 行缺 implied_id）" if missing_implied_id else ""
+        notes.append(f"{NOTE_NO_IMPLIED_ROWS}: 无反解 id 可比对，本判据真空成立{detail}")
     if not (baselines and implied_ids):
         return violations, notes
 

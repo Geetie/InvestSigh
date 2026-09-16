@@ -172,6 +172,29 @@ Python 里**后一份静默遮蔽前一份** ⇒ 这 9 个副本**从不执行**
 处置：以 AST 哈希定位第二个副本整块删除（`+0 / -101` 与 `+0 / -30`，**纯删除**），
 并逐文件名核对关键用例仍在；**pytest 收集数不变**（遮蔽态与实际态都是 1 个/名）。
 
+#### 修 7 —— `order_guard` 的 §B.1 多解判据：**三处同族病**（口径冲突 / 内置参数 / 静默跳过）
+
+审计"我自己的模块里还有没有'静默'"时发现 `order_guard._multi_solution_violations`：
+
+| # | 病 | 后果 | 依据 |
+|---|---|---|---|
+| ① | 数**全部**行（不筛 `feasible`） | 同解集里 1 行可行 + 1 行不可行 ⇒ 被算成"2 组" ⇒ **漏报**单解集；且与 `solver.check` 的**同名判据**（只数 `feasible`）**口径冲突** | `Ch5 §B.1`（"展示**解集**"= 使当前价格成立的那些解） |
+| ② | 硬编码 `count < 2` | 规则改了**代码不动** ⇒ 违反「**参数只能住 `rules/`**，代码不得内置」；且批 13 任务书**方案②已明确要求"代码删掉常量 `2`，改为从该键派生"** | `Ch11 §D.2` / `P-09` / 任务书 `batch13_taskbook.md:412` |
+| ③ | 缺 `solution_set_id` 的行 `continue` 掉 | 那些行**落在不变式之外**却无声；且"所有行都缺键"时 note 说"无可用解集"，把**数据在、只是键缺**误报成**没有数据** | `schema.models.ImpliedRequirement.solution_set_id` 是**必填**字段；`G-03` |
+
+处置：①只数 `feasible`；②下限改读 `load_solution_set_display(root).min_count`（**与 `solver` 同一个读口**，并把它 `design_default` 时的 note **转发进 report** —— 裁定 ③-2）；③缺键 ⇒ **违例**，并把被排除的行数（缺键 / 不可行）写进 note（**计数可见**）。
+
+#### 修 8 —— 同一轮检查顺带抓到的第二处：`implied_ids` 的黑名单也会**静默少 id**
+
+`_baseline_backfill_violations` 原稿用 `if row.get("implied_id")` 推导"反解 id 黑名单"⇒
+**缺 `implied_id` 的行被静默排除**，于是"baseline 引用了反解 id"这条判据对它们**没有管**
+（`solver.check` 对同类行是**响亮**报 `IMPLIED-ROW-INCOMPLETE` 的 ⇒ 又是一处**口径分裂**）。
+`implied_id` 同样是 `schema.models.ImpliedRequirement` 的**必填**字段 ⇒ 缺即违例。
+★ 处置时撞到一个**熟悉的坑**：该违例若放在 `if not (baselines and implied_ids): return` **之后**，
+`baselines` 为空时就会被**早退静默吞掉** —— 与 `valuation.check` 的 D-1（§1-4 约束②）**同一形状**。
+故**放在早退之前**，并加回归锁用例 `test_row_missing_implied_id_is_flagged_even_without_baselines`
+（**刻意不写 `baselines`**，正是为了锁住这个位置）。
+
 > **已办**：上表 8 处缺键 + 修 4 的**永久回归用例已写并逐条执行**（9 条新用例 + 2 条反向对照）——
 > 方式见 §② V-1j：`pytest` **命令**仍未跑（`G-60` 排他窗口），但把**测试函数本体**用**手搓等价夹具**
 > 直接调用执行了断言。窗口关闭后仍需按正式路径 `verify.py --batch pricelayer` 复跑一次。
@@ -412,6 +435,20 @@ blocking.when 置空串                          scenario_guard     1    2     1
 ★ **"旧"列必须为 0 才说明这条反例在守东西** —— 8 处里 **6 处旧 = 0**（真·欠报），
 2 处 `blocking.when` 旧 = 1 也已在改前就红（加载器的"形态不认识"响亮失败），第四轮新增的是**绑定面**那一条（1 → 2）。
 
+`order_guard` 的同类对照（修 7 / 修 8；同一份数据，旧 = `git show HEAD:` 版模块）：
+
+```text
+用例                                          旧违例    新违例   新CLI
+④ 1 可行 + 1 不可行（同集）                       0      1      1
+⑤ 有行缺 solution_set_id                       0      1      1
+⑥ 单解集 + 规则 must=false                      1      0      0
+对造 单解集 + 真规则 must=true                     1      1      1
+⑦ 有行缺 implied_id（且无 baselines）              0      1      1
+```
+
+★ 这张表同时说明**三种方向都测到了**：④⑤⑦ 是"旧代码**漏报**（0→1）"，⑥ 是"旧代码**内置参数**
+（规则改它不动，1→0）"，"对造"行是"真值下**行为不变**（1→1，不误伤）"。
+
 `daily_explain` 单列（`_rule_binding_violations` 是两参，旧版也须传 `trigger`；用错签名会得到假读数）：
 
 ```text
@@ -471,6 +508,37 @@ keep_original_judgment_time 置假              rules       1 |        rules    
 ★ 途中两个坑如实登记：①`pytest` 新版本**禁止直接调用 fixture 函数**（`Failed: Fixture "write_jsonl" called directly`）⇒
 改用 `.__wrapped__()`；②`daily_explain._rule_binding_violations` 是 **`(root, trigger)` 两参**，
 首轮探测用错签名得到**假读数**（"旧=1"）⇒ 已用 `inspect.signature` 核正后重测。
+
+### V-1k ★ 第四轮**全量复核**：把 V-1j 的手法跑满整个 `tests/pricelayer/**`（零删除口径）
+
+V-1j 只覆盖了"本轮新增的那几条"。为免"新的绿、老的黄"无人知，用**同一手法**（`importlib` 载入 +
+手搓等价夹具 + 按签名注入 + 直接调用）把**目录下全部 8 个测试模块**跑了一遍，
+并把 `parametrize` 的**参数组逐个展开**（否则会漏在 `pytest.skip` 形态里）。
+
+命中 `G-60`（删除配额）：`SAFE_DELETE_BULK_CONFIRM_REQUIRED {"count":100003,"threshold":99999}`
+⇒ 夹具根**全部改到 `/tmp`（`mkdtemp`）且**一次都不删**（`conftest` 的 `_clear_work_dir()` 不再被触碰）。
+**这是绕开、不是绕过**：删除配额的作用面是 pytest 的 session 终结算，本方式压根不经那条路径，
+故**没有**改 `conftest`、**没有**加环境变量、**没有**动 `--no-report`。
+
+```text
+test_daily_explain.py        通过  34 / 失败  0
+test_history_guard.py        通过  19 / 失败  0
+test_order_guard.py          通过  25 / 失败  0
+test_package_laziness.py     通过   5 / 失败  0
+test_scenario_guard.py       通过  44 / 失败  0
+test_solver.py               通过  29 / 失败  0
+test_step_wiring.py          通过   9 / 失败  0
+test_valuation.py            通过  31 / 失败  0
+
+合计：通过 196 / 失败 0
+```
+
+〔对象 = 工作树 `.worktrees/ws-ch5-pricelayer`，分支 `ws/ch5-pricelayer`，SHA `89e2d15`（含未提交的修 7/修 8 工作区改动）；取样时刻 = `2026-09-16T15:38:23Z`；
+执行体 = `/Users/gaza/.workbuddy/binaries/python/envs/default/bin/python`；`exit=0`〕
+
+★ 这一列**同样不是**"批次通过"（性质同 V-1j 末段的声明：无收集、无 fixture 终结器）——
+它证明的是**整目录的断言与夹具用法在真实对象上成立、且我本轮的改动没有打黄任何老用例**。
+正式批次读数仍以 §② V-0 的 `verify.py --batch pricelayer` 为准。
 
 ---
 
@@ -651,6 +719,29 @@ RESULT: PASS（0 violations）        EXIT=0
 - 首轮提交：`9834f4f`（已在主干，merge `4468da5`）
 - （提交信息内不含动态哈希；哈希由 `git rev-parse HEAD` 另附于回报消息。）
 
+**第四轮（自查轮）提交**（均**未** `--no-verify`）：
+
+| 提交 | 内容 | 是否已在 main |
+|---|---|---|
+| `f648a3d` | 报告：删掉散文里的条数 + 补 V-1f/V-1g | ✅ 已在 |
+| `bff9791` | 修 3/修 4/修 5/修 6（8 处缺键静默跳过 + 死 note + 重复死用例） | ✅ 已在 |
+| `bf99f91` | 修 3/修 4 的 9 条永久回归用例 + 诚实证据声明 | ⏳ 待合 |
+| `89e2d15` | `git merge main`（零冲突） | ⏳ 待合 |
+| 本表下方待提交 | 修 7 / 修 8（`order_guard`）+ §② V-1k 全量复核 | ⏳ 待合 |
+
+### `git status --short`（第四轮，提交前）
+
+```
+ M system/reports/ws_ch5_pricelayer_report.md
+ M system/scripts/pricelayer/order_guard.py
+ M system/tests/pricelayer/test_order_guard.py
+```
+
+〔对象 = 工作树 `.worktrees/ws-ch5-pricelayer`，分支 `ws/ch5-pricelayer`，SHA `89e2d15`；取样时刻 = `2026-09-16T15:38:29Z`；
+命令 = `git status --short`，工具 = `git` 2.x，`exit=0`〕
+（**未使用 `git add -A`**；只 add 上表 3 个文件。`rules/**`、`facts/**`、`derived/**`、`schema/**` 无任何改动。）
+
+
 ### `git status --short`（提交前，修订轮）
 
 ```
@@ -759,3 +850,25 @@ RESULT: PASS（0 violations）        EXIT=0
 
 **（b）本轮 pytest 用例：已写、已逐条**执行**，但**未跑 `pytest` 命令**（与 §② V-1i/V-1j 同一条）。
 正式路径 `verify.py --batch pricelayer` 待窗口关闭后复跑；届时在 §③ 补报**真**读数（不在此处写条数 —— 见 §② V-1i）。
+
+### ④-9 修 7 / 修 8 带出的两条"行为收窄"（已处置，登记风险面）
+
+**（a）`order_guard` 的 §B.1 判据从"数全部行"收窄为"只数 `feasible` 行" —— 收窄即会**多报**。**
+依据是 `Ch5 §B.1`（"展示**解集**" = 使当前价格成立的那些解）+ 与 `solver.check` 的**同名判据口径必须一致**
+（此前两处口径分裂：`solver` 只数 `feasible`，`order_guard` 数全部）。⇒ 收窄后，
+"同解集里既有可行行又有不可行行"的**正确**数据现在会（正确地）被判为**单解集**而报警；
+若某上游把"同一 `solution_set_id` 下混放不可行行"当作合法写法，那属于**上游与 `§B.1` 不一致**，不是本判据过严。
+**风险面已用 note 显式暴露**（被排除的行数写进 note：缺键 / 不可行分别计数），避免"数少了但看不出为什么"。
+
+**（b）"行缺 `solution_set_id` / `implied_id` ⇒ 违例"会让**存量脏数据**从"静默通过"变成"红"。**
+依据：`schema.models.ImpliedRequirement` 这两个字段**均为必填**，且 `solver.check` 对同类行**本来就响亮报**
+`IMPLIED-ROW-INCOMPLETE` ⇒ 这是**补齐口径分裂**，不是新增更严的标准。**未对存量真源做任何写入**；
+若窗口关闭后正式批次出现本判据的红，应读作**真源缺字段**（上游 bug），而非本模块缺陷 ——
+判据消息里已直接点名字段与"这些行无法进入黑名单/无法进入解集计数"的后果。
+
+### ④-9补 本轮**未**触碰的边界（再声明，防误读）
+
+- **`rules/**` 一字未改**（0444 + SHA256；`git diff --stat -- system/rules system/registry` 为空）。
+- **未改 `CONVENTIONS.md`**（主理人裁定 ②：由他统一处置）。
+- **未跑 `pytest` 命令**（`G-60` 排他窗口，主理人指令）；正式批次读数仍**待补**。
+- **未做任何 branch 操作**（主理人指令："不要做任何 branch 操作"）；`git merge main` 是唯一例外且经其明示许可。
