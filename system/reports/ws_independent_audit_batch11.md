@@ -711,6 +711,8 @@ Grep 工具 pattern = 零命中        →  ws_degrade_contract_report.md:75/78/
 
 #### 新-1（**中高**）`G-44` 官方正例的 **step 6 半边**，其前提是一条 **schema 判为非法、且全仓无生产者**的基准行
 
+> ★ **编号更正（2026-09-17 00:1x 补，对象 `main@8f3298d`）**：我在回报里曾提议本条编号为 **`G-65`**。实测 **`G-65` 已被他人占用**（`a797b28 feat(#96): G-65 可见性修复`，落在 `scripts/ops/gate_set_diff.py` / `pre-commit.sh` / `tests/guards/test_gate_set_visibility.py`）。`git grep -l "G-6x\b" HEAD -- system/` 实测：**`G-65` 占用；`G-66`/`G-67`/`G-68`/`G-69` 均空**。⇒ **本条建议改用 `G-68`**；另两条（`run_decide.py:462-463` 死代码 → **`G-66`**；`traceback.py:163` 认非真源 → **`G-67`**，本报告 §⑫ 已在用）不冲突。编号以 team-lead 裁定为准。
+
 证据链（每条都有独立复算）：
 
 1. **官方 seed 补的那个字段不在冻结模型里**：`test_step56_skipped_wiring.py:77` 写 `benchmark["security_id"]="usAGIX"`。
@@ -1101,6 +1103,13 @@ bef9628 feat(rules)+docs: R8-3 收口 —— (1) solution_set_display 增语义�
 
 - **触发**：team-lead 采纳"时效核对件"为常态并立 **`V-11` 规矩 5**（机制改**内容级**）+ **规矩 9**（引用位置/数字须**指真源符号**，给数字则须紧跟"（当时读数）"）。规矩 5 我只做到**文件级**（`git diff --quiet <SHA> HEAD -- <f>`），规矩 9 我**一条都没做**。本轮是我在**没有裁判要求的情况下**自己按规矩 9 回头审自己。
 - **对象与取样时刻**：工作树 `main` @ **`af20ebc83dc1798d5c4dec738b64ccece23bfd3a`**（`git rev-parse HEAD` 实测），取样 **2026-09-17 00:08:21 CST–00:2x CST**。工作树唯一改动 = 本报告（`git status --short` = ` M system/reports/ws_independent_audit_batch11.md`）。
+- **时效核对件（`V-11` 规矩 5，内容级）**：本节写完时 HEAD 已推进到 **`8f3298d`**（12 条提交，改动面 = `CONVENTIONS.md` / `ops/{gate_set_diff.py,pre-commit.sh,verify.py}` / `tests/guards/*` / 两份报告 —— **不含本节的任何锚点文件**）。逐文件实测：
+  ```
+  git diff --quiet af20ebc HEAD -- system/scripts/daily/degrade.py        → rc=0 ✅ 内容未变
+  git diff --quiet af20ebc HEAD -- system/scripts/tasks/gap_to_task.py    → rc=0 ✅ 内容未变
+  git diff --quiet af20ebc HEAD -- system/scripts/delivery/stage_gate.py  → rc=0 ✅ 内容未变
+  ```
+  ⇒ 本节给出的 `degrade.py:184` / `:152` / `:129`、`gap_to_task.py:66` / `:83` / `:315`、`stage_gate.py:600` **在 `main@8f3298d` 上依然成立**。★ 但按本节二·补的教训，**"现在成立"不等于"永远成立"** —— 下一次有人改这三个文件时，锚点必须重取；这也是我坚持写**符号**而非行号的原因。
 - **仪器**（全部在 `/tmp/investsigh-audit-b11/`，零写入被审树）：`citesweep2.py`（按 basename 建索引 + 逐条判"文件在否/行在否"+ 打出该行原文）、`drift.py`（把每条引用的**当前行文本**回搜"当时版本 blob"，给出**当时读数 → 现读数**）、`linecheck.py`（对带语义锚点的引用做**断言式**对拍）。
 
 ### 一、结果 A：97 条引用**全部**解析成功 —— 但**这不等于语义正确**
