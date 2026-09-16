@@ -20,6 +20,11 @@ python system/scripts/daily/degrade.py [code_root] --scope full --run-date YYYY-
    `parent_context.degraded=true` + `gaps`（来自 `RunResult.gaps`）；
 3. **幂等**：同一 `(run_date, scope)` 只落一条（键 `degrade::<date>::<scope>`）。
 
+★ **"上次有效结果"的判定只有一份**（`G-45` 收口）：原语 `is_valid_run_record()`
+  + 由它派生的 `last_valid_result_ref()`（写路径据此填引用）与 `holds_valid_result()`
+  （阶段④"首日豁免"据此判定，`scripts/delivery/stage_gate.py` **import 本模块**，
+  不再自持一套）。此前两处口径相反 —— 同一批行一个说"有"、一个说"无"。
+
 ★ **追加式不可变**（`Ch9 §3.4.2` 纪律 4）：唯一写路径是 `schema.store.append_records`；
   本模块**不做** UPDATE / DELETE。
 ★ 写路径断言（`Ch8 §E.4`）：`assert_no_null_overwrite` / `assert_not_labeled_latest`
@@ -76,11 +81,71 @@ def run_gaps(result: Any) -> list[str]:
     return [str(g) for g in (getattr(result, "gaps", None) or [])]
 
 
+def is_valid_run_record(row: Mapping[str, Any]) -> bool:
+    """该行是否**一条成功的运行记录** —— "上次有效结果"的**唯一原语**（`G-45` 收口）。
+
+    判据（`Ch8 §E` / `§E.2`）：
+
+    1. 带 `check_record`（只有运行记录才有可被引用的 `check_id`）；
+    2. `status != "failed"`（本次运行没有失败）；
+    3. `check_record.degraded` 为假（**降级运行的结果不是"有效结果"** —— 它本身就是在
+       声明"本次结果不完整，请用上一次的"）。
+
+    ★ **本函数是全仓库"上次有效结果"的唯一判定原语**：`last_valid_result_ref()`（定位该引用）
+      与 `holds_valid_result()`（判定豁免）都建在它之上。此前 `stage_gate._holds_valid_result()`
+      **另写了一套**（`output_refs` 口径）⇒ 同一批行两个模块给出**相反结论**（`G-45`）。
+    """
+    record = row.get("check_record")
+    if not isinstance(record, Mapping):
+        return False
+    return row.get("status") != "failed" and not record.get("degraded")
+
+
+def holds_valid_result(row: Mapping[str, Any]) -> bool:
+    """该行是否**持有有效结果** —— 阶段④"首日豁免"判定的**唯一真源**（`G-43` / `G-45`）。
+
+    三条载体取**并集**（相对 `stage_gate` 旧口径与 `degrade` 旧口径**只增不减**，不放松）：
+
+    | 载体 | 判据 | 来源 |
+    |---|---|---|
+    | ① | `last_valid_result_ref` 非空 | `stage_gate` 旧口径 —— 降级链上的**显式引用**：前序行已经证明"引用是能保留的" |
+    | ② | `is_valid_run_record(row)` | `degrade` 旧口径 —— **一次成功的运行**（这正是消掉 `G-45` 分歧的那一条） |
+    | ③ | `status == "done"` 且 `output_refs` 非空 | `stage_gate` 旧口径 —— 正常完成且**真的产出了对象** |
+
+    ★ **为什么必须有 ②**（本单的核心修复，`G-43`）：写入方 `pipeline._write_check_record()`
+      原先**两个载体都不填**，于是 ①③ 在生产数据上**恒为假** ⇒ 本谓词**恒 False**
+      ⇒ `any(prior)` 恒 False ⇒ **每一个失败行都被当成"首日"豁免** ⇒
+      判据"降级保留上次有效结果"**空转、从不报任何真违规**。
+      补上 ② 后，"此前有过一次成功运行"这件事**不再依赖任何未被填写的字段**。
+
+    ★ **② 为什么不看 `output_refs`**：`Ch1 §D.3` 的反 KPI 明确"无变化日**不产信号**"，
+      故无变化日的产出**合法为空**；但那次运行**仍是一次有效结果**（它完成了核查）。
+      若把"产出为空"排除在有效结果之外，则"成功但无新增"的日子一过，
+      下一次失败就会被误判成首日 —— 那正是 `G-43` 的同一形态（换个字段复发）。
+
+    ★ **③ 为什么保留**：它是 `stage_gate` 的既有载体，删掉即**放松**判据（`R-06`：只增不减）。
+      它当前无生产写入点（`output_refs=` 在本单之前全仓库零个生产赋值点，`G-45`），
+      保留它的代价为零，收益是"将来有别的写入方按旧口径填 `output_refs` 时不被漏掉"。
+    """
+    if row.get("last_valid_result_ref"):
+        return True
+    if is_valid_run_record(row):
+        return True
+    return row.get("status") == "done" and bool(row.get("output_refs"))
+
+
 def last_valid_result_ref(root: str | Path, *, scope: str = "full") -> str | None:
     """上一次**成功**运行的 `check_id`，作为"上次有效结果"的引用。
 
     判据（`Ch8 §E`）：取 `facts/tasks.jsonl` 内带 `check_record` 的行中，
-    **降级为假且状态非 `failed`** 的**最后一条**。无 → `None`（**如实为空**）。
+    **满足 `is_valid_run_record()`**（= 降级为假且状态非 `failed`）的**最后一条**
+    （`facts/tasks.jsonl` 追加式不可变 ⇒ **行序即时序**）。无 → `None`（**如实为空**，`G-03`）。
+
+    ★ 这里**只**用 `is_valid_run_record()`，**不**用 `holds_valid_result()` 的并集：
+      本函数的返回值是**可被引用的 `check_id`**，而并集的载体 ① 是一条**失败行自带的指针**
+      （它自己的 `check_id` 不是有效结果）。二者分工：本函数答"**该指向谁**"，
+      `holds_valid_result()` 答"**结构上是否可能存在可保留的结果**"，
+      且后者 ⊇ 前者所用的原语（不会比前者更弱）。
     """
     from schema.store import read_records
 
@@ -91,7 +156,7 @@ def last_valid_result_ref(root: str | Path, *, scope: str = "full") -> str | Non
             continue
         if str(row.get("scope") or record.get("scope") or "") not in ("", scope):
             continue
-        if row.get("status") == "failed" or record.get("degraded"):
+        if not is_valid_run_record(row):
             continue
         check_id = record.get("check_id")
         if check_id:

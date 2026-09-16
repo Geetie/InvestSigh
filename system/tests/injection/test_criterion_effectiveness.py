@@ -30,7 +30,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import SYSTEM_ROOT, run_gate_inproc
+from conftest import SYSTEM_ROOT, run_gate_inproc, write_check_records
 
 GATE = "scripts/delivery/stage_gate.py"
 GUARD = "scripts/checks/criterion_effectiveness_guard.py"
@@ -47,6 +47,26 @@ _FATAL = "[FATAL]"
 def _write_jsonl(root: Path, stem: str, rows: list[dict]) -> None:
     (root / "facts" / f"{stem}.jsonl").write_text(
         "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8"
+    )
+
+
+def _drop_last_valid_ref(root: Path, task_id: str) -> None:
+    """**违约注入**：把真实写入行的 `last_valid_result_ref` 抹成 `null`（`Ch8 §E.4` 禁止的置空）。
+
+    ★ 违约只加在**被注入的那一行**上；其余行都是真实写路径的产物 ——
+      这与"手工拼一个生产写不出来的形状"有本质区别（后者是**夹具造假**）。
+    """
+    path = root / "facts" / "tasks.jsonl"
+    rows = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    hit = False
+    for row in rows:
+        if row.get("task_id") == task_id:
+            row["last_valid_result_ref"] = None
+            hit = True
+    assert hit, f"注入点不存在: {task_id}"
+    path.write_text(
+        "".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in rows),
+        encoding="utf-8",
     )
 
 
@@ -100,9 +120,14 @@ def _daily_compliant(root: Path) -> None:
 
     ★ 这份输入下阶段④ **`exit 0`** —— 故阶段④ 的反例具备完整判别力归因
       （红了就是该判据干的，不是别的判据顺带变红）。
+
+    ★★ 运行记录行由**真实写路径**产出（`conftest.write_check_records`），**不手工拼字段形状** ——
+      这是 `G-43` / `G-45` 的直接教训：审计实测的手工夹具（`status=done` +
+      `output_refs=["rec-1"]`）**与生产写出形状不同源**（`_write_check_record()` 当时
+      两个字段都不填），于是"判据空转"在夹具上完全看不出来。夹具与真形状必须同源（`G-06`）。
     """
     _write_jsonl(root, "companies", [{"company_id": "co_1", "research_depth": "position_listed"}])
-    _write_jsonl(root, "tasks", [_task("check_1", "done", output_refs=["rec-1"])])
+    write_check_records(root, [{"produced": ["rec-1"]}])
 
 
 def _task(task_id: str, status: str, **kw) -> dict:
@@ -299,18 +324,26 @@ def test_daily_run_timing_replayable_blocks_on_missing_run_date(code_root: Path)
 
 
 def test_daily_run_degrade_keeps_last_valid_blocks_on_dropped_ref(code_root: Path) -> None:
-    """`degrade_keeps_last_valid` 反例：先有有效产出、后失败却丢引用 → 必须红。"""
+    """`degrade_keeps_last_valid` 反例：先有有效产出、后失败却丢引用 → 必须红。
+
+    ★★ **本反例的输入由真实写路径产出**（`G-43` / `G-45` 的教训）：
+      原先手工拼 `[_task("check_1","done",output_refs=["rec-1"]), _task("check_1_r1","failed")]` ——
+      那个"成功行"形状**生产代码从未写出过**，于是它对判据的判别力是**假的**
+      （审计实测：真实形状 `[done + output_refs=[] + ref=null, failed]` ⇒ **一条真违规都不报**）。
+      现在：成功行 / 失败行都由 `pipeline._write_check_record()` 写出，
+      再对失败行做**定向违约注入**（把已填好的 `last_valid_result_ref` 抹成 null）。
+    """
     _daily_compliant(code_root)
     assert _gate(code_root, "daily_run")[0] == 0
 
-    _write_jsonl(
-        code_root,
-        "tasks",
-        [
-            _task("check_1", "done", output_refs=["rec-1"]),
-            _task("check_1_r1", "failed"),
-        ],
+    rows = write_check_records(code_root, [{"blocked": True, "degraded": True}])
+    bad_row = rows[-1]
+    assert bad_row["last_valid_result_ref"] is not None, (
+        "真实写路径**必须**在失败行上填出上一次成功运行的引用（`Ch8 §E.2`）——\n"
+        f"若此处为 None，说明写路径没补契约，本反例就又变成'空转'的了：{bad_row}"
     )
+    _drop_last_valid_ref(code_root, bad_row["task_id"])
+
     code, out = _gate(code_root, "daily_run")
     assert code == 1, out
     assert "失败但未保留 last_valid_result_ref" in out, out

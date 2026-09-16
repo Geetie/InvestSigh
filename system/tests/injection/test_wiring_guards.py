@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from conftest import SYSTEM_ROOT, assert_rejected, run_gate
+from conftest import SYSTEM_ROOT, assert_rejected, run_gate, write_check_records
 
 REGISTRY_GUARD = "scripts/checks/registry_schema_guard.py"
 GATE = "scripts/delivery/stage_gate.py"
@@ -197,61 +197,123 @@ def test_unimplemented_criteria_are_listed_as_notes(code_root: Path) -> None:
 # ★ 故本节的断言**必须落在"豁免计数"上**，只断言"没有违例"是不够的 ——
 #   豁免生效 与 判据根本没跑 都表现为"没有违例"，两者观测量相同（与 `G-03` 同源：
 #   没有可观测的证据，就不等于已验证）。
+#
+# ★★ **本节的夹具在批次 11 独立审计中被判为"跟真数据不同源"**（`G-43` / `G-45`）：
+#   旧夹具手工拼行 —— `_done_task_with_output()` 给 `output_refs=["rec-nvda-001"]`，
+#   而**生产代码从未写出过那个形状**：`_write_check_record()` 当时**两个字段都不填**，
+#   真行恒为 `output_refs=[]` / `last_valid_result_ref=None`。
+#   ⇒ 谓词在**夹具上**为 True、在**真数据上**恒 False：
+#     夹具全绿，判据在真数据上**空转、从不报任何真违规**。
+#   现一律改走**唯一写入方** `conftest.write_check_records()`
+#   （= `Pipeline._write_check_record`，真实字段形状，`G-06` 不造第二套）。
+#   需要"契约被破坏"的形态时，对**真实写入的行**做**定向篡改**（删掉引用）——
+#   篡改是**违约注入**，不是夹具造假（`§5.1 AC-04`：注入即必须 exit 非零）。
 
 _DAY = "2026-09-16"
 
 
-def _check_task(task_id: str, *, status: str, last_valid: str | None = None) -> dict:
-    """一条 `verify` 任务行（含 `check_record`），字段形状与 `_write_check_record()` 一致。"""
-    return {
-        "task_id": task_id,
-        "task_type": "verify",
-        "status": status,
-        "idempotency_key": f"check::{task_id}",
-        "parent_context": {"orchestrator": "pipeline.run_daily"},
-        "last_valid_result_ref": last_valid,
-        "output_refs": [],
-        "check_record": {
-            "check_id": task_id,
-            "run_date": _DAY,
-            "changed": False,
-            "judgment_change": {},
-            "signals_emitted": 0,
-            "degraded": False,
-        },
-    }
+def _tasks_path(code_root: Path) -> Path:
+    return code_root / "facts" / "tasks.jsonl"
 
 
-def _done_task_with_output(task_id: str) -> dict:
-    """一条**正常完成且持有产出**的行。
-
-    ★ 它**没有** `last_valid_result_ref`（那是降级链才有的字段）。若"是否持有有效结果"
-      只看那一个字段，本行就会被误判成"没有有效结果"→ 后续失败行被**误豁免** → 漏报。
-      这正是 `_holds_valid_result()` 取**两载体并集**的理由。
-    """
-    return {
-        "task_id": task_id,
-        "task_type": "verify",
-        "status": "done",
-        "idempotency_key": f"check::{task_id}",
-        "parent_context": {"orchestrator": "pipeline.run_daily", "run_date": _DAY},
-        "output_refs": ["rec-nvda-001"],
-    }
-
-
-def _write_tasks(code_root: Path, rows: list[dict]) -> None:
-    (code_root / "facts" / "tasks.jsonl").write_text(
-        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8"
+def _drop_last_valid_ref(code_root: Path, task_id: str) -> None:
+    """**注入违约**：把真实写入的某行 `last_valid_result_ref` 抹成 `null`（`Ch8 §E.4` 禁止的置空）。"""
+    rows = [json.loads(l) for l in _tasks_path(code_root).read_text(encoding="utf-8").splitlines() if l.strip()]
+    hit = False
+    for row in rows:
+        if row.get("task_id") == task_id:
+            row["last_valid_result_ref"] = None
+            hit = True
+    assert hit, f"注入点不存在: {task_id}（行未被真实写路径写出？）"
+    _tasks_path(code_root).write_text(
+        "".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n" for r in rows),
+        encoding="utf-8",
     )
 
 
+def test_write_path_fills_last_valid_ref_and_output_refs(code_root: Path) -> None:
+    """★ **写路径补齐契约**（`G-43` 的根因那一半）：成功 / 失败两种运行写出的**真行**长什么样。
+
+    这条断言不跑门禁，直接看**真源里被写出的字段** —— 因为缺陷的本质是
+    "谓词改了、真数据里字段仍是空的"（"改完就信"）。
+    """
+    rows = write_check_records(
+        code_root,
+        [
+            {"produced": ["obj-1", "obj-2"]},                       # 成功运行
+            {"blocked": True, "degraded": True},                    # 失败 / 降级运行
+            {"produced": []},                                       # 有效但**无新增产出**的运行
+        ],
+    )
+    ok, bad, noop = rows[0], rows[1], rows[2]
+    cid = ok["check_record"]["check_id"]
+
+    # ① 成功运行：`last_valid_result_ref` 为空（本次结果**就是**有效结果，无需保留旧引用）；
+    #    `output_refs` = 本轮真正新写入的对象引用（**不再恒为空**）
+    assert (ok["status"], ok["last_valid_result_ref"], ok["output_refs"]) == ("done", None, ["obj-1", "obj-2"]), ok
+    # ② 失败运行：**必须保留上一次成功运行的引用**（`Ch8 §E.2`："失败时指向旧结果"）；
+    #    本次**不产有效结果** ⇒ `output_refs` 如实为空（不得把部分写入冒充有效产出）
+    assert (bad["status"], bad["last_valid_result_ref"], bad["output_refs"]) == ("failed", cid, []), bad
+    # ③ 无新增产出的**成功**运行：`output_refs` 合法为空，但它**仍是一次有效结果**
+    #    （`Ch1 §D.3`：无变化日不产信号）—— 故 `last_valid_result_ref=None` 不等于"没有有效结果"
+    assert (noop["status"], noop["last_valid_result_ref"], noop["output_refs"]) == ("done", None, []), noop
+
+    # ④ 谓词的**两载体之一**（"一次成功的运行"）在上述真实形状上必须为真 ——
+    #    旧谓词（`last_valid_result_ref` ∪ `done∧output_refs`）对 ①②③ **全是 False**。
+    from scripts.daily.degrade import holds_valid_result, last_valid_result_ref
+
+    assert holds_valid_result(ok) is True, "成功运行行必须被认成'持有有效结果'（真实形状）"
+    assert holds_valid_result(noop) is True, (
+        "**无新增产出**的成功运行行也必须被认成'持有有效结果' —— "
+        "否则'成功但无新增'的日子一过，下一次失败就会被误判首日（G-43 换字段复发）"
+    )
+    assert holds_valid_result(bad) is True, "失败行已保留引用 ⇒ 它自身也持有有效结果"
+    # ⑤ 而"该指向谁"由**追加序 + 只认成功运行**决定：第 2 次失败时指向**当时**最后一次成功运行
+    #    （= row1），此后又成功一次 ⇒ 现在指向 row3。链式保留不"记住旧值"，也不跳过错行。
+    assert bad["last_valid_result_ref"] == cid, bad
+    assert last_valid_result_ref(code_root, scope="full") == noop["check_record"]["check_id"]
+
+
+def test_audit_counterexample_real_shape_is_now_caught(code_root: Path) -> None:
+    """★★ **审计反例（`G-43`）必须从"拦不住"变成"拦得住"** —— 用**真实字段形状**构造。
+
+    审计实测的反例形状 = `[done + output_refs=[] + last_valid_result_ref=null, failed]`
+    （**这正是 `_write_check_record()` 写出的真形状**）。
+    修复前：`degrade_first_day_exempt=1`、预期的那条真违规 FATAL **一条不报**（判据空转）。
+    修复后：必须 `exit=1` 且命中"失败但未保留 last_valid_result_ref"，豁免计数为 0。
+
+    ★ 成功行**不做任何手工拼装**：`produced=[]` 的"成功运行"由真实写路径写出
+      （`output_refs=[]` 是它的**合法**真形状）。违约只加在失败行上（删引用）。
+    """
+    rows = write_check_records(code_root, [{"produced": []}, {"blocked": True, "degraded": True}])
+    ok_row = rows[0]
+    assert ok_row["status"] == "done" and ok_row["output_refs"] == [], ok_row
+    assert ok_row["last_valid_result_ref"] is None, ok_row
+    _drop_last_valid_ref(code_root, rows[1]["task_id"])
+
+    proc = run_gate(GATE, code_root, "--stage", "daily_run")
+    assert proc.returncode == 1, (
+        "真实字段形状下 '此前有成功运行、失败却未保留引用' 必须 FATAL\n" + proc.stdout
+    )
+    assert "失败但未保留 last_valid_result_ref" in proc.stdout, proc.stdout
+    assert "degrade_first_day_exempt: 0" in proc.stdout, proc.stdout
+
+
 def test_first_day_degrade_exemption_is_effective_and_counted(code_root: Path) -> None:
-    """★ 首日降级（此前**无**任何行持有有效结果）→ 豁免，且**计数必须可见且 > 0**。"""
-    _write_tasks(code_root, [_check_task("check_d1_full", status="failed")])
+    """★ 首日降级（此前**无**任何行持有有效结果）→ 豁免，且**计数必须可见且 > 0**。
+
+    ★ 反向对照的另一半：`rows_holding_valid_result: 0` 与 `degrade_first_day_exempt: 1`
+      **同时**出现才说明"豁免是因为结构上不可能保留"，
+      而不是"谓词恒 False ⇒ 人人豁免"（后者两个计数会是 `1` / `0`，此处可区分）。
+    """
+    write_check_records(code_root, [{"blocked": True, "degraded": True}])
     proc = run_gate(GATE, code_root, "--stage", "daily_run")
     assert "degrade_first_day_exempt: 1" in proc.stdout, (
         "首日豁免必须**实际生效**且计数可见 —— 计数恒 0 意味着豁免分支根本没进（死代码）。\n"
         f"{proc.stdout}"
+    )
+    assert "rows_holding_valid_result: 0" in proc.stdout, (
+        "首日必须**没有任何行**持有有效结果（否则'豁免'就不是结构性的，而是漏判）\n" + proc.stdout
     )
     assert "失败但未保留 last_valid_result_ref" not in proc.stdout, proc.stdout
 
@@ -263,13 +325,11 @@ def test_degrade_violation_fires_when_a_prior_result_exists(code_root: Path) -> 
       按日期判定会把失败行当成"首日"而豁免 —— 那是**漏报真违规**。
       按**追加序**判定则不受同日重跑影响。
     """
-    _write_tasks(
+    rows = write_check_records(
         code_root,
-        [
-            _done_task_with_output("check_d1_full"),
-            _check_task("check_d1_full_r1", status="failed"),
-        ],
+        [{"produced": ["rec-nvda-001"]}, {"blocked": True, "degraded": True}],
     )
+    _drop_last_valid_ref(code_root, rows[1]["task_id"])
     proc = run_gate(GATE, code_root, "--stage", "daily_run")
     assert "失败但未保留 last_valid_result_ref" in proc.stdout, (
         "此前已完成并持有产出 ⇒ 引用本该在却被丢掉，必须 FATAL\n" + proc.stdout
@@ -280,15 +340,17 @@ def test_degrade_violation_fires_when_a_prior_result_exists(code_root: Path) -> 
 def test_failed_row_that_kept_ref_does_not_exempt_the_next_one(code_root: Path) -> None:
     """前序**失败但保留了引用**的行同样算"持有有效结果" → 紧随其后的失败行**不得**豁免。
 
-    这是 `_holds_valid_result()` 的第二个载体（`last_valid_result_ref`）的判别力来源。
+    这是 `holds_valid_result()` 的载体①（`last_valid_result_ref`）的判别力来源：
+    前序行**已经证明"引用是能保留的"**，故后续失败行丢引用不可归因于"当时无引用可保留"。
     """
-    _write_tasks(
+    rows = write_check_records(
         code_root,
-        [
-            _check_task("check_d1_full", status="failed", last_valid="rec-nvda-001"),
-            _check_task("check_d1_full_r1", status="failed"),
-        ],
+        [{"produced": ["rec-nvda-001"]}, {"blocked": True, "degraded": True},
+         {"blocked": True, "degraded": True}],
     )
+    # 第 2 行（真实写路径）**保留了引用** —— 先断言它确实保留了，再注入第 3 行违约
+    assert rows[1]["last_valid_result_ref"] == rows[0]["check_record"]["check_id"], rows[1]
+    _drop_last_valid_ref(code_root, rows[2]["task_id"])
     proc = run_gate(GATE, code_root, "--stage", "daily_run")
-    assert "check_d1_full_r1 失败但未保留 last_valid_result_ref" in proc.stdout, proc.stdout
+    assert f"{rows[2]['task_id']} 失败但未保留 last_valid_result_ref" in proc.stdout, proc.stdout
     assert "degrade_first_day_exempt: 0" in proc.stdout, proc.stdout

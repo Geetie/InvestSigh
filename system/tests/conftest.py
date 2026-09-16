@@ -557,3 +557,44 @@ def assert_rejected(proc: GateResult, *, rule_hint: str = "") -> None:
     )
     if rule_hint:
         assert rule_hint in combined, f"输出中未出现期望的规则标记 {rule_hint!r}。\n输出:\n{combined}"
+
+
+def write_check_records(root: Path, runs: list[dict]) -> list[dict]:
+    """用**真实写路径**（`Pipeline._write_check_record`）往 `<root>/facts/tasks.jsonl` 追加运行记录。
+
+    `runs` 每项支持：`run_date`（默认 `"2026-09-16"`）/ `scope` / `produced`（本轮**真正新写入**
+    的对象引用）/ `blocked` / `degraded` / `judgment_change` / `signals_emitted`。
+
+    ★★ **为什么测试必须走真实写路径**（缺陷 `G-43` / `G-45` 的教训 —— **夹具本身曾是缺陷的一部分**）：
+      旧夹具手工拼 `{"status": "done", "output_refs": ["rec-nvda-001"]}`，而这个形状
+      **生产代码从未写出过**（`_write_check_record()` 当时**两个字段都不填** ⇒ 真行恒为
+      `output_refs=[]` / `last_valid_result_ref=None`）。于是「首日豁免」的谓词在**夹具上**为 True、
+      在**真数据上**恒 False —— **测试全绿，判据在真数据上空转**（独立审计批次 11 实测）。
+      故夹具与真实字段形状必须**同源**：由**唯一写入方**产出，不手工造第二套形状（`G-06`）。
+    """
+    from scripts.orchestrate.pipeline import Pipeline, RunResult, StepResult
+
+    pipe = Pipeline(root, config={"steps": []})
+    for spec in runs:
+        res = RunResult(
+            run_date=str(spec.get("run_date", "2026-09-16")),
+            scope=str(spec.get("scope", "full")),
+            blocked=bool(spec.get("blocked", False)),
+            degraded=bool(spec.get("degraded", False)),
+            judgment_change=dict(spec.get("judgment_change", {})),
+            signals_emitted=int(spec.get("signals_emitted", 0)),
+        )
+        produced = [str(x) for x in spec.get("produced", [])]
+        # ★ 只用**一个**步结果承载 produced：本辅助函数关心的是"任务行"的字段形状，
+        #   不是 8 步各自的产物（那是 `tests/injection/test_chain_steps_wiring.py` 的范围）。
+        res.steps = [
+            StepResult(
+                1, "ingest_public_information",
+                "failed" if res.blocked else "ok",
+                produced=produced,
+            )
+        ]
+        pipe._write_check_record(res)
+    from schema.store import read_records
+
+    return read_records(root, "tasks")
