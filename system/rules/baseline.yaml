@@ -55,8 +55,9 @@ form_completeness:
   entry: form_complete                     # §G.2 代码块函数名逐字
   guard: scripts/valuelayer/completeness.py
   sections: ["①业务与产业位置", "②增长驱动", "③增长确定性", "④护城河", "⑤财务与估值", "⑥价格与行动"]   # §G.1 六项深度名称逐字
-  require_locator_at_least: 1              # §G.2 代码 `has_locator(baseline) >= 1`
-  require_derivation_at_least: 1           # §G.2 代码 `has_derivation(baseline) >= 1`
+  # ★ 定位数 / 推导数的最小值**不在此处重复** —— 唯一存放处 = 上面 `thresholds.min_locator_count` /
+  #   `thresholds.min_derivation_count`（`G-06` 单一真源：同一事实不要两个存放处）。
+  #   `§G.2` 代码 `has_locator(baseline) >= 1` / `has_derivation(baseline) >= 1` 的 `1` 即取自上两键。
   require_cross_section_consistent: true   # §G.2 代码 `cross_section_consistent(baseline)`；表格「跨节引用一致（驱动出现在财务连接里）」
   failed_items_reported: true              # §G.2 代码 `return CheckResult(passed=all(checks), failed=[...])`
 
