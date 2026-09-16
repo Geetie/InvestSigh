@@ -44,7 +44,18 @@ from scripts._common import (  # noqa: E402
 
 VERIFY_RELPATH = "scripts/ops/verify.py"
 RUN_PYTEST_RELPATH = "scripts/ops/run_pytest.sh"
-BROKER_ENV_VARS = ("CODEBUDDY_SAFE_DELETE_SANDBOX", "CODEBUDDY_BROKERED_FS_HOOK_ENABLED")
+BROKER_ENV_VARS = (
+    "CODEBUDDY_SAFE_DELETE_SANDBOX",
+    "CODEBUDDY_BROKERED_FS_HOOK_ENABLED",
+    # ★ 第三道闸门（`E` 裁定，(甲) 合法配置）：**安全删除本身**的开关。
+    # 前两个关掉后，每次删除仍会 spawn 一次 node CLI（见 `G-60`）⇒
+    # 夹具批次照样打穿宿主**回合级**删除预算（`V-08`/`V-09`）。
+    # 本变量由**用户环境**置 0；把 `0` 显式写进本仓的两处派生子进程环境，
+    # 是让「验证子进程一律在沙箱外跑」这句**声明**与**实现**一致
+    # （此前只关了前两个 ⇒ 声明没追上实现，`T-18` 同族）。
+    # `E` 下即**生产/门禁口径**（CI 亦然），故这不是"绕过"。
+    "CODEBUDDY_SAFE_DELETE_ENABLED",
+)
 MAX_TIMEOUT_S = 300.0
 TIMEOUT_EXIT_CODE = 124
 

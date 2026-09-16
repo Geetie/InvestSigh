@@ -689,6 +689,9 @@ def _rule_binding_violations(root: Path) -> list[str]:
     | ④ | `assumption_grid.solver_ref` 指向**本模块**（改名即违例） | `§B.3` / `§I.2` |
 
     ★ ②③ 即主理人裁定 ③-3：**断言"回落值 == 真文件里的值"** ⇒ 让"规则改了、回落没改"变红。
+    ★ **"缺键"本身即违例**（②③④ 一律先判"键在不在"，再判"值对不对"）：这四个键在真文件里
+      **都存在** ⇒ 删键意味着该事实从规则面消失、代码却仍按回落值行事。写成"无可比对象
+      故跳过"就是门禁**欠报**（`G-03`："跳过不是通过"）。
     ★ 规则文件不存在 → 返回空（另有 note 面，**不**当已核）。
     """
     from scripts._common import _cached_yaml
@@ -706,45 +709,75 @@ def _rule_binding_violations(root: Path) -> list[str]:
             )
 
     node = doc.get(RULE_KEY_SOLUTION_SET_DISPLAY)
-    if isinstance(node, Mapping):
-        declared_default = node.get(RULE_KEY_DEFAULT_COUNT)
-        declared_max = node.get(RULE_KEY_MAX_COUNT)
-        if declared_default is not None and int(declared_default) != DEFAULT_DISPLAY_CAP:
+    if RULE_KEY_SOLUTION_SET_DISPLAY in doc and not isinstance(node, Mapping):
+        violations.append(
+            f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY} 形态非法（应为映射，"
+            f"实为 {type(node).__name__}）—— 展示口径不可判定，不得静默跳过（G-03）"
+        )
+    elif isinstance(node, Mapping):
+        # ★ **缺键 ⇒ 违例**（不是"无可比对象故跳过"）：真文件里三个键**都存在** ⇒ 删键等于
+        #   "展示多少组"从规则面消失、而代码仍按回落值展示。若此处跳过，门禁即**欠报**
+        #   （`G-03`："跳过不是通过"）。
+        for sub_key, code_default, why in (
+            (RULE_KEY_DEFAULT_COUNT, DEFAULT_DISPLAY_CAP, "B18：默认展示组数"),
+            (RULE_KEY_MAX_COUNT, MAX_DISPLAY_CAP, "B18：展示硬上限"),
+        ):
+            if sub_key not in node:
+                violations.append(
+                    f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}.{sub_key} 缺失 "
+                    f"—— 缺键本身即违例（Ch11 §D.2）：{why}将静默退化为代码回落值 "
+                    f"{code_default}（无从核对）"
+                )
+        if RULE_KEY_DEFAULT_COUNT in node:
+            declared_default = node[RULE_KEY_DEFAULT_COUNT]
+            if int(declared_default) != DEFAULT_DISPLAY_CAP:
+                violations.append(
+                    f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
+                    f"{RULE_KEY_DEFAULT_COUNT}={declared_default} 与代码默认值 "
+                    f"{DEFAULT_DISPLAY_CAP} 不一致（B18；调用方应传 "
+                    "load_solution_set_display(root).default_count）"
+                )
+        if RULE_KEY_MAX_COUNT in node:
+            declared_max = node[RULE_KEY_MAX_COUNT]
+            if int(declared_max) != MAX_DISPLAY_CAP:
+                violations.append(
+                    f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
+                    f"{RULE_KEY_MAX_COUNT}={declared_max} 与代码硬上限 "
+                    f"{MAX_DISPLAY_CAP} 不一致（B18）"
+                )
+        if RULE_KEY_MUST_SHOW_MULTIPLE not in node:
             violations.append(
                 f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
-                f"{RULE_KEY_DEFAULT_COUNT}={declared_default} 与代码默认值 "
-                f"{DEFAULT_DISPLAY_CAP} 不一致（B18；调用方应传 "
-                "load_solution_set_display(root).default_count）"
+                f"{RULE_KEY_MUST_SHOW_MULTIPLE} 缺失 —— 缺键本身即违例（Ch11 §D.2）："
+                f"多解下限将退化为设计回落值 {DESIGN_MUST_SHOW_MULTIPLE}（非'已核'；"
+                "下限由该语义键派生）"
             )
-        if declared_max is not None and int(declared_max) != MAX_DISPLAY_CAP:
+        elif bool(node[RULE_KEY_MUST_SHOW_MULTIPLE]) != DESIGN_MUST_SHOW_MULTIPLE:
             violations.append(
                 f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
-                f"{RULE_KEY_MAX_COUNT}={declared_max} 与代码硬上限 "
-                f"{MAX_DISPLAY_CAP} 不一致（B18）"
-            )
-        declared_multi = node.get(RULE_KEY_MUST_SHOW_MULTIPLE)
-        if declared_multi is not None and bool(declared_multi) != DESIGN_MUST_SHOW_MULTIPLE:
-            violations.append(
-                f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
-                f"{RULE_KEY_MUST_SHOW_MULTIPLE}={declared_multi} 与代码回落值 "
+                f"{RULE_KEY_MUST_SHOW_MULTIPLE}={node[RULE_KEY_MUST_SHOW_MULTIPLE]} 与代码回落值 "
                 f"{DESIGN_MUST_SHOW_MULTIPLE} 不一致（Ch5 §B.1：欠定方程必须展示多组解）"
                 " —— 回落值未跟随规则，属声明与实现脱节（Ch11 §D.2）"
             )
-        elif declared_multi is None:
-            violations.append(
-                f"{VALUATION_METHODS_YAML}:: {RULE_KEY_SOLUTION_SET_DISPLAY}."
-                f"{RULE_KEY_MUST_SHOW_MULTIPLE} 缺失 —— 多解下限将退化为设计回落值 "
-                f"{DESIGN_MUST_SHOW_MULTIPLE}（非'已核'；下限由该语义键派生）"
-            )
 
     grid = doc.get(RULE_KEY_ASSUMPTION_GRID)
-    if isinstance(grid, Mapping):
-        ref = str(grid.get(RULE_KEY_SOLVER_REF) or "")
+    if RULE_KEY_ASSUMPTION_GRID in doc and not isinstance(grid, Mapping):
+        violations.append(
+            f"{VALUATION_METHODS_YAML}:: {RULE_KEY_ASSUMPTION_GRID} 形态非法（应为映射，实为 "
+            f"{type(grid).__name__}）—— 假设网格归属不可判定，不得静默跳过（G-03）"
+        )
+    elif isinstance(grid, Mapping):
         expected = "scripts/pricelayer/solver.py"
-        if ref and ref != expected:
+        if RULE_KEY_SOLVER_REF not in grid:
+            violations.append(
+                f"{VALUATION_METHODS_YAML}:: {RULE_KEY_ASSUMPTION_GRID}.{RULE_KEY_SOLVER_REF} 缺失 "
+                f"—— 缺键本身即违例（Ch11 §D.2）：无法核对假设网格是否仍归本模块 {expected!r}"
+            )
+        elif str(grid[RULE_KEY_SOLVER_REF]) != expected:
             violations.append(
                 f"{VALUATION_METHODS_YAML}:: {RULE_KEY_ASSUMPTION_GRID}.{RULE_KEY_SOLVER_REF}="
-                f"{ref!r} 未指向本模块 {expected!r} —— 声明与实现脱节（Ch5 §B.3 / §I.2）"
+                f"{grid[RULE_KEY_SOLVER_REF]!r} 未指向本模块 {expected!r} —— "
+                "声明与实现脱节（Ch5 §B.3 / §I.2）"
             )
     return violations
 

@@ -182,6 +182,9 @@ def _rule_binding_violations(root: Path) -> list[str]:
     | ② | `unregistered_fallback.method_class` **真值 == 代码默认值** | `Ch5 §D.1` 末句 |
     | ③ | `valuation_compute.entry` 指向的函数**真在本模块内**（改名即违例） | `Ch5 §D.2` / `§D.3` |
 
+    ★ **"缺键"本身即违例**（②③ 先判"键在不在"，再判"值对不对"）：这几个键在真文件里
+      **都存在** ⇒ 删键意味着该事实从规则面消失、代码却仍按回落值行事。写成"无可比对象
+      故跳过"就是门禁**欠报**（`G-03`："跳过不是通过"）。
     ★ 规则文件不存在 → 返回空（调用方另有 `NO_VALUATION_METHODS_RULE` note，**不**当已核）。
     """
     from scripts._common import _cached_yaml
@@ -222,13 +225,26 @@ def _rule_binding_violations(root: Path) -> list[str]:
             )
 
     compute = doc.get(VALUATION_COMPUTE_KEY)
-    if isinstance(compute, Mapping):
-        declared = str(compute.get("entry") or "")
-        if declared and declared not in globals():
+    if VALUATION_COMPUTE_KEY in doc and not isinstance(compute, Mapping):
+        violations.append(
+            f"{VALUATION_METHODS_YAML}:: {VALUATION_COMPUTE_KEY} 形态非法（应为映射，实为 "
+            f"{type(compute).__name__}）—— 入口不可判定，不得静默跳过（G-03）"
+        )
+    elif isinstance(compute, Mapping):
+        if "entry" not in compute:
+            # ★ 缺键 ⇒ 违例（不是"无可比对象故跳过"）：真文件里该键存在，删掉它意味着
+            #   "入口叫什么"这一事实从规则面消失 ⇒ 门禁必须红（`G-03`：跳过不是通过）。
             violations.append(
-                f"{VALUATION_METHODS_YAML}:: {VALUATION_COMPUTE_KEY}.entry={declared!r} "
-                "在本模块内不存在 —— 规则文件声明的入口与实现脱节（Ch5 §D.2）"
+                f"{VALUATION_METHODS_YAML}:: {VALUATION_COMPUTE_KEY}.entry 缺失 —— "
+                "缺键本身即违例（Ch11 §D.2）：规则文件声明的入口与实现无从核对"
             )
+        else:
+            declared = str(compute["entry"])
+            if declared not in globals():
+                violations.append(
+                    f"{VALUATION_METHODS_YAML}:: {VALUATION_COMPUTE_KEY}.entry={declared!r} "
+                    "在本模块内不存在 —— 规则文件声明的入口与实现脱节（Ch5 §D.2）"
+                )
     return violations
 
 
