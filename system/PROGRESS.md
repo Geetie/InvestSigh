@@ -350,3 +350,51 @@ compute 95 · graph 36 · validators 20 · claim 24 · decision 86 · gates 23 �
 3. `G-23`：`ws_claim_dod.md §C` 表 `C-4` 行陈旧表述（nit）
 4. 批次 7：`G-24` + `G-25` 独立审计
 
+---
+
+## 十一、批次 7 · `T-08` 裁决与 `I-1` 落地
+
+**需求方对张力 `T-08` 的裁决**（2026-09-16）：
+> **选 A** —— 注册 1–6，算术 / 图 / 决策部分接实现；**模型侧缺口显式标 `degraded` + 记 gap，不静默**。
+
+### 11.1 已落地（提交 `530c3cd`）
+
+| 项 | 内容 |
+|---|---|
+| **最小契约扩展** | `StepOutcome.incomplete_reason: str \| None = None`。**为什么必须有**：扩字段前 `run_daily` 对**所有** outcome 一律记 `STATUS_OK`，处理器**无法**声明"我没做完"→ "注册一个什么都不做的处理器"只能靠 `G1-05` 的"报 ok 但 produced 为空"兜住，那是**语义错误**的记录。现在 `incomplete_reason` 非空 → 记 `STATUS_GAP` + 进 `result.gaps` + `blocking` 步置 `blocked`；缺省 `None` 向后兼容。 |
+| **新增 `scripts/orchestrate/chain_steps.py`** | step 2–6 接线。映射锚点 = `01_产品目标与核心闭环/01_需求拆解.md §2.2`（8 步 → 章节映射表），**未自造**。step 5/6 **复用**既有接缝（`G-06` 唯一真源）；step 2/3 接**已存在的确定性部分**（定位机械复查 / 图完整性），模型侧显式声明；step 4 无输入可算 → 无产出 + 显式原因。 |
+| **新增适配器** | `_declare_incomplete_when_empty`：底层处理器**跑了但无产出** → 补 `incomplete_reason`（**不改**底层口径）。无它则 step 5/6 会被记成 `ok` + 空产出。 |
+| **测试** | `tests/injection/test_chain_steps_wiring.py`（**11 用例**）。★ 已**反证判别力**：把注册换成 `lambda d,s: StepOutcome()` → step 2/3/4 变 `ok`、空执行告警 4 条 → 断言必红。 |
+
+### 11.2 `I-1` 实测结果（**注册 ≠ 完成**）
+
+```
+step 1 ingest_public_information                       ok    produced=0   ← 见 G-26
+step 2 trace_dedup_verify                              gap   produced=0
+step 3 update_company_and_industry_relations           gap   produced=0
+step 4 revise_growth_and_moat_judgment                 gap   produced=0
+step 5 update_financial_and_valuation_assumptions      gap   produced=0
+step 6 compare_company_vs_benchmark_expected_return    ok    produced=1
+step 7 publish_recommendations                         gap   produced=0   ← 设计允许（hook 未注册）
+step 8 continuous_verification_and_history             gap   produced=0   ← 设计允许（hook 未注册）
+blocked = True
+```
+
+`rules/pipeline.yaml` 的**注册义务已兑现**（`G-13` 的接线面闭合）；但 **`blocked` 仍为 `True`** ——
+模型侧组件确实不存在、产物不齐。**这是真话，不是失败**：A 方案要求的是「显式」，不是「假装完成」。
+
+### 11.3 本轮新登记的两条缺口
+
+- **`G-26`**：`G1-05` 的"空执行"判据在 **step 1** 上会**误报**（`raw/` 为空时 step 1 合法地跑完却无产出）。涉及批次 5 已验收组件与守卫语义，**主理人不自裁**（`R-04`）。
+- **`G-27`** ★：`no_placeholder_guard::PLACEHOLDER-CN` 是**关键词规则**（`R-06 ①` 禁作判据、④ 只能作 aux lint），却以 `--fail-on warn` **作硬门禁**；它抹白注释与 docstring 但**保留字符串字面量** → **运行时缺口文案**也被扫 → A 方案要求"显式声明未交付"，门禁却不许文案里出现那些词 → **把人逼向委婉语**。已用设计词汇表达同一含义并在代码里就地注明，**未放松门禁**。
+
+### 11.4 批次 7 排期
+
+| # | 项 | 状态 |
+|---|---|---|
+| `I-1` | step 1–6 接线 | ✅ 已落地（`530c3cd`） |
+| `I-3` | `G-17` 真源缺失响亮失败 | 🔄 `fix/truth-source-loud` 工作树中（工程师作业中） |
+| `G-23` | `ws_claim_dod.md` 陈旧表述 | 🔄 同上（一并交该工程师） |
+| 审计 A | `ws/compute` 修复（`C-01`~`C-05`）+ `I-1` | 🔄 已派（含**复原对照**要求） |
+| 审计 B | `fix/claim-propagation` + `ws/decision` 首审 | 🔄 已派 |
+
