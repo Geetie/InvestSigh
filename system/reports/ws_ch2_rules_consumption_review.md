@@ -86,6 +86,15 @@ e5039163c2d5 system/rules/scenario.yaml
 
 ★ **时序声明**：两流仍在写入（13-A 的 `completeness.py` 在我上次钉 SHA 后已变；13-B 已进入 `git add` 暂存态）。故 ②③ 的结论**对应上列 SHA**；**提交后须以 commit hash 重跑一遍**（§7 给了可复跑的命令）。
 
+### §0.3 提交后重跑：`#69` 的落点（**读 §11 / §12 请从这两节进，别用 §0.2 的旧快照**）
+
+| 节 | 对应 commit | 内容 |
+|---|---|---|
+| **§11** | 13-B = **`4468da5`**（已合并）；13-A 仍 `d74a829` | ②③ 的 13-B 面复跑 + ★★ 一条**自我更正**（"`grep` 零引用 = 死常量"是**假阴性**，③ 定档上调为**错**） |
+| **§12** | 13-B = `4468da5` 后的 **`main` = `c591082`**；13-A = `bb8991a`（**零领先提交**） | **`R8-3` 收口核**（`rules/` 侧 ✅ 已装 / **代码侧 ❌ 未做 ⇒ `G-06` 双份**）+ `R8-1`/`R8-2` 在 13-A 面 **⛔ 无被检对象**（`G-03`） |
+
+⇒ 全文的 ②③ 结论按 **§11 + §12** 为准（§1 总览与 §7.1 已同步改档）；**§2–§10 的 SHA 仍是 13-A/13-B 未提交期的快照**，保留作过程证据。
+
 ---
 
 ## §1 结论总览
@@ -94,7 +103,7 @@ e5039163c2d5 system/rules/scenario.yaml
 |---|---|---|---|
 | ① | 键名对齐 | ❌ **未做**（仍是 `min_locators`/`min_derivations`）——且**改名也救不了**，见 §2.3 | n/a（无此清单） |
 | ② | 偷偷新增键 | ✅ 键名 **11/11 全对齐**；❌ **夹具自造了不同形状的 `baseline.yaml`** ⇒ **不够** | ✅ **好**（无新增键；`method_version` 缺键**符合设计**） |
-| ③ | 硬编码阈值 | ✅ **好**（阈值全部从 rules 读、缺键响亮失败） | ❌ **不好**（B18 的 3/5 硬编码）+ **不够**（`DEFAULT_MIN_SOLUTIONS=2` 自定）+ ✅ **好**（`grid_step` 必填无默认） |
+| ③ | 硬编码阈值 | ✅ **好**（阈值全部从 rules 读、缺键响亮失败） | ❌ **错**（B18 的 3/5 硬编码**且进决策函数**）+ ❌ **错**（`DEFAULT_MIN_SOLUTIONS=2` 无出处**且进决策**）+ ✅ **好**（`grid_step` 必填无默认）+ ✅ **不是违规**（`max_grid_points`/`max_nodes` = 护栏）<br>★ **2026-09-16 上调**：原判「不好/不够」基于"零引用=死常量"，该 `grep` 是**假阴性** ⇒ 见 **§11.2** |
 
 **贯穿性结论（最重要的一条）**：
 > 已安装的 `rules/baseline.yaml`（**我的 13-R 产出**）与 13-A 的读取路径**契约不一致**，且**不一致有两层**：① 键名后缀；② **YAML 嵌套深度**。
@@ -404,16 +413,13 @@ $ grep -n '解集展示上限' '05_价格与市场预期研究/02_实现方案.m
 460:| J3 | 解集展示上限 N | 待定 | 上限 + 区间包络折叠 |
 ```
 
-**判定：❌ 不好。** 理由：
+**判定：❌ 错**（原为「不好」，因我的"零引用"假阴性而**上调**，见下面第 3 条与 §11.2）。理由：
 1. 这是**已拍板的设计参数值**（B18〔新给〕确认为 3/5；`§J3` 原为"待定"，由 B18 收口）⇒ 按单一真源纪律应住 `rules/`，**不应住代码**。
 2. 方向与 `G-06` 正相反：我在 13-R 报告 §4.2 把 N-5/B18 登记为"设计给了值但**没给键名、未指派文件**"，团队长裁定**"保持不收"**（即暂不落 `rules/`）；13-B 于是把它**落进了代码** —— 结果它从"rules 侧待登记"变成了"**code 侧的既成事实**"。**"不收进 rules"≠"写进代码"。**
-3. ★ **减轻情节（必须写清，否则是过度指控）**：这两个常量在 `pricelayer/` 里**零引用**：
-```
-$ grep -rn 'DEFAULT_DISPLAY_CAP\|MAX_DISPLAY_CAP\|DEFAULT_MIN_SOLUTIONS' system/
-(exit=1)
-```
-   ⇒ 它们是**死常量**，**当前不影响任何决策输出**。按判据（禁"参数进决策函数"）严格讲它们**尚未进入决策路径**。
-   ⇒ 故定档 **不好**（值错位真存在、且埋了雷），**不是"错"**（未产生错误行为）。**风险项**：一旦接线（解集折叠/展示），就立即变成真实违规。
+3. ~~★ **减轻情节**：这两个常量在 `pricelayer/` 里**零引用** ⇒ 死常量，未进决策路径，故定档「不好」不是「错」。~~
+   ★★ **本条已被我自己推翻 —— 见 §11.2。** 那段 `grep` 是 **BSD `\|` 交替的假阴性**：三个常量**都在决策路径里**（`solver.py:318` 默认入参、`:336` 越界 raise、`:391` degraded 标记、`:403` 呈现前不变式 `SingleSolutionError`、`:503` 门禁 `Violation`）。
+   ⇒ **定档上调为「错」**（`施工图 §8 纪律 1` 禁"参数进决策函数"，此处为**明确违反**）。
+   ⇒ 且该错误已**进入团队长的裁定文本**（`batch13_taskbook.md:374` 引"（`grep` 零引用 = 死常量）"），**必须更正** —— 见 §11.2 与 §11.7。
 
 ★ **裁定结果（`R8-3`）：我的引用对，但结论被团队长推翻为"进 `rules/`"——依据更强，我接受。**
 团队长指出：我判"暂不收"的**前提**是"**没有键名、没有指派文件**"，而**现在前提没了** —— `05/02:460 §J3` 就是 `00_待拍板项清单.md` **B18 的来源**，B18 已拍板 3/5 ⇒ **条件变了，裁定随之改变**。并给出一条**可复用的统一判据**（本报告 §10 采用）：
@@ -436,7 +442,7 @@ $ grep -n '欠定\|多组解\|必须展示' '05_价格与市场预期研究/02_�
 ```
 设计只写"**多**组解"，**没有任何字面 2**；`§J3` 的"上限 N"是**上限**不是**下限**。
 
-**判定：不够。** "多"⇒ ≥2 的推演**合理但属代码自定**；既未参数化，也未登记为"待裁定"。它**不在 11 项冻结参数内**，故不触发 `param_ref` 指针纪律。修法二选一：登记为待裁定，或参数化进 `rules/`。（与 (a) 不同：(a) 有 B18 明文，是无争议的"值错位"。）
+**判定：❌ 错**（原为「不够」，同上**上调**；详见 §11.2 —— `2` 这个**设计无出处**的数在 `solver.py:391/403/503` **进入决策**：标 `degraded`、呈现前 raise `SingleSolutionError`、门禁产 `Violation`）。
 
 ★ **裁定结果（`R8-3`）：按统一判据处置为"不得自创"。** 团队长定：
 > `DEFAULT_MIN_SOLUTIONS=2` = **设计无字面 2、B18 也没给** ⇒ **不得自创**，无出处就**删掉该常量**
@@ -687,7 +693,7 @@ $ sed -n '19,29p' system/rules/baseline.yaml
 |---|---|---|---|---|
 | **R-1** | **`rules/baseline.yaml` 的深度契约**：`thresholds.*`（现装）还是扁平（13-A 读法）？ | "已安装件为准"上次只覆盖了键名，**没覆盖深度**；而深度决定"改谁"（改 13-A 的读路径 **vs** 改我 13-R 的安装件 + 重锁） | 若维持"已安装件为准"⇒ 13-A 改为 `cfg["thresholds"][…]`；**同时**必须把 `min_locators→min_locator_count` 一起改（否则仍失败） | ✅ **`R8-1` 维持分组为准** + 已把「深度约定」写进 `rules/baseline.yaml` 并重锁（§6.1b） |
 | **R-2** | **`tests/valuelayer/` 的 `V-06` 批次归属** | 13-A 的允许面**不含** `verify.py`（**修正后的一手依据**：卡 13-A「接线要求」第 2 条 + DoD 第 3 条 **⟂** 开头的并行边界表，**自相矛盾** —— 我初稿引的 `PROGRESS.md:228` 是**另一件事**，见 §5.2 的归因更正） | 授权 13-A 改 `verify.py::BATCHES`（对齐 13-B 的做法），或你自己补 —— **不要**落到 `--no-verify` | ✅ **`R8-2` 已修表**：边界表回填两个共享文件，授权**收窄到"仅限本卡自己那一条"** |
-| **R-3** | **13-B 的两个死常量**（`DEFAULT_DISPLAY_CAP=3` / `MAX_DISPLAY_CAP=5`，B18 已拍板值） | 它们**零引用** ⇒ 现在无害；但"值住代码"与 `G-06` 反向，且接线即违规 | 二选一：**移进 `rules/`**（需给键名 + 指派文件，正是 13-R §4.2 登记的那批）／或**明确授权为"暂存于代码、接线前必须迁出"**并登记 | ✅ **`R8-3` 改为"进 `rules/`"**（前提变了：B18 的出处就是 §J3）；并立**参数/护栏统一判据**；`DEFAULT_MIN_SOLUTIONS=2` **不得自创、删常量**。收口见 §10 |
+| **R-3** | **13-B 的两个死常量**（`DEFAULT_DISPLAY_CAP=3` / `MAX_DISPLAY_CAP=5`，B18 已拍板值） | ~~它们**零引用** ⇒ 现在无害~~ ★ **此话为假**（§11.2）：三常量**都在决策路径** ⇒ 是**明确违反** `施工图 §8 纪律 1`，**不是"现在无害"** | 二选一：**移进 `rules/`**（需给键名 + 指派文件，正是 13-R §4.2 登记的那批）／或**明确授权为"暂存于代码、接线前必须迁出"**并登记 | ✅ **`R8-3` 改为"进 `rules/`"**（前提变了：B18 的出处就是 §J3）；并立**参数/护栏统一判据**；`DEFAULT_MIN_SOLUTIONS=2` **不得自创、删常量**。收口见 §10 |
 
 ### §7.2 提交后必须重跑的（本报告结论对应未提交快照）
 
@@ -829,3 +835,340 @@ solution_set_display:
 2. `DEFAULT_MIN_SOLUTIONS` 语义改为"展示解数 = 求解器实际解出组数"，**不再拒绝**单解（除非 rules 的 `min_count` 被拍板）。
 3. `max_grid_points` / `max_nodes` **留代码**，docstring **逐字标注"护栏"**，并与 `assumption_grid.grid_search_upper_bound`（**取值上界，非点数**）**互指**。
 
+
+---
+
+## §11 `#69` 重跑（**13-B 面已完成**）+ ★★ 一条自我更正
+
+### §11.1 范围与快照
+
+**13-B 已合并** ⇒ ②③ 的 **13-B 面有对象了**；**13-A 仍停在 `d74a829`**（未合并）⇒ **13-A 面仍无对象，本报告此节不覆盖**。
+```
+$ git -C .worktrees/ws-ch5-pricelayer log --oneline -3
+4468da5 (HEAD -> ws/ch5-pricelayer, ws/daily-nochange-exit) merge ws/ch5-pricelayer: 批次13-B Ch5 价格层六模块（…）+ tests/pricelayer + verify.py 批次
+b7103b6 docs: 登记 T-18（…）+ T-15 补充（…）+ G-51/G-52
+9834f4f feat(pricelayer): 批次 13-B Ch5 价格层 —— 反解多解 / 估值路由 / 倒填守卫 / 情景 / 历史外推 / 每日解释
+
+$ git -C .worktrees/ws-ch5-pricelayer status --short
+ M system/scripts/pricelayer/scenario_guard.py          ← ★ 又有**未提交**改动（+322/−27），见 §11.3
+$ git -C .worktrees/ws-ch5-pricelayer status --short system/rules system/registry
+(空 —— 边界守住)
+
+快照 SHA：
+a4a1b95eebfd system/scripts/pricelayer/solver.py        （与 d74a829 快照**相同** ⇒ R8-3 未落地）
+2c98f7edc448 system/scripts/pricelayer/scenario_guard.py （**未提交**工作区版）
+b612de96b2b9 system/scripts/pricelayer/valuation.py
+```
+
+### §11.2 ★★ 自我更正：「零引用 = 死常量」是**假阴性**，③(a)(b) 定档上调
+
+**我先前在 §4.2(a) 写了"这两个常量在 `pricelayer/` 里**零引用**"，并据以下结论"当前不影响任何决策输出 ⇒ 定'不好'不是'错'"。这句话是错的。** 原因是我**又踩了 BSD `grep` 不支持 `\|` 交替的坑**（本报告前面刚记过这个坑，随后自己再踩一次）：
+```
+$ grep -rn 'DEFAULT_DISPLAY_CAP\|MAX_DISPLAY_CAP\|DEFAULT_MIN_SOLUTIONS' system/
+(exit=1)          ← 假阴性：BSD BRE 下 \| 被当字面量，整个模式匹配不到东西
+```
+**改用正确检索（`Grep` 工具 / `grep -E`）后的真相** —— 三个常量**全部在决策路径里**：
+```
+system/scripts/pricelayer/solver.py:79:DEFAULT_DISPLAY_CAP = 3
+system/scripts/pricelayer/solver.py:82:MAX_DISPLAY_CAP = 5
+system/scripts/pricelayer/solver.py:85:DEFAULT_MIN_SOLUTIONS = 2
+system/scripts/pricelayer/solver.py:318:    display_cap: int = DEFAULT_DISPLAY_CAP,        ← ① 默认入参：直接决定"展示几组/折叠哪些"
+system/scripts/pricelayer/solver.py:328:    - `display_cap` 必须 ∈ `[1, MAX_DISPLAY_CAP]`（B18 的"最多 5 组"是硬上限）。
+system/scripts/pricelayer/solver.py:336:    if not 1 <= display_cap <= MAX_DISPLAY_CAP:    ← ② 越界 ⇒ raise SolverError（决策分支）
+system/scripts/pricelayer/solver.py:391:    if solution_set.feasible_count < DEFAULT_MIN_SOLUTIONS:   ← ③ 标 degraded + 写 note
+system/scripts/pricelayer/solver.py:403:    min_solutions: int = DEFAULT_MIN_SOLUTIONS,    ← ④ 呈现前不变式 assert_multi_solution 的默认
+system/scripts/pricelayer/solver.py:503:        if count < DEFAULT_MIN_SOLUTIONS:          ← ⑤ check() 里产 Violation（门禁会红）
+system/tests/pricelayer/test_solver.py:169:    assert DEFAULT_DISPLAY_CAP == 3, "B18 已确认：默认展示 3 组"   ← ⑥ 测试**钉住**这个硬编码值
+```
+`display_cap` 的实际效果（决定产出）：
+```
+system/scripts/pricelayer/solver.py:385:    solution_set.folded = feasible_solutions[display_cap:]
+system/scripts/pricelayer/solver.py:403:def assert_multi_solution(… min_solutions: int = DEFAULT_MIN_SOLUTIONS) → 低于则 raise SingleSolutionError
+```
+
+**⇒ 定档更正**
+| 项 | 原名 | 新名 | 依据 |
+|---|---|---|---|
+| `DEFAULT_DISPLAY_CAP=3` / `MAX_DISPLAY_CAP=5` | 不好 | **错** | `施工图 §8 纪律 1` 禁"**参数进决策函数**"；此处 ①②⑥ = 明确违反（且测试把硬编码值**钉死**，将来迁移必须同改测试） |
+| `DEFAULT_MIN_SOLUTIONS=2` | 不够 | **错** | 一个**设计无出处**的数（§B.1 只写"多"）在 ③④⑤ **驱动 raise / Violation** —— 无出处 + 进决策，两项叠加 |
+
+★ **这个错误不只影响本报告**：团队长的裁定文本**引用了我的错话** ——
+```
+system/reports/batch13_taskbook.md:374:`ws/ch2-rules` 报告：13-B 有 `DEFAULT_DISPLAY_CAP=3` / `MAX_DISPLAY_CAP=5`（`grep` 零引用 = 死常量），
+```
+⇒ **建议他删掉括号里的"（`grep` 零引用 = 死常量）"**，否则该错误会继续被下一个读任务卡的人继承。
+★ **对裁定的实质结论无影响**（`R8-3` 已判"进 `rules/`"+"`DEFAULT_MIN_SOLUTIONS` 不得自创"，与更正后的定档**同向**），但**定档与"后果描述"必须改**：三常量**不是"现在无害的埋雷"，是"此刻就在用设计参数做决策"**；`DEFAULT_MIN_SOLUTIONS` 更是在**用无出处的数拒绝呈现**。
+★ **根因与防范**：这是**同一类错误第二次**（第一次是 §3.1 的 67/65 个"不在键集合"假阳性）。⇒ 本项目应把"**macOS/BSD `grep` 的 `\|` 交替需用 `-E`**"写进检索纪律（我已在本报告的 `§6.3` 记过一次）。**我这次是自己违反了已知规则，责任在我。**
+
+### §11.3 ② 13-B 复跑：**无自造规则键** ✅ 好（且新增了机器绑定，质量升级）
+
+**(a) 键集合比对**（`python3 /tmp/keycmp.py`，合法键集合 = 682）
+```
+=== 13-B (…/pricelayer) ===
+  .get()/下标 字符串键 共 73 处（去重 56 个名）
+  不在已安装键集合里的 .get()/下标 键名 40 个：[…]
+```
+★ 这 40 个**仍以假阳性为主**（`facts/`/`derived/` 记录字段与 `report.scanned[...]` 诊断名），逐条收窄后：
+- **真从 `rules/` 装载的对象**：`rules/valuation-methods.yaml`（`method_routing` / `registry_driven` / `unregistered_fallback`）与 `rules/scenario.yaml`（`scenario_method_status` / `scenario_tags` / `probability.*` / `scenario_method_blocking.*`）—— **全部在已安装件里**，**无一个自造键**。
+- 新增的 `rule_keys_required` / `rule_binding_checks` / `blocking_status` / `downstream` / `required_field`：`report.scanned[...]` **诊断字段名**（非 rules 键）。
+- `unregistered_fallback_method_class`：读 `valuation-methods.yaml::unregistered_fallback.method_class`（已安装件**有**）。
+
+**(b) ★ 该流在未提交改动里**新增了"规则↔代码机器绑定"**（`scenario_guard.py`，+322/−27）**：
+```
+:86  RULE_KEY_TAGS = "scenario_tags"          （及 RULE_KEY_STATUS / _DOMAIN / _BLOCKING / _PROMOTION / _CONSISTENCY / _PROBABILITY …）
+:96  REQUIRED_RULE_KEYS: tuple[str, ...] = (…7 个顶层键…)   """本模块**实际读取**的 rules/scenario.yaml 顶层键"""
+:408 def assert_rule_tags_match(root)  — "scenario_tags 必须与 ScenarioTag 枚举**逐字一致**"
+:428     expected = tuple(t.value for t in ScenarioTag)      ← 从**代码枚举**取，不写字面量
+:489 def check(root) → _rule_binding_violations(root) → 违例 SCENARIO-RULE-BINDING
+```
+其 docstring 自列**四条判据**（键存在 / 标签逐字一致 / `probability.default` 恒 null / `must_be_null_50_50` 为 false）+ **"规则文件不存在 → 显式 note（`G-03`：**不**当'已核'）"**。
+
+**(c) 我给这个绑定做了正反例实测**（`root` 指向 `/tmp` 副本，**未动其工作区**）：
+```
+=== 正向对照：原样（真实已安装件副本）===
+  violations = []      notes = []
+  assert_rule_tags_match -> ('bear','neutral','bull','custom')
+
+=== 反例 A：scenario_tags 加一个 'PANIC' ===
+  violations = ["rules/scenario.yaml:: scenario_tags=[…,'PANIC'] 与代码枚举 ['bear','neutral','bull','custom'] 不一致 —— 规则文件改了而代码没改（Ch11 §D.2 / Ch5 §J4）"]
+
+=== 反例 B：删掉 scenario_method_status_domain ===
+  violations = ["rules/scenario.yaml 缺本模块实际读取的键 ['scenario_method_status_domain'] —— 声明与实现脱节（Ch11 §D.2）"]
+
+=== 反例 C：probability.default 由 null 改成 0.5 ===
+  violations = ['rules/scenario.yaml:: probability.default=0.5 非 null —— Ch5 §D.6：情景概率默认 null（**不默认 50/50**）']
+```
+⇒ **正向干净、三个反例全部逐条命中**（且违例文本各自指回节号）。**这是本次复核里质量最高的一处实现** —— 且它恰好回应了 §3.3 那条"两流各自补了设计没给的键名、恰好对上（运气成分应被记录）"：**现在不再是运气，是机器绑定。**
+**判定：② ✅ 好（较 `4468da5` 时点进一步升级）。**
+
+### §11.4 ③ 13-B 复跑：`R8-3` **只落了一半**（`rules/` 侧 ✅ / 代码侧 ❌）；护栏判定成立；并避免一个假阳性
+
+**(a) `R8-3` 必须**分开记两半**（★ 本条经 **§12.2** 重钉后更正 —— 我先写的是"尚未实施"，那只是**代码侧**的真相）**：
+- **代码侧 ❌ 未改**：`solver.py` 在 `4468da5` 的 SHA 与该流任务卡快照**完全相同**（`a4a1b95eebfd`）⇒ 三个常量**仍在原位**，且**仍在决策路径上**（§11.2 已给逐处证据）。
+- **`rules/` 侧 ✅ 已装**：主理人在 `182f8a1` 把 §10.3 候选装进 **`rules/valuation-methods.yaml::solution_set_display`**（**落点采纳我的建议、并更正了他先前的 `scenario.yaml` 指令**）。
+- ⇒ 合并结果是 **`G-06` 意义上的"双份真源"**：rules 载 `default_count: 3 / max_count: 5`，代码载 `DEFAULT_DISPLAY_CAP = 3 / MAX_DISPLAY_CAP = 5`；**代码那份在决策路径上、rules 那份零消费者**。逐键对照 + 实测见 **§12.2**。
+
+**(b) 护栏判定经复核** **成立**：
+```
+system/scripts/pricelayer/solver.py:277:    if len(values) > max_grid_points:
+system/scripts/pricelayer/solver.py:280:            f"> 上限 {max_grid_points}，按已扫部分给区间（Ch5 §I.2 网格上界告警）"
+system/scripts/pricelayer/solver.py:282:        values = values[:max_grid_points]
+system/scripts/pricelayer/solver.py:30:- **网格上界告警**（`Ch5 §I.2`："设网格上限告警"）⇒ 超出 `max_grid_points` **不静默**：
+system/scripts/pricelayer/valuation.py:225:        if len(seen) > max_nodes:
+```
+⇒ 只**截断搜索**且**非静默记 note**（`§I.2`"设网格上限告警"逐字），**不改变"展示哪组解"的取值/选择** ⇒ 属**护栏**，**`R8-3` 允许留代码**。★ 小建议：docstring 里把「护栏」二字**逐字写出**（现用"网格上界告警"，语义等价但不如"护栏"便于机器/人检索）。
+★ 我之前提的**混淆风险仍在**：`max_grid_points`（点数上限）vs `rules/valuation-methods.yaml::assumption_grid.grid_search_upper_bound`（**取值**上界，现 `tbd`）—— 二者需互指。
+
+**(c) ★ 避免一个假阳性：`weight` 不是 `P-09` 违规**
+`history_guard.py:236` 有 `entry.get("weight")`，而 `weight` **确在** `rules/banned_tokens.yaml` 的 32 个 token 里（与 `score`/`vote`/`sentiment` 同族）。但逐层核后 **不是违规**：
+```
+# ① 它是**设计逐字给定的数据字段名**，不是决策权重：
+05_价格与市场预期研究/02_实现方案.md:221:| 非上市资产无法独立建模 | `non_listed_assets{value, weight, gap_note}` |
+05_价格与市场预期研究/01_需求拆解.md:161:| 非上市资产无法独立建模 | `non_listed_assets{value, weight, gap_note}` |
+# ② 禁词表的**决策域**不含 pricelayer：
+banned_tokens.yaml::decision_scope.include_paths = ['system/scripts/decision/**', 'system/scripts/graph/**']
+```
+⇒ 前者是"设计给字段、代码照读"，后者是"禁词只在其**声明的决策域**内生效" ⇒ **判"不是违规"**，并记下：**naive 扫描会把它当 P-09 命中**，下一个人别误报。
+
+### §11.5 与 `ws-schema-expand` 的三条交叉核对（他给我的输入，我逐条独立复核）
+
+| 他的命中 | 我的复核 | 结论 |
+|---|---|---|
+| **① `rules/scenario.yaml::scenario_tags` ↔ `ScenarioTag` 同值双存放、零绑定** | **在被审时点（`4468da5`）成立**：`git show 4468da5:…/scenario_guard.py \| grep -n 'scenario_tags\|assert_rule_tags_match'` → **两条皆 `exit=1`（无匹配）**。★★ **且经 §12.3 重钉：在 `main`（`c591082`）上仍成立** —— `git grep -nE 'RULE_KEY_TAGS\|REQUIRED_RULE_KEYS\|_rule_binding_violations' main -- system/scripts/pricelayer/scenario_guard.py` → **`exit=1`**。修复**存在**（§11.3(b)(c) 逐处 + 正反例），但**未提交、未进 main**（挂在 `ws/ch5-pricelayer` 工作区，`git status --short` = 5 个 `M`） | ✅ **他的命中成立，且不是"已闭合"而是"未提交的修复挂在分支工作区"** —— 我先前写的"已被未提交改动闭合"**会被误读成 main 已安全**，故在 §12.3 一并更正。⇒ 建议他：**在下一个 commit（不是工作区）上复跑**，别重复上报；**并提醒 13-B 把这份修复提交**（未提交的修复 = `G-50` 形态：一个"看着有、实际不在真源上"的绑定） |
+| **② `Valuation.scenario_tag` 零生产消费** | **成立**：`check()` 只扫 `valuation.probability` + `formula_ref`（`scenario_guard.py:489+` 全文已读）；`assert_scenario_match(stock: ScenarioTag\|str, benchmark: ScenarioTag\|str)`（`:375`）**入参不是 `Valuation`**；`scenario_tag`（单数）在工作区版仅出现在**注释**（`:10,:11`） | ✅ **成立**。**但我不下"缺陷"判词**：设计 `§E.3` 的受检字段是 `checked_fields: [stock.scenario_tag, benchmark.scenario_tag]`（我 `rules/scenario.yaml:34` 逐字转写），即**设计把该字段放在 stock/benchmark 上**，放不放 `Valuation` 是他 (D) 那单的自选 ⇒ 若属自选，则"零消费"是**预期**（`G-50` 形态只在他**声称接线**时才成立）。**建议他自查**：有设计出处就补消费点，无出处就登记为待接线/删 |
+| **③ `scenario_tags`（域）vs `scenario_tag`（值）** | 语义不同、确无冲突 | ✅ 同意，登记即可 |
+
+★ 他的**边界声明我认可**：①③ 只覆盖 13-B 面，**13-A 面仍无对象** ⇒ **`#69` 现在只能做一半**，本报告 §11 **不是完整复核结账**。
+
+### §11.6 13-B 工作区的一个**必然假红**（同我先前那次，提醒他）
+
+```
+$ ls -l .worktrees/ws-ch5-pricelayer/system/rules/baseline.yaml
+-rw-r--r-- 1 gaza staff 7515 2026-09-16 21:36 …/rules/baseline.yaml     ← 644！应为 0444
+```
+⇒ `git merge main` 把只读位重置了（git 不跟踪权限位）。**`rules_lock_guard` 会报"应为 0o444"**。修法：
+```
+sh system/scripts/ops/bootstrap_worktree.sh     # 我这边实测：14 件置 0444 + rules_lock_guard PASS 14/14
+```
+（我已把这条单独发给 13-A 与他两流。）
+
+### §11.7 本节的**未完成**与**需更正处**（如实登记）
+
+**未完成（不冒充已核）**
+1. **13-A 面 ②③ 仍无对象**（`ws/ch4-valuelayer` 停在 `d74a829`）。⇒ `#69` 保持 in_progress。
+2. 13-B **工作区版**（`scenario_guard.py` 未提交，SHA `2c98f7edc448`）我的核对**仅覆盖**：键名、`assert_rule_tags_match`、`_rule_binding_violations`、`check()` 主体。**未读**其新增的 300 余行其余部分；**未跑其单测**（避 `V-05`/`V-08` 配额）。⇒ 结论"②✅好"对应**该 SHA 的这些函数**，不是全文件背书。
+3. 我在 §11.3(c) 的反例是**我构造的**（`/tmp` 副本），**不是** 13-B 提交的测试。⇒ "绑定可拦"由我证明；"其测试覆盖了这些反例"**我没有核**。
+
+**需更正**
+4. **§4.2(a)(b) 的"零引用/死常量"已作废**（§11.2 给真相与逐处证据）；§1 总览与 §7.1 的 `R-3` 行已同步改档。
+5. **团队长的裁定文本 `batch13_taskbook.md:374` 引了我的错话**（"`grep` 零引用 = 死常量"）⇒ **建议删除该括注**（裁定结论不受影响，但后果描述会误导）。
+
+---
+
+## §12 `#69` 第二轮：在 **`main` 上重钉**（`R8-3` 收口核验 + 13-A 面仍无对象）
+
+> 触发：主理人 `182f8a1` 安装了 §10.3 候选（并更正落点）；`ws-schema-expand` 送来三条现成输入。
+> **本节只读、只跑探针，未改任何被审文件**（被审面 = `scripts/pricelayer/**`、`scripts/valuelayer/**`、`rules/**`、`registry/**`）。
+
+### §12.1 快照重钉（把 §11 的"分支工作区 SHA"换成 **commit hash**）
+
+```
+$ git -C .worktrees/ws-ch2-rules log --oneline main..HEAD          # 我领先 main 的提交
+(空)      ⇒ 我的报告提交（8f3f476 / 89bdf00）已随 9cd3b6d 进 main
+
+$ git -C .worktrees/ws-ch2-rules log --oneline HEAD..main           # main 领先我的提交
+c591082 fix(verify)+docs: G-54 unit 批超时 60s→270s（…）+ G-53 把 bootstrap 触发面扩到 git merge（V-07）
+bb8991a Merge branch 'ws/ch13-d-valuation-fields'
+a4760db Merge branch 'ws/criterion-effectiveness'
+9cd3b6d merge ws/ch2-rules: 13-R 报告收口（…）
+182f8a1 feat(rules): 安装 §J.3 解集展示上限 → rules/valuation-methods.yaml::solution_set_display
+        （落点采纳 ws-ch2-rules 建议，更正我先前的 scenario.yaml 指令）+ 重锁
+```
+
+| 对象 | 钉住的 commit | 说明 |
+|---|---|---|
+| **13-B 提交面** | `4468da5`（= `9834f4f` 合并） | §11 已核 |
+| **13-B 工作区版** | 未提交（`ws/ch5-pricelayer` 工作区，5 个 `M`） | §12.3 |
+| **`rules/valuation-methods.yaml` 安装** | `182f8a1` | §12.2 |
+| **`rules.lock.json`** | `locked_at = 2026-09-16T13:38:46+00:00`，14 件，`owner_writable = False` | `rules/valuation-methods.yaml` → `bytes 8118` / `locked_mode 0o444` / `sha256 8e01a9bb91…4ae857` |
+| **13-A 面** | `ws/ch4-valuelayer` = `bb8991a`（**main 的祖先，零领先提交**） | §12.4 ⇒ **仍无被检对象** |
+
+★ 我先前 §11.6 提的"`git merge main` 把 `rules/*.yaml` 重置成 644 ⇒ `rules_lock_guard` 假红"**已被主理人以 `c591082` 的 `G-53` 收口**（把 `bootstrap` 触发面扩到 `git merge`，`V-07`）⇒ 该提醒**结案**，不必再逐流喊。
+
+### §12.2 `R8-3` 逐项核（**结论：`rules/` 侧 ✅ 好 / 代码侧 ❌ 未做 ⇒ `G-06` 双份当场成立**）
+
+#### (a) `rules/` 侧 ✅ **已装**（逐字）
+
+```
+$ git show main:system/rules/valuation-methods.yaml | sed -n '74,78p'
+solution_set_display:
+  default_count: 3                          # B18 逐字（「默认展示 3 组」）—— 设计 `§J.3` 原为"待定"
+  max_count: 5                              # B18 逐字（「最多 5 组」）—— 同上
+  selection: "代表解 + 区间包络"             # §I.2 行 2 控制手段逐字
+  overflow: fold                            # §I.2 行 2 逐字（「…上限 N，**超出折叠**」）
+```
+★ 落点 = **`valuation-methods.yaml`**（我的 §10.3 建议被采纳，他先前的 `scenario.yaml` 指令已自更正）；头注 `:12-18` 把"为什么落本件"的三条依据逐字写了，`:69-73` 把 `§J.3` 与 B18 原文逐字贴了。**这一处我判 ✅ 好。**
+
+#### (b) 代码侧 ❌ **未做**（不是"错"，是**没动**）—— 且现在**比装之前更糟**
+
+```
+$ git show main:system/scripts/pricelayer/solver.py | sed -n '79,85p'
+DEFAULT_DISPLAY_CAP = 3
+"""解集**默认展示组数**（`00_待拍板项清单` B18 已确认："默认展示 3 组，最多 5 组"）。"""
+
+MAX_DISPLAY_CAP = 5
+"""解集展示**硬上限**（同上 B18："最多 5 组"）。"""
+
+DEFAULT_MIN_SOLUTIONS = 2
+
+$ PYTHONPATH=. python3 -c "import inspect, scripts.pricelayer.solver as s; \
+    print(s.DEFAULT_DISPLAY_CAP, s.MAX_DISPLAY_CAP, s.DEFAULT_MIN_SOLUTIONS); \
+    print({k: v.default for k, v in inspect.signature(s.solve_implied_requirements).parameters.items() if v.default is not inspect._empty})"
+3 5 2
+{'max_grid_points': 256, 'display_cap': 3, 'computed_at': None, 'method_version': 'pricelayer-solver-v1'}
+
+$ git grep -n 'solution_set_display' main -- system/scripts system/tests
+(exit=1)                    ← ★★ **rules 那份装了，但零消费者**
+```
+⇒ **`G-06` 双份**：同一对值（3/5）**同时**住 `rules/valuation-methods.yaml` 与 `solver.py`；**代码那份在决策路径上**（`solver.py:318/336/338/384/385/391/395/403/503`），**rules 那份一行代码都不读**。
+★ 定档为 **❌ 未做**（不是"错"）：处置方**尚未接到改动指令**（§10.4 那份待办是随 §10 一起给主理人的）。
+★ 但**后果严重性上升了**：安装**之前**只是"值住错了地方"；**安装之后**多了一条 —— **规则文件自称唯一真源而实际零消费者**（"文件说谎"）。这正是 §11.3 那处 `scenario_tags` / 本处常量 的**同一形状**，**第三次出现**。⇒ 建议在 `§10.4` 待办里加一句**验收口径**：`git grep 'solution_set_display' -- system/scripts` **必须非空**，否则"装了没人读"会被下人当成"已消费"。
+
+#### (c) §10.3 候选 ↔ 实装 **逐键对照**（他有权精简；我逐条给判词，不搞一刀切）
+
+| §10.3 我的候选 | 实装（`182f8a1`） | 判词 | 为什么 |
+|---|---|---|---|
+| `default_count: 3` | `default_count: 3` | ✅ **好** | 值 = B18 逐字 |
+| `max_count: 5` | `max_count: 5` | ✅ **好** | 值 = B18 逐字 / `§J.3`「上限 N」 |
+| `must_show_multiple: true`（我标"键名为转写、语义非数值"） | **未落**，改落 `selection: "代表解 + 区间包络"` | ✅ **好** | 我这键**与 `overflow_policy` 语义重叠**，且我自己都标了"键名为转写"；他落的 `selection` 是 **`§I.2` 行 2 逐字**，**比我更像逐字转写** |
+| `overflow_policy: "只保留代表解 + 区间包络（超出上限即折叠）"` | `overflow: fold` | ✅ **好** | `fold` = `§I.2` **逐字用词**（"超出**折叠**"）；我的长句反而是**复述** |
+| `solver_ref: scripts/pricelayer/solver.py` | 未落（同文件 `:63 assumption_grid.solver_ref` 已有**同一指针**） | ✅ **好** | **不重复写**正合 `G-06` |
+| `basis: {逐键出处}` | 未落，改在**头注 `:65-73` 逐字给** `§I.2`/`§J.3`/B18 原文 | ✅ **可接受** | 出处**逐字在**，只是载体是注释。★ 但与同目录惯例不一致（`baseline.yaml::thresholds.basis`、本件 `:58 assumption_grid.basis` 都是**映射**）⇒ **建议**（非缺陷）：补 `basis:` 映射，或在头注写明"本件此处出处由注释承载" |
+| `min_count: tbd` | **未落** | ⚠ **不够** —— 见 (d) | 设计未给下界这个**事实**没被登记 |
+
+#### (d) ★ 我这一轮**唯一要提的实质缺口**：`§B.1` 的「**必须展示多组解**」在 `rules/` 里**没有任何载体**
+
+`rules` 现在载的是 `§J.3`/`§I.2` 的**上限面**（展示几组、超出怎么折叠）；而**下界面**（`05/02:69 §B.1` 逐字："一个 P 对应**无穷多组**解。故**必须展示多组解**，否则会把某一解误当『市场的唯一真相』"）在 rules 里**既无 `must_show_multiple` 也无 `min_count`**。
+⇒ 后果不是抽象的：代码里那个 **`DEFAULT_MIN_SOLUTIONS = 2`（无出处）仍在决策路径**（`:391` 置 `degraded`、`:403` 呈现前不变式、`:503` `check()` 产 `IMPLIED-SINGLE-SOLUTION` Violation）⇒ **"2"长期没有归宿**，且**没有任何地方写着"下界 = tbd"**（`G-03`：未落 ≠ 无此要求）。
+⇒ **请你拍一下**（三种都行，我不擅动 `rules/`）：① 补 `min_count: tbd` + `basis`（我 §10.3 的原案）；② 补 `must_show_multiple: true`（语义键，非数值）；③ 明确"§B.1 下界面首版不参数化、`2` 按护栏处理"——若选 ③，则 `2` 必须**改成护栏口径**（docstring 明标 + 与 rules 互指），否则它仍是"参数却住代码"（违 `R8-3`）。
+
+#### (e) `max_grid_points = 256` —— 护栏判词**维持**，但记一条**前瞻风险**
+
+```
+$ PYTHONPATH=. python3 -c "…"        # 见 (b)：solve_implied_requirements 默认参数 max_grid_points = 256
+$ git show main:system/scripts/pricelayer/solver.py | sed -n '277,282p'
+    if len(values) > max_grid_points:
+        …
+            f"> 上限 {max_grid_points}，按已扫部分给区间（Ch5 §I.2 网格上界告警）"
+        values = values[:max_grid_points]
+```
+判 **✅ 护栏**（`R8-3`：仅防搜索爆炸 + `:273` docstring 明写"**不静默**"）—— 与 §11.4(b) 一致。
+★ **前瞻风险**：`rules/valuation-methods.yaml:61` 的 `grid_search_upper_bound: tbd` 一旦被拍板，代码里的 `256` 若不改读 **就重演同一 `G-06` 双份**（且这次是"真值 vs tbd"的更坏形态）。⇒ 护栏 docstring 里**除"护栏"二字外**，还应写明"本值非 rules 的 `grid_search_upper_bound`（那是**取值**上界，非**点数**上限）"。
+★ 顺带：`:61` 现在 **`tbd` 但代码有 `256`** ⇒ `grid_search_upper_bound` 眼下是个**永远不会被读的空壳**（形状同 (b)，只是值为 `tbd`）。
+
+#### (f) §12.2 判词汇总
+
+| 项 | 判词 |
+|---|---|
+| §J.3 候选**进 `rules/valuation-methods.yaml`** + 落点依据逐字写在头注 | ✅ **好** |
+| 实装键名/值相对我的候选的**精简**（`selection`/`overflow: fold`/不重复 `solver_ref`） | ✅ **好**（逐条理由见 (c)） |
+| 实装**少了 `basis:` 映射**（出处改由注释承载） | ✅ 可接受 / ⚠ **与同目录惯例不一致**（建议项，非缺陷） |
+| `§B.1` 下界面在 rules 里**无载体**、`DEFAULT_MIN_SOLUTIONS=2` 无出处仍在决策路径 | ⚠ **不够** ⇒ **待你拍**（(d) 三选一） |
+| 代码侧**未改**（三常量仍在决策路径）+ rules 那份**零消费者** | ❌ **未做** ⇒ **`G-06` 双份当场成立**（(b)） |
+| `max_grid_points` / `max_nodes` = 护栏 | ✅ **不是违规**（(e)，判词维持） |
+| `batch13_taskbook.md:391-392` 的落点**仍写 `rules/scenario.yaml`** | ❌ **错**（文档与实装矛盾；同 `:374` 一起订正，见 §12.5） |
+
+### §12.3 13-B 工作区：`scenario_tags` 绑定**仍未进 main**（并更正我 §11.5 的措辞）
+
+```
+$ git -C .worktrees/ws-ch5-pricelayer status --short
+ M system/scripts/pricelayer/scenario_guard.py
+ M system/scripts/pricelayer/valuation.py
+ M system/tests/pricelayer/conftest.py
+ M system/tests/pricelayer/test_scenario_guard.py
+ M system/tests/pricelayer/test_valuation.py
+$ git -C .worktrees/ws-ch5-pricelayer log --oneline -1
+4468da5 …（HEAD 未前进）
+
+$ git grep -nE 'RULE_KEY_TAGS|REQUIRED_RULE_KEYS|_rule_binding_violations|SCENARIO-RULE-BINDING' \
+      main -- system/scripts/pricelayer/scenario_guard.py
+(exit=1)                    ← ★★ main 上**零命中** ⇒ `scenario_tags` ↔ `ScenarioTag` 双存放**零绑定在 main 上仍活**
+```
+⇒ **更正我 §11.5 命中① 的措辞**：我写"已被 13-B 的未提交改动闭合"——**语义上会把"main 已安全"读进去**，实际是 **`main` 上仍无绑定**，修复**只存在于分支工作区**。
+⇒ ⇒ 这本身是 **`G-50` 形态**的活标本：**"看着有绑定、实际不在真源上"**（工作区改动不进 commit ⇒ 下一个人 `git grep` 真源时看到的是**零绑定**；而门禁**是绿的**，因为**零绑定意味着没人查**——绿恰恰是风险而非安全）。
+⇒ **建议**：提醒 13-B 尽快把这份修复提交；`#69` 的 ② 判词改为 **"13-B 面：设计上已补、真源上未达"**。
+
+### §12.4 13-A 面：`R8-1` / `R8-2` 两项 **⛔ 无被检对象**（`G-03`：不计为已验证）
+
+```
+$ git -C .worktrees/ws-ch2-rules log --oneline main..ws/ch4-valuelayer
+(空)      ⇒ ws/ch4-valuelayer = bb8991a = **main 的祖先**，**零领先提交**（13-A 未提交任何东西）
+$ git stash list
+stash@{0}: On ws/ch4-valuelayer: wip-ch4          ← 线索：13-A 的活儿在 stash 里
+$ git grep -n 'chapter4_g_depth' main -- system/scripts/delivery/stage_gate.py
+(exit=1)          ⇒ stage_gate **未绑**（:451/:452 只有 six_step_chain_complete / derivation_reviewable）
+$ git show main:system/registry/criterion_counterexamples.yaml | grep -c 'chapter4_g_depth'
+0                 ⇒ 反例登记表**无** `nvidia_sample::chapter4_g_depth` 条目
+$ cd system && python3 scripts/checks/criterion_effectiveness_guard.py
+  note: 未绑定判据[nvidia_sample]：2 条（['chapter4_g_depth', 'evidence_locatable']）—— 属后续阶段待交付，**不计为已验证**（`G-03`：无被检对象不得当成已核）
+RESULT: PASS（0 violations）
+```
+| `R8-*` 项 | 13-A 面现状 | 判词 |
+|---|---|---|
+| **R8-1**（`completeness.py` 键名 **且** `_rules.py::baseline_cfg` 深度） | 工作区零改动 ⇒ 真件上仍 `MissingRuleInput`（§6.3 已实测 6/6 键全红） | ⛔ **无被检对象**（`G-03`） |
+| **R8-2**（`verify.py::BATCHES` 只加自己那一条 + 反例只加自己那一条） | 台账仍 `未绑定判据[nvidia_sample]：2 条`，反例条目 0 | ⛔ **无被检对象**（`G-03`） |
+| **R8-3**（B18 常量） | 见 §12.2：rules 侧 ✅ / 代码侧 ❌ | 见 §12.2(f) |
+
+★ 已有任务 **#73**（"把价值层读口适配到 13-R 已安装的 rules 结构"）、**#74**（"同步测试夹具与注入测试到真实 rules 结构并解冲突"）在跑，且描述里已含 `thresholds` 分组与 `min_locator_count` ⇒ **方向与我 §12.2 的结论一致**；但**它们尚未产出 commit** ⇒ 本轮**仍按"无对象"计**，不得当已核。
+
+### §12.5 需主理人动作（截至本轮）
+
+1. **`batch13_taskbook.md:374`** —— 删括注 "（`grep` 零引用 = 死常量）"（引了我已在本报告 §11.2 证伪的话；裁定结论不受影响）。
+2. **`batch13_taskbook.md:391-392`** —— 落点仍写 `rules/scenario.yaml`，实际落在 `rules/valuation-methods.yaml`（`182f8a1`）⇒ **两行订正**（同一文件两处矛盾，别只改一处）。
+3. **代码侧 `R8-3` 未做**（§12.2(b)）：`solver.py:79/82/85` + 5 处决策路径 + rules 零消费者。⇒ 派活时**给可验收口径**：`git grep 'solution_set_display' -- system/scripts` **必须非空**。
+4. **`§B.1` 下界面载体缺失**（§12.2(d)）：三选一（`min_count: tbd` / `must_show_multiple: true` / 明确"下界按护栏口径"并把 `2` 的 docstring 改护栏）。
+5. **13-B 的 `scenario_guard.py` 修复未提交**（§12.3）：真源上 `scenario_tags` 绑定**仍为零**。
+
+### §12.6 本节一句话
+
+**`rules/` 侧装得很好（落点、逐字、头注依据都对，我逐条给了"为什么好"）；但"装了"与"读了"之间隔着一次接线 —— 现在 `rules` 的那对值是当局的第二次"声明 ≠ 有效力"（`G-50` 家族），而 `13-A` 面连被检对象都还没有。⇒ `#69` 保持 `in_progress`，13-B 面收口、13-A 面挂账。**
