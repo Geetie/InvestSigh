@@ -25,6 +25,24 @@
 
 set -u
 
+# ★★ 卡 `#96` §③（缺口 `G-65` 的可见性修复）之前，先修一处**我自己在 13-O 写下的静默缺陷**：
+#   `$0` **必须先钉成绝对路径** —— 本文件后面会 `cd "$REPO_ROOT"`，
+#   若调用方式是相对路径（`cd system/scripts/ops && sh pre-commit.sh`），相对 `$0` 就再也解不开：
+#   `done < "$0"` 的重定向**失败** ⇒ **整个 while 循环体一次都不执行** ⇒ `_gate_count` 静默停在 `0`，
+#   而脚本**照常 `exit 0`**、报"全部门禁放行"。
+#   实测（2026-09-17，本树 `0582804`，cwd=`system/scripts/ops`）：
+#       $ sh pre-commit.sh
+#       pre-commit.sh: line 129: pre-commit.sh: No such file or directory
+#       pre-commit: 判据树 HEAD=0582804 · 本树门禁 0 道 · 判据=pre-commit.sh
+#       …（14 道**确实都跑了**）…   pre-commit ✓ 全部门禁放行     ⇒ rc=0
+#   ⇒ 13-O 那行"可见性输出"**当场报了个假数**，而假数比不报更坏（`G-03`：`0 道` ≠ 没门禁）。
+#   ★ 这是"判据用了相对路径，而对象在 `cd` 之后"的同族第三例（前两例见 `run_gate` 的载荷约定）。
+_SELF="$0"
+case "${_SELF}" in
+  /*) ;;
+  *) _SELF="$(cd "$(dirname "${_SELF}")" 2>/dev/null && pwd)/$(basename "${_SELF}")" ;;
+esac
+
 # ★★ 问根之前**必须摘掉 `GIT_DIR`**（与 `append_only_guard` 那处**同一根因**，实测过）：
 #   在 git 钩子里 `GIT_DIR` 是**已导出**的；此时**不带** `GIT_WORK_TREE` 的
 #   `git rev-parse --show-toplevel` **不查仓库、直接把 cwd 当工作树根**返回。
@@ -121,19 +139,46 @@ INPUT_ERROR=0
 #   ★ 门禁数**由本文件自身派生**（不写死 —— 13-J 的纪律：写死计数会漂）。
 #   ★ 用 `case` 扫行、**不用 grep**：本机 `grep` 是被 broker 影子化的 toybox 方言
 #     （`CONVENTIONS.md V-10`）⇒ 取数脚手架**不得依赖方言**。
+#   ★★ 取不到时必须说"**取不到**"，**不许报 0**：`0 道` 与"扫描没生效"是两件事，
+#     报成 `0 道` 就是上面那处实测过的假数。
 _gate_count=0
-while IFS= read -r _line; do
-  case "${_line}" in
-    run_gate\ \"*) _gate_count=$((_gate_count + 1)) ;;
-  esac
-done < "$0"
+if [ -r "${_SELF}" ]; then
+  while IFS= read -r _line; do
+    case "${_line}" in
+      run_gate\ \"*) _gate_count=$((_gate_count + 1)) ;;
+    esac
+  done < "${_SELF}"
+fi
+if [ "${_gate_count}" -gt 0 ]; then
+  _gate_count_text="${_gate_count}"
+else
+  _gate_count_text="**取不到**（⚠ 不得当作 0）"
+fi
 #   ★ 问 HEAD 之前**同样**要摘 `GIT_DIR`（与第 15–23 行同一根因）：钩子里它是已导出的，
 #     不摘会让 git 读**钩子注入的那个**仓库，而我们要的是 `$REPO_ROOT` 这棵树自己的 HEAD。
 _tree_head="$(
   unset GIT_DIR GIT_WORK_TREE GIT_PREFIX
   git rev-parse --short HEAD 2>/dev/null
 )" || _tree_head=""
-echo "pre-commit: 判据树 HEAD=${_tree_head:-（无提交）} · 本树门禁 ${_gate_count} 道 · 判据=${0}"
+
+# ★★ 卡 `#96` §③ / 缺口 `G-65`：把**两组门禁集合之差**变成机器可见（此前它**完全不可观测**）。
+#   问题：`run_all_gates.py::GATES` 27 道 vs 本文件 14 道**不是同一集合**
+#   ⇒ 有 13 道**只在集成时跑，红着也不挡提交**（`traceback.py` 就是活例：主干即红而提交照过）。
+#   ★ **明确不做**：把 27 道塞进本文件 —— 那会让每次提交变慢，而"**卡死的门禁 = 被关掉的门禁**"；
+#     且 `口径 16` 已定 pre-commit 不跑 pytest（13 道里的多数）。
+#   ⇒ 只换一行**可见性**：差是多少、是哪些，读输出即知（`口径 10`：本次用的是哪份清单要留现场）。
+#   ★ 取数**不许 grep**（`V-10`），且道数必须**派生**：
+#     本树门禁数 = 上面 `case` 扫 `${_SELF}`；`run_all_gates` 侧 = **装载真源模块**取 `len(GATES)`
+#     （不是文本扫 `GATES` —— 格式一变计数会静默漂，本文件上面刚实测过同族形态）。
+#   ★ 派生器 `gate_set_diff.py` **永不阻断提交**（它是可见性工具，不是门禁）；取不到数时
+#     输出"取不到"，**不报 0**。
+_gate_sets="$( "$PY" "$CODE_ROOT/scripts/ops/gate_set_diff.py" \
+  "$CODE_ROOT/scripts/ops/run_all_gates.py" "${_SELF}" "${_gate_count}" 2>/dev/null )" \
+  || _gate_sets=""
+if [ -z "${_gate_sets}" ]; then
+  _gate_sets="run_all_gates 集合差**取不到**（⚠ 不得当作 0；派生器未产出）"
+fi
+echo "pre-commit: 判据树 HEAD=${_tree_head:-（无提交）} · 本树门禁 ${_gate_count_text} 道 · ${_gate_sets} · 判据=${_SELF}"
 
 run_gate() {
   # ★★★ 载荷约定（**改动这里必看**）：调用点是 `run_gate <label> <script> <args…>`，

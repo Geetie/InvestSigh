@@ -3035,3 +3035,171 @@ pre-commit ✗ append_only_guard 阻断（exit=127）
   "跨面写约定"要走裁定）；本节只做**登记**。
 - ★ 本轮所有"改前"读数均取自 `git show HEAD:…`（`15835d8`）落成的 `/tmp/pc96old/pre-commit-old.sh`，
   **不是**凭记忆 —— 且锚点先核对过（`cd "$REPO_ROOT" || exit 1` 1 次 / `找不到可用的 python` 1 次）。
+
+---
+
+### §17.19 卡 `#96` §③：`G-65` 的**可见性修复**（两组门禁集合之差必须机器可见）
+
+#### 17.19.1 对象与取样钉死（`口径 10` / `口径 9`）
+
+| 项 | 值 |
+|---|---|
+| 实施树（对象） | `/Users/gaza/Developer/InvestSigh/.worktrees/ws-ch2-rules` @ `ws/ch2-rules` |
+| 改动前 HEAD | `0582804`（§17.18 的提交） |
+| 取样时刻 | 2026-09-17 CST |
+| 被改/新增 | `system/scripts/ops/pre-commit.sh`（改）、`system/scripts/ops/gate_set_diff.py`（**新**）、`system/tests/guards/test_gate_set_visibility.py`（**新**，13 例） |
+
+#### 17.19.2 缺口（`G-65`）与"**明确不做**"的那一半
+
+`GATES` **27 道** vs `pre-commit` **14 道**不是同一集合 ⇒ **13 道只在集成时跑，红着也不挡提交**。
+本树 27 道汇总（§17.19.7）里 `traceback.py exit=1` 就是**活样本**：它红着，而提交照过。
+
+★ **不做**：把 27 道塞进 `pre-commit`。理由（逐条）：
+① 会让每次提交变慢，而"**卡死的门禁 = 被关掉的门禁**"——**扩大**门禁集合反而**削弱**门禁；
+② `口径 16` 已定 pre-commit 不跑 pytest，而 13 道里的多数是 pytest 形态的检查器；
+③ 差的**存在**不是缺陷，**差的不可见**才是。⇒ 只买一行**可见性**。
+
+#### 17.19.3 做法：三个数都**派生**，且**两条独立派生必须对得上**
+
+| 数 | 谁产 | 手段 |
+|---|---|---|
+| 本树门禁数 | `pre-commit.sh` | `case` 扫 `${_SELF}` 的行首（13-O 原样，**不用 grep**，`V-10`） |
+| `run_all_gates` 集合 | `gate_set_diff.py` | **装载真源模块**取 `len(GATES)`（**不是**文本扫 `GATES`） |
+| 差值 `\|G \\ P\|` | 同上 | 集合差（`G \\ P`），**不是** `\|G\| - N` |
+
+★ **为什么用"装载"而不是"扫行"**：扫行只在"格式恰好如此"时成立，格式一变计数就**静默漂** ——
+  本卡**刚在同一行上实测过**这个形态（§17.19.4）。装载真源是 `G-06`（单一真源）的直接落实。
+★ **为什么第二条派生**：`pre-commit.sh` 的 `case` 与派生器的正则都在数"本树门禁"，
+  两者**手段独立**⇒ 不一致时报 `⚠ 两处派生不一致`（**不阻断提交**）。
+  "同一事实的两条派生必须对得上"是 `G-06` 在**派生层**的形态；只写一条，漂了没人知道。
+
+新行（真实树，逐字）：
+
+```
+pre-commit: 判据树 HEAD=0582804 · 本树门禁 14 道 · run_all_gates 另有 13 道（集成时跑） · 判据=/…/system/scripts/ops/pre-commit.sh
+```
+
+#### 17.19.4 ★★ 动手前先修掉一处**我自己在 13-O 写下的静默缺陷**（`$0` 相对路径）
+
+`_gate_count` 的派生用 `while … done < "$0"`，而本文件**稍后会 `cd "$REPO_ROOT"`** ⇒
+相对 `$0` 再也解不开 ⇒ 重定向失败 ⇒ **整个循环体一次都不执行** ⇒ 计数**静默停在 `0`**。
+
+实测（改前，本树 `0582804`，cwd = `system/scripts/ops`）：
+
+```
+$ sh pre-commit.sh
+pre-commit.sh: line 129: pre-commit.sh: No such file or directory
+pre-commit: 判据树 HEAD=0582804 · 本树门禁 0 道 · 判据=pre-commit.sh
+pre-commit → append_only_guard
+…（14 道**确实都跑了**）…
+pre-commit ✓ 全部门禁放行                                    ⇒ rc=0
+```
+
+★★ **这是本轮最该记的一条**：13-O 那一行**本来就是为了治"静默"**，
+  而它在**另一种调用方式**下**自己变成了静默**（报 `0 道` 且 `exit 0` 说"全放行"）。
+  ⇒ "可见性输出"本身也是判据，**它也要被反向验证**；否则它就是**假证据的来源**。
+
+**两处修法（独立的两个保险）**：
+
+1. `$0` 在**任何 `cd` 之前**钉成绝对路径（`_SELF`）⇒ 拿回**真数**；
+2. 计数**取不到时不许报 `0`**，改写"**取不到**（⚠ 不得当作 0）"⇒ **不许说谎**。
+   ★ 第 2 条是**独立**的：即使 `_SELF` 又坏了（例如被 `source` 调用），也只会有"取不到"，不会有假数。
+
+#### 17.19.5 验收 ① ② ③ 的原始读数
+
+**① 两个数各自与实际集合一致** —— `test_numbers_match_the_actual_sets`：
+测试自己 parse `pre-commit.sh`（`_GATE_RE`）+ 自己 `importlib` 装载 `run_all_gates.py`，
+用**第三条独立路径**现算 `(|P|, |G\\P|)` 与输出对；并钉住 `P ⊆ G`（否则"另有"会被**低报**）。
+
+**② 增/删一道门禁 ⇒ 两个数自动跟着变**（`/tmp/g65_killtest.py`，A1–A4 全 PASS）：
+
+| 实验 | 改什么 | 本树门禁 | 另有 | `⚠ 未登记` |
+|---|---|---|---|---|
+| A1 | 把 `traceback`（已在 `GATES` 里）**提升**为提交时门禁 | `14→15` | `13→12` | 无 |
+| A2 | 加一道**未登记**的门禁 | `14→15` | **`13→13`** | **有**（点名 `zz_fake_guard.py`） |
+| A3 | **删掉**一道提交时门禁 | `14→13` | `13→14` | 无 |
+| A4 | 被 `source` 调用（`$0`≠本文件） | **`取不到`** | `27 道（两集合之比不可得）` | — |
+
+★ **A2 是这三格里最有信息量的**：「另有」**没变**，而且**这是对的** —— 集合差**真的**没变，
+  新增的是"**两处口径不一致**"（`G-07`）。若实现写成"机械地 `|G| - N`"，
+  就会报 `12`，把"不一致"伪装成"差变小了"（`G-62`）。⇒ `B4` 反例专门打这一点，**红**。
+
+**③ 全道 PASS 不受影响**（真实树，逐字）：
+
+```
+$ sh system/scripts/ops/pre-commit.sh
+rc=0   ·   `pre-commit → ` 14 次  ·  `pre-commit ✗ ` 0 次  ·  `阻断` 0 次  ·  `[INPUT-ERROR]` 0 次
+末尾：pre-commit ✓ 全部门禁放行
+```
+
+#### 17.19.6 `B1`–`B8` 八个反例（`/tmp/g65_killtest2.py`，8/8 有判别力）
+
+| # | 反例 | 期望变红的用例 | 红在哪（**原文**） |
+|---|---|---|---|
+| B1 | `$0` 打回裸 `$0` | `…does_not_silently_count_zero` | 行里出现 `**取不到**（⚠…）` ⇒ `_numbers` 解析失败（**不是**报 0：两个保险独立生效） |
+| B2 | 删掉"取不到"那一支 | `…is_not_reported_as_zero` | `AssertionError: 取不到时报了 0 道（假数）` |
+| B3 | 删掉可见性行 | `…real_tree_still_passes…` | `输出里没有可见性行` |
+| B4 | 「另有」改成机械 `\|G\|-N` | `…unregistered_gate_is_flagged` | `assert 12 == 13` —— "集合差没变却把「另有」改了" |
+| B5 | 删掉"未登记"告警 | 同上 | `未登记的门禁没被点名` |
+| B6 | 派生器取不到时报 0 | `…missing_module_says_unavailable_not_zero` | 输出里出现 `另有 0 道` |
+| B7 | 删掉交叉核对 | `…flags_cross_check_mismatch` | 不再报 `两处派生不一致` |
+| B8 | 改发射字面量 | `…emitted_literals_are_still_in_the_sources` | 元断言命中 |
+
+`B0` 基线 `13 passed`；`B9` 全部还原后 `13 passed`。
+
+#### 17.19.7 `run_all_gates` 27 道汇总（本树，`--timeout 60`）
+
+**26 绿 + 1 红**：红的是 `traceback.py`（`exit=1`，**主干即红**，见 §17.16.7 的归属判定）。
+本卡改动**没有**引入任何新红。
+```
+conflict_scan 0 · append_only_guard 0 · rules_lock_guard 0 · registry_schema_guard 0 ·
+schema_sync_guard 0 · assert_gate_input 0 · freeze_guard 0 · launch_guard 0 · module_denylist 0 ·
+no_signal_day 0 · no_placeholder_guard 0 · neutrality_check 0 · return_guard 0 · anti_padding 0 ·
+gap_to_task 0 · **traceback 1** · pipeline 0 · stage_gate(--stage prep) 0 · injection_guard 0 ·
+verification_policy_guard 0 · shell_var_guard 0 · graph_integrity_guard 0 · locator_check 0 ·
+criterion_effectiveness_guard 0 · quote_provenance_guard 0 · scenario_tag_binding_guard 0 ·
+rule_key_alignment_guard 0          非零计数 = 1
+```
+★ 这张表**就是 `G-65` 的收益证明**：那个 `1` **红着**，而**提交照过**（`pre-commit` 不看它）。
+  此前这件事**只在有人手工跑 27 道时才能发现**；现在每次提交的第一行就写着"另有 13 道（集成时跑）"。
+
+#### 17.19.8 门禁抓出真问题一次：`SWALLOW_EXCEPTION_CONTINUE`
+
+派生器初版取不到数时写的是 `except Exception: return None` ——
+被 **`no_placeholder_guard::SWALLOW_EXCEPTION_CONTINUE`** 当场拦下（`scripts/ops/gate_set_diff.py:64`）。
+
+★ **它抓得对，我没有加豁免**：`return None` 会让"**文件不在本树**"与"**装载失败**"
+  在调用方**看起来一模一样**（`G-62`）—— 而这恰恰是**本节自己**要消灭的形态。
+★ 修法照本项目**已两次记录**的做法（`scripts/ops/sample_batch_times.py::_read_log_header`、
+  `scripts/daily/coverage.py:145`）：**返回带原因的字符串**（返回类型写成 `list[str] | str`），
+  失败**携带原因**并进入输出。实测四种失败各报各的：
+```
+文件不在本树：run_all_gates.py
+装载失败（SyntaxError: invalid syntax (broken_gates.py, line 1)）
+无法按路径装载（spec/loader 为空）：pre-commit.sh
+`GATES` 是空序列（⚠ 空 ≠ 没有门禁 —— 不得当作 0）
+```
+★ 记功一句：**这是本卡"门禁在起作用"的第三个独立证据**（前两次见 §17.16/§17.17）。
+
+#### 17.19.9 边界与未证
+
+1. `gate_set_diff.py` **永不阻断提交**（`rc` 恒 `0`，除用法错误 `2`）—— **刻意的**：
+   它是可见性工具，不是门禁。⇒ "有人看见差却不当回事"这件事，**本卡管不了**。
+2. "两处口径一致"只在**危险方向**（本树有、`run_all_gates` 无）报 `⚠`；
+   反向（`run_all_gates` 有、本树无）**本来就是本卡要暴露的正常差**，不是缺陷。
+3. 本卡**没有**机器强制"那 13 道在集成时**确实**有人跑" —— `run_all_gates` 是一份**清单**，
+   **不是调度器**。⇒ 差可见 ≠ 差会被处理。
+4. `$0` 的修法只覆盖"脚本被**当脚本**执行"这一族；被 `source` 时仍取不到数，
+   此时输出"**取不到**"（B1/A4 已实测）——**这不修**，因为"被 source"本就不是本文件的用法。
+5. `tests/guards` 由 **`125 passed`** 覆盖（112 → +13）；**未跑**：injection 7 片（同 §17.17/§17.18）。
+
+#### 17.19.10 自查
+
+- ★ **本轮最重的一条是自己打自己**：13-O 那行"可见性输出"在**相对路径调用**下
+  **自己变成了假数**（`0 道` + `exit 0` "全放行"）。我是在**给同一行加东西之前**
+  顺手探了一下才发现的 —— **如果我直接加新行不改它，这个假数会一直留着，而且新行会站在它旁边**。
+  ⇒ 教训：**"可见性输出"也是判据，必须与普通判据一样做反向验证**（`G9` 的同一形状）。
+- ★ 我**没有**把"27 道塞进 pre-commit"当作"更彻底的修法" —— 那会把**门禁变慢**，
+  而慢门禁会被绕过；`口径 16` 也已定 pre-commit 不跑 pytest。**扩范围 ≠ 收口**。
+- ★ 我**没有**擅自新增 `CONVENTIONS.md` 条目（`G-65`/"可见性输出须反向验证"两条都只在本报告登记，
+  等主理人裁定）。
