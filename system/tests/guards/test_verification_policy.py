@@ -12,8 +12,17 @@
 | B | 加一个以裸 `tests` 为目标的"全量批次" | V-01 |
 | C | 把某批超时设成 0 或不设上限 | V-02 |
 | D | 把超时码 `124` 判成通过 | V-03 |
-| E | 去掉 `run_pytest.sh` 的 broker 关闭（测试又跑在沙箱里） | V-04 |
+| E | 去掉 `run_pytest.sh` / `verify.py` 的 broker 关闭（测试又跑在沙箱里） | V-04 |
 | F | 新增测试目录却不加批次（测试永远不被跑） | V-06 |
+| G | 删掉 `verify.py` 的**第三道闸门** `CODEBUDDY_SAFE_DELETE_ENABLED` | V-04 |
+| H | 删掉 `run_pytest.sh` 的**第三道闸门** | V-04 |
+| I | ★ 文本里有第三道闸门、**运行时**派生环境里没有（声明↔实现脱节） | V-04 |
+
+★ G/H/I 是**第三道闸门**落地时补的：只关前两个 broker 变量时，每次删除仍会 spawn 一次
+node CLI ⇒ 夹具批次照样打穿宿主**回合级**删除预算（`V-08`/`V-09`），症状是"后面所有建夹具的
+用例集体报 `E`"，极易被读成"测试坏了"。三条闸门的**唯一真源** =
+`scripts/checks/verification_policy_guard.py::BROKER_ENV_VARS`。
+★ G/H 管**文本层**、I 管**运行时** —— **只测文本层会漏掉"写了却没进入子进程环境"**。
 """
 
 from __future__ import annotations
@@ -138,6 +147,70 @@ def test_missing_broker_env_in_verify_is_rejected(code_root: Path) -> None:
         "",
     )
     assert_rejected(run_gate(GUARD, code_root), rule_hint="V-04")
+
+
+# ═══════════════ G/H/I · 第三道闸门 `CODEBUDDY_SAFE_DELETE_ENABLED`（V-04） ═══════════════
+
+def _load_child_env(root: Path) -> dict:
+    """按**文件路径**加载夹具树里的 `verify.py`，返回 `_child_env()` 的结果。
+
+    ★ 必须在 `exec_module` **之前**把模块登记进 `sys.modules`：`verify.py` 用了
+      `@dataclass(frozen=True)`，而 `dataclasses` 会去 `sys.modules[cls.__module__]`
+      取命名空间 ⇒ **不登记就 `AttributeError: 'NoneType' object has no attribute '__dict__'`**
+      （本会话实测踩到）。`tests/injection/test_shard_coverage.py::_load_verify` 同法。
+    ★ `try/finally` 复原 `sys.modules`：加载器带全局副作用，不还原会污染同会话的其它用例。
+    """
+    import importlib.util
+    import sys as _sys
+
+    path = root / VERIFY_REL
+    assert path.exists(), f"缺少验证器: {path}"
+    name = "_verify_under_choke_point_binding_check"
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None, f"无法加载 {path}"
+    module = importlib.util.module_from_spec(spec)
+    _sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+        return dict(module._child_env())
+    finally:
+        _sys.modules.pop(name, None)
+
+
+def test_missing_safe_delete_switch_in_verify_is_rejected(code_root: Path) -> None:
+    """删掉 `verify.py::_child_env` 的**第三道闸门** → 必须 FAIL（文本层绑定）。"""
+    _patch(code_root, VERIFY_REL, '"CODEBUDDY_SAFE_DELETE_ENABLED": "0",', "")
+    assert_rejected(run_gate(GUARD, code_root), rule_hint="V-04")
+
+
+def test_missing_safe_delete_switch_in_run_pytest_is_rejected(code_root: Path) -> None:
+    """删掉 `run_pytest.sh` 的**第三道闸门** → 必须 FAIL（文本层绑定）。"""
+    _patch(
+        code_root,
+        RUN_PYTEST_REL,
+        "export CODEBUDDY_SAFE_DELETE_ENABLED=0",
+        "# (removed)",
+    )
+    assert_rejected(run_gate(GUARD, code_root), rule_hint="V-04")
+
+
+def test_child_env_actually_carries_all_three_switches(code_root: Path) -> None:
+    """★ **运行时**断言：`_child_env()` 真的把**三道**闸门都置成了 `"0"`。
+
+    上面 G/H 只证明守卫在**文本层面**要求它们；本用例补上另一半 ——
+    **文本里有、运行时没有**同样是脱节（`G-02` 的立意：绑定要落在**函数体**上，
+    而不是"某个文件里出现过这个字符串"）。
+    """
+    env = _load_child_env(code_root)
+    for var in (
+        "CODEBUDDY_SAFE_DELETE_SANDBOX",
+        "CODEBUDDY_BROKERED_FS_HOOK_ENABLED",
+        "CODEBUDDY_SAFE_DELETE_ENABLED",
+    ):
+        assert env.get(var) == "0", (
+            f"派生环境里 {var} 不是 '0'，实际是 {env.get(var)!r} —— "
+            "夹具会在沙箱里 copytree，即 V-04 被破"
+        )
 
 
 # ═══════════════ F · 新增测试却不入批（V-06） ═══════════════
