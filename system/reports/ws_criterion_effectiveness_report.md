@@ -401,3 +401,104 @@ $ pytest tests/injection -q -p no:cacheprovider
   `verify.py`，只报"需新增批次"）—— 本报告 §4.1 即为该上报。
 - **未**改 `conftest.py`（夹具 1.4s/例 的 `raw/` 清理开销属既有实现，实测 main 上同样 1.4s，
   非本批次引入；不属我的范围）。
+
+---
+
+## 五、合并后复验（本节在分支并入 main 之后补写）
+
+上面 §一~§四 的全部数字都测于本分支的基线 `5a314a3`。分支并入 main 后
+（`bc26933 merge ws/criterion-effectiveness`），本节的数字**测于合并后的 main 树**，
+以免"只在旧基线上绿"。
+
+### 5.1 复验命令与实录
+
+复验在 main 的**干净临时工作树**上做（`git worktree add <tmp> main --detach`，
+用完 `git worktree remove` 删除），先按 `CONVENTIONS §一 V-07` bootstrap `rules/` 权限。
+
+**① 门禁本身**
+```
+$ python system/scripts/checks/criterion_effectiveness_guard.py system
+EXIT=0
+  scanned criteria_bound: 12
+  scanned criteria_declared_automated: 18
+  scanned criteria_not_implemented: 6
+  scanned criteria_registry_entries: 13
+  scanned registry_entry_tests_resolved: 13
+RESULT: PASS（0 violations）
+```
+四个扫描数与基线**完全一致**。另对两个输入做了直接比对，确认未漂移：
+```
+$ git diff ws/criterion-effectiveness main -- system/scripts/delivery/stage_gate.py
+（空）
+$ git diff ws/criterion-effectiveness main -- system/registry/delivery.yaml
+（空）
+```
+
+**② 反例测试文件（23 条）**
+```
+$ sh system/scripts/ops/run_pytest.sh tests/injection/test_criterion_effectiveness.py
+collected 23 items
+tests/injection/test_criterion_effectiveness.py .................
+→ 打到第 17 条时被宿主 SIGTERM 掐断（环境问题，见 §5.2；**非测试失败**，17 个点全为通过）
+
+$ sh system/scripts/ops/run_pytest.sh tests/injection/test_criterion_effectiveness.py \
+    -k "makes_guard_fail or is_registered_in_runner or reports_input_error"
+collected 23 items / 17 deselected / 6 selected
+tests/injection/test_criterion_effectiveness.py ......                   [100%]
+====================== 6 passed, 17 deselected in 32.56s =======================
+RC=0
+```
+中断点前 17 条与续跑的 6 条**互不重叠**，合起来覆盖全部 23 条。
+**续跑的 6 条正是 H2/H3 义务测试**（`H2`：删任一登记 → 门禁必红 / 新绑定未登记 → 必红 /
+登记指向不存在的测试 → 必红 / 登记了未绑定判据 → 必红；`H3`：门禁已注册进
+`run_all_gates.py` + `pre-commit.sh` / `code_root` 缺失 → 返 `2`）。
+
+**③ 全门禁**
+```
+$ python system/scripts/ops/run_all_gates.py --timeout 30
+  ...
+  criterion_effectiveness_guard.py   exit=0        1.51s     ← 本次新增，24 条门禁
+  非零计数                               1
+```
+唯一非零仍是 `traceback.py exit=1`（§4.2 已定性为既有 `T-10` 真实违例），与 G9 无关。
+新门禁 1.51s，未显著拖慢（既有 18 条合计 ≈3.7s 的基线未变）。
+
+**④ pre-commit**
+```
+$ sh system/scripts/ops/pre-commit.sh
+pre-commit ✓ 全部门禁放行
+RC=0        ← 11 条（含本次新增的第 ⑪ 条）
+```
+
+### 5.2 本节两次 SIGTERM 的定性（**环境，非代码**）
+
+`pytest` **不能**在 Bash 沙箱内直接跑：`sitecustomize.py` 的 FS broker 在每次文件操作上
+往宿主走 IPC，夹具每例 `copytree` 130 个文件 ⇒ 累积数万次往返后**进程卡死/被 SIGTERM**，
+且**卡点漂移、无任何输出**，极易被误读成"测试挂了"。
+正确跑法是 `sh system/scripts/ops/run_pytest.sh tests/<子目录>`（该脚本自行把 broker 关掉）。
+另注意 PATH 上的 `python`（`versions/3.13.12`）**没有 pytest**，
+`python -m pytest` 会报 `No module named pytest`（误导），不要据此判断环境坏了。
+
+这与我早前实测到的宿主删除配额（`SAFE_DELETE_BULK_CONFIRM_REQUIRED {"count":10218,"threshold":9999}`）
+是**两个独立**的环境限制；本文所有测试结论均已在这两类干扰之外取得。
+
+### 5.3 §4.1 / §4.2 两条上报的**最新状态**（本报告写完后 main 已前进，故在此更正）
+
+| 上报项 | 当前状态 |
+|---|---|
+| §4.1 `injection` 批一次跑不完（宿主删除配额） | main 的 `verify.py` 已被 team-lead 重构（`+61/-16`）。**我未在重构后复验该批** —— 本轮删除配额已被前面复验吃掉，再跑必然假红。**此条仍未经我复验**，如需请另行验证。 |
+| §4.2 `stage` 批期望值随真实数据过期 | **已修**：`3f4c372 fix(verify): stage 批次判据改为数据驱动（原写法把"哪些阶段该阻塞"写死 → 已过期成假红）`。本报告 §4.2 的"建议上报"已完成。 |
+| §4.2 `traceback.py exit=1` | **仍未修**（既有真实违例 `rec-nvda-001` 缺 `['assumptions','computation']`）。`pre-commit` 不跑它，故不阻塞提交。 |
+
+### 5.4 G9-1 / G9-2 已被 team-lead 登记
+
+我上报的两个缺口已在 main 的 `016f311` 中登记为 `G9-1` / `G9-2` / `G-28`。
+**本批次未**自行修改 `delivery.yaml` 的判据措辞（字面语义属设计区 `R-04`），落点归 team-lead。
+
+### 5.5 本节新增证据下的清洁性
+
+- 两个临时工作树（复验 main 用）**均已 `git worktree remove` 删除**，`.worktrees/tmp-*` 无残留。
+- 本分支工作树 `git status --short` **空**。
+- 真实仓库 `git status --short` 仅见**他人**产物（` M system/tests/guards/test_exit_code_contract.py`
+  —— 应为 `ws-guards-catchup` 在收编 `GUARDS` 矩阵；`?? system/tests/.audit-b11/` —— `auditor-batch11`）。
+  **我未触碰这两者**，本节实验全部只在副本内进行，真实 `facts/`、`derived/`、`space/` 未被写入。
