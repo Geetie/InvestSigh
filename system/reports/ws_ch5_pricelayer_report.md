@@ -199,6 +199,59 @@ Python 里**后一份静默遮蔽前一份** ⇒ 这 9 个副本**从不执行**
 > 方式见 §② V-1j：`pytest` **命令**仍未跑（`G-60` 排他窗口），但把**测试函数本体**用**手搓等价夹具**
 > 直接调用执行了断言。窗口关闭后仍需按正式路径 `verify.py --batch pricelayer` 复跑一次。
 
+### 1-6 ★ 第五轮：主理人**裁定（甲）**落地 —— `value_source` 的**声明粒度**收紧
+
+`§④-8a` 那条待裁定项（第三轮起提了三轮）主理人已裁：**采纳 (甲)，不采纳 (乙)**。
+
+> **理由（他的原话，逐字）**：*"标志的单位必须与它声称覆盖的单位一致。`value_source` 是对
+> **整个结构**的'已核'声明。若结构内**有**字段落到 `design_default` 而标志仍写 `rules`，
+> 那么只读 `value_source` 的下游会得到「**整块已核**」—— 而事实是**部分未核**。
+> 这正是本轮入册的 `V-11` 类别轴（样本性质被上推到类别）与 `G-62`（不可区分）。"*
+
+**改动面 = 3 个 `load_*` 各一行**（`solver` / `valuation` / `daily_explain`）：
+
+```python
+value_source="rules" if not notes else "design_default",
+```
+
+即 **"全部字段都来自文件"才叫 `rules`**，否则 `design_default` —— 而 `notes` 里逐条点名
+**缺的是哪个字段**（**不丢信息**：改标志只是**不再过度声称**，不是删信息）。
+
+#### ★★ 反向对照（`G-05`，主理人明确要求）：字段齐备时**必须仍报 `rules`**
+
+否则标志会退化成"**永远 `design_default`**"——那与"永远 `rules`"**一样没有信息量**。
+实测（真 `rules/` 只读副本，字段齐备）三处**全部仍报 `rules` 且零 note**（见 §② V-1l）。
+
+#### ★ 落 (甲) 时**必须同步动的三处**（漏一处就变成"改出新的静默"）
+
+| # | 连带改动 | 为什么非改不可 |
+|---|---|---|
+| ① | `solver`：`int(node.get(k) or DEFAULT)` → **先判键在不在**，键在但值非整数 ⇒ `PriceLayerError` | 旧写法在**键在但值为 `0`/`None`** 时用 `or` 悄悄换成回落值**且不留 note** ⇒ 标志会**误报 `rules`**（正是甲要堵的那个洞） |
+| ② | `solver`：`must_show_multiple` 由 `bool(node.get(k, DEFAULT))` → **键在且非布尔 ⇒ `PriceLayerError`** | `bool(None)` = `False` ⇒ `must_show_multiple: null` 会把"必须多组解"这条**设计不变量**悄悄关掉（多解下限退化为 1） |
+| ③ | ★★ `daily_explain._rule_binding_violations`：把 `on_hit.…` 的**存在性判据挪到早退之前** | 甲生效后"缺该子键"会让 `value_source` 变 `design_default`，而该函数有一条"`value_source != rules` ⇒ 报'读不到值'并**早退**"。存在性判据若排在早退**之后**就会被**吞掉**，只剩一条笼统消息、**信息更少** —— 与 `valuation.check` 的 D-1「**早退吞违例**」**同一形状**（`G-62` 家族） |
+
+★ ③ 是**主理人赞扬过的那条跨模块形状**（"早退吞违例"）在本轮的**第二次复现**：他给我记功时
+说的是修 8 里那次；本轮是**同一个人在同一个补丁里**又踩到一次、又自己发现并挪走。
+★ 顺带：挪走后原位置留下**同一段判据的第二份副本**（我在第一轮编辑时留下的重复块）——
+按**修 5/修 6 的同一条纪律**（死代码 / 重复代码必须删，不能留"看起来还在守"的假象）**已删**。
+
+#### ★ 口径变更史（写明"为什么这不是反复"）
+
+- **第三轮裁定 ③-2** 定的是**实现口径**："节存在即 `rules`"——即"**怎么判**"。
+- **第五轮裁定（甲）** 定的是**声明的粒度**："标志只能覆盖它声称覆盖的单位"——即"**声称什么**"。
+- ⇒ 两者是**同一方向上的收紧**，**不是翻转**。（主理人原话：*"这条不属于'反向改自己刚立的判据'"*。）
+
+#### 顺带：`selection` / `overflow` 也纳入标志范围（**本流的选择，登记请复核**）
+
+`solution_set_display` 的 5 个字段里，`selection`/`overflow` 是**自由文本标签**、**没有设计逐字
+回落值**（设计里查不到这两个标签的"逐字值"）⇒ 严格看它们不构成"回落"。但 (甲) 的字面是
+"**全部字段都来自文件**才叫 `rules`"，且 `""` 确实**不是从文件读到的** ⇒ 本流**选择纳入**：
+缺它们 ⇒ note + `design_default`。
+★ **理由偏好严**：纳入只会**多报**、不会漏报（`G-03`：宁严勿松）；且这两个字段在
+`solution_set_display` 里是**展示口径的一部分**（"代表解 + 区间包络" / 折叠策略），
+并非无关装饰。★ **若主理人认为应把它们排除**，改动面 = 该循环少两个键 + 1 条用例，
+**我已按"可低成本回退"的方式实现**（同一循环、同一 note 机制）。
+
 ---
 
 ## ② 怎么验证的（原样命令 + 原样输出 + 退出码）
@@ -540,6 +593,83 @@ test_valuation.py            通过  31 / 失败  0
 它证明的是**整目录的断言与夹具用法在真实对象上成立、且我本轮的改动没有打黄任何老用例**。
 正式批次读数仍以 §② V-0 的 `verify.py --batch pricelayer` 为准。
 
+### V-1l ★ 第五轮裁定（甲）的证据：**8 例反例（旧→新）+ 3 例反向对照**
+
+取证方式与 §② V-1h 同：`/tmp` 里**真 `rules/` 的副本**做变异根（**只 `chmod 0644` 副本**，
+原文件是 0444 且**从未被写过**）；**旧 = `git show HEAD:system/scripts/pricelayer/<mod>.py`
+的字节** `exec` 成 `scripts.pricelayer._old_*`，与新版在**同一根**上各读一次。
+
+```text
+删掉的子键                                    旧 value_source   新 value_source   新 note 点名该键
+solution_set_display.default_count                    rules      design_default        ✓
+solution_set_display.max_count                        rules      design_default        ✓
+solution_set_display.must_show_multiple               rules      design_default        ✓
+solution_set_display.selection                        rules      design_default        ✓
+solution_set_display.overflow                         rules      design_default        ✓
+unregistered_fallback.method_class                    rules      design_default        ✓
+unregistered_fallback.mark                            rules      design_default        ✓
+forced_recheck.on_hit                                 rules      design_default        ✓
+```
+
+```text
+反向对照（G-05，真文件·字段齐备）       旧 value_source   新 value_source   新 note 数
+solution_set_display (5 字段齐)               rules             rules           0
+unregistered_fallback (2 字段齐)              rules             rules           0
+forced_recheck (含 on_hit)                    rules             rules           0
+```
+
+★ **读法（与 V-1h 的"旧列必须为 0"相反，这里刻意**不**那样要求）**：本表的旧列**本来就该是
+`rules`** —— 那**正是被裁定的旧口径**（"节存在即 `rules`"），**不是"旧代码漏报"**。
+本表要证的是**声明粒度**变了、且**反向对照下两版一致**（未误伤真数据）。
+
+★ **真文件上四门禁 CLI（未改任何文件）**：
+
+```text
+scripts/pricelayer/solver.py          exit=0   scanned display_value_source: 1
+scripts/pricelayer/valuation.py       exit=0   scanned unregistered_fallback_value_source: 1
+scripts/pricelayer/daily_explain.py   exit=0   scanned recheck_value_source: 1
+scripts/pricelayer/order_guard.py     exit=0
+```
+
+★ **§1-6③ 的次序判据（"早退吞违例"）实测**：删 `on_hit.keep_original_judgment_time` ⇒
+
+```text
+exit=1
+  scanned recheck_value_source: 0
+  note: NO_ON_HIT_KEY: rules/review.yaml:: forced_recheck.on_hit.keep_original_judgment_time 缺失 —— 取设计逐字回落值 True …
+  [FATAL] DAILY-RULE-BINDING — …keep_original_judgment_time 缺失 —— 缺键本身即违例（Ch11 §D.2）…
+  [FATAL] DAILY-RULE-BINDING — …forced_recheck 读不到值（NO_ON_HIT_KEY: …）—— **不**按回落值判'一致'…
+```
+
+⇒ **具名违例与笼统违例都在** —— 若把存在性判据留在早退之后，**第一行 FATAL 会消失**（只剩第二行）。
+
+★ **工具与命令（负结论带工具名，口径 16）**：上列数字由**本机 Python**
+（`/Users/gaza/.workbuddy/binaries/python/envs/default/bin/python`，3.13.12）经
+`importlib` / `types.ModuleType` / `subprocess.run(...).returncode` / `os.chmod` 得出；
+"旧代码"取自 `git show HEAD:…` 的**字节**（工具 = `git`），非我复述。
+〔对象 = 工作树 `.worktrees/ws-ch5-pricelayer`，分支 `ws/ch5-pricelayer`，`HEAD = 2611c85` + 本工作区改动；
+取样时刻 = `2026-09-16T16:0x Z`〕
+
+#### 第五轮**全量复核**（同 V-1k 手法，零删除口径）
+
+改完 3 个 `load_*` 后重跑整目录（同一手法、同一零删除口径，**不经 pytest 命令**）：
+
+```text
+test_daily_explain.py        通过  34 / 失败  0
+test_history_guard.py        通过  19 / 失败  0
+test_order_guard.py          通过  25 / 失败  0
+test_package_laziness.py     通过   5 / 失败  0
+test_scenario_guard.py       通过  44 / 失败  0
+test_solver.py               通过  34 / 失败  0        ← 第四轮 29，本轮 +5（新增的 5 组 parametrize）
+test_step_wiring.py          通过   9 / 失败  0
+test_valuation.py            通过  31 / 失败  0
+
+合计：通过 201 / 失败 0      exit=0
+```
+
+〔取样时刻 = `2026-09-16T15:51:15Z`；执行体同 V-1k；**零删除**（`/tmp` 夹具，未触碰 `conftest` / 环境变量 / `--no-report`）〕
+★ 性质声明同 V-1j/V-1k：**不等于** pytest 运行，**不能**据此声称"批次通过"。
+
 ---
 
 ### V-2 六门禁在**真仓库真源**上运行（`code_root = system`）
@@ -697,7 +827,8 @@ RESULT: PASS（0 violations）        EXIT=0
 
 - **本模块测试**：`tests/pricelayer` **168 passed**，退出码 **0**（`verify.py --batch pricelayer` 实测 91.26s/300s）。
   ★ **该读数的取样时刻早于第四轮**（§1-5 修 3–8 之前）——对象是修订轮的树，**不是当前 `HEAD`**（口径 10）。
-  第四轮新增用例后**未**复跑该命令（`G-60` 排他窗口 + 主理人指令）；当前树的证据见 §② **V-1k**（196/0，**非同一条路径**）。
+  第四/五轮新增用例后**未**复跑该命令（`G-60` 排他窗口 + 主理人指令）；当前树的证据见 §② **V-1k**（196/0）
+  与 **V-1l**（**201/0**，含本轮裁定甲的 5 组新 parametrize）——**两者都不是 pytest 路径**。
   ⇒ **不得**把 168 当成当前树的读数；正式复跑**待窗口关闭**，届时在此处补报**真**读数（条数 + 耗时）。
 - **门禁**：`pre-commit.sh` **全部门禁放行**（exit 0），**无 `--no-verify`**；`V-06` 因新批次登记而闭环（`uncovered 0`）。
 - **反例有效性**：**6/6 守卫**有可执行反例（exit=1）+ 反向对照（exit=0）（`DEMO_EXIT=0`）；
@@ -848,10 +979,12 @@ RESULT: PASS（0 violations）        EXIT=0
 
 ### ④-8 第四轮登记（两条）
 
-**（a）`value_source` 在"部分字段回落"时的语义 —— ★ 待裁定，本轮**不擅自改**。**
+**（a）`value_source` 在"部分字段回落"时的语义 —— ★★ 主理人第五轮已裁定：采纳 (甲)。**
+（**本条已闭合**，落地与证据见 §1-6 / §② V-1l。以下保留裁定前的登记原文，便于追溯。）
+
 `value_source` 是**单个**取值域为 `{rules, design_default}` 的标志，却服务**多字段**结构
 （`UnregisteredFallback{method_class, mark}`、`SolutionSetDisplay{default_count, max_count, must_show_multiple, selection, overflow}`、
-`RecheckTrigger{阈值×2, keep_original_judgment_time}`）。现口径（第三轮刻意选的、并已写进用例
+`RecheckTrigger{阈值×2, keep_original_judgment_time}`）。**裁定前**口径（第三轮选的、并曾写进用例
 `test_unregistered_fallback_partial_key_records_note` 的 docstring）是：**只要节存在 ⇒ `rules`**，
 缺失的**子键**由 **note** 点名。第四轮实测确认它一致地等于"**子键缺 ⇒ 仍报 `rules`**"：
 
@@ -861,8 +994,13 @@ RESULT: PASS（0 violations）        EXIT=0
 
 ⇒ **风险**：只看 `value_source` 的下游（看板/其它门禁）会读成"这个结构整体已核"，而实际有字段来自设计回落。
 **两个候选口径**：(甲) `value_source` 改为"**全部字段都来自文件**才叫 `rules`"，否则 `design_default`（信息由 note 保留）；
-(乙) 保持现状（`rules` + 逐键 note）。★ 本流**不自行翻转**：这条已被第三轮的裁定 ③-2 解释过一次，
-翻转等于**反向改自己刚立的判据**，且会动到 3 个读口 + 若干用例 ⇒ 请主理人裁定（若选甲，改动面 = 3 个 `load_*` 各 1 行 + 1 条用例的断言）。
+(乙) 保持现状（`rules` + 逐键 note）。
+
+**★ 裁定结果**：主理人第五轮**采纳 (甲)**，理由 = *"标志的单位必须与它声称覆盖的单位一致"*
+（该风险正是 `V-11` 类别轴 / `G-62` 不可区分）。落地见 **§1-6**（3 个 `load_*` 各一行 + **3 处必须同步动的连带面**），
+证据见 **§② V-1l**（8 例反例 + **3 例反向对照**）。★ 裁定前的用例断言已按 (甲) **翻转**
+（`test_unregistered_fallback_partial_key_records_note` / `test_trigger_missing_on_hit_key_records_note`），
+并在 docstring 里写明**口径变更史**与"为何不是反复"（③-2 是实现口径、(甲) 是声明粒度）。
 
 **（b）本轮 pytest 用例：已写、已逐条**执行**，但**未跑 `pytest` 命令**（与 §② V-1i/V-1j 同一条）。
 正式路径 `verify.py --batch pricelayer` 待窗口关闭后复跑；届时在 §③ 补报**真**读数（不在此处写条数 —— 见 §② V-1i）。

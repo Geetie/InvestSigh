@@ -399,11 +399,49 @@ def test_display_fallback_records_source_and_note(scratch: Path) -> None:
 
 
 def test_display_real_rules_records_rules_source_without_note(scratch: Path, real_rules) -> None:
-    """对照：真文件齐备 ⇒ `rules` 且 **零 note**（不把"读到真值"也标成回落）。"""
+    """★ **反向对照（`G-05`）**：真文件**五个字段齐备** ⇒ `rules` 且 **零 note**。
+
+    ★ 这条是第五轮裁定（甲）的**反向对照**：甲把标志收紧为"**全部字段都来自文件**才叫
+      `rules`"，其风险是标志**退化成"永远 `design_default`"**（那与"永远 `rules`"一样
+      没有信息量）。故必须同时证明"字段齐备时**仍报 `rules`**"。
+    """
     real_rules(scratch, "valuation-methods.yaml")
     display = load_solution_set_display(scratch)
     assert display.value_source == "rules"
     assert display.notes == ()
+
+
+@pytest.mark.parametrize(
+    "missing_key",
+    ["default_count", "max_count", "must_show_multiple", "selection", "overflow"],
+)
+def test_display_partial_fallback_downgrades_value_source(
+    scratch: Path, real_rules, missing_key: str
+) -> None:
+    """★ 裁定（第五轮·甲）：删**任一**子键 ⇒ `value_source == "design_default"` **且**点名该子键。
+
+    判据 = "标志的单位必须等于它声称覆盖的单位"：结构内**有**字段不是从文件读到的，
+    就不再声称"整块已核"（`V-11` 类别轴 / `G-62` 不可区分）。
+    ★ 同时断言**构造不变量**：`notes` 非空 ⟺ `value_source == "design_default"`
+      —— 否则"标志为真但无 note"或"有 note 但标志仍称已核"两种不一致都可能出现。
+    """
+    import yaml
+
+    real_rules(scratch, "valuation-methods.yaml")
+    path = scratch / "rules" / "valuation-methods.yaml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    doc["solution_set_display"].pop(missing_key)
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+
+    display = load_solution_set_display(scratch)
+    assert display.value_source == "design_default", (
+        f"删掉 {missing_key} 后仍有字段不是从文件读到的 ⇒ 不得报 rules（裁定甲）"
+    )
+    assert display.notes, "design_default 必须打 note（裁定 ③-2）"
+    assert any(missing_key in n for n in display.notes), display.notes
+    assert (display.notes == ()) is (display.value_source == "rules"), (
+        "构造不变量：notes 非空 ⟺ value_source == design_default"
+    )
 
 
 def test_cli_flags_must_show_multiple_drift(scratch: Path, real_rules, run_script) -> None:

@@ -423,7 +423,18 @@ def test_unregistered_fallback_fallback_records_source_and_note(scratch: Path) -
 
 
 def test_unregistered_fallback_partial_key_records_note(scratch: Path, real_rules) -> None:
-    """★ 裁定 ③-2：键在但子键缺 ⇒ `value_source` 仍 `rules` **且** note 点名缺失子键。"""
+    """★ 裁定（第五轮·甲）：子键缺 ⇒ `value_source == "design_default"` **且** note 点名缺失子键。
+
+    ★ **口径变更史**：本用例原断言 `value_source == "rules"`（第三轮裁定 ③-2 的"节存在即
+      `rules`"实现口径）。主理人第五轮采纳 **(甲)**：标志的单位必须等于它声称覆盖的单位
+      —— 结构内**有**字段回落而标志仍写 `rules`，只读标志的下游会读成「整块已核」
+      （`V-11` 类别轴 / `G-62` 不可区分）。故此处翻转为 `design_default`。
+      ★ **不是反向改判据**：③-2 定的是**实现口径**，(甲) 修的是**声明的粒度**，同向收紧。
+
+    ★ **反向对照（`G-05`，同文件另一条用例）**：`method_class` 与 `mark` **都在**真文件里
+      ⇒ `test_real_rules_unregistered_fallback_matches_code_defaults` 断言**仍报 `rules`**
+      —— 否则标志会退化成"永远 `design_default`"，与"永远 `rules`"一样没用。
+    """
     import yaml
 
     from scripts.pricelayer.valuation import load_unregistered_fallback
@@ -435,7 +446,9 @@ def test_unregistered_fallback_partial_key_records_note(scratch: Path, real_rule
     path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
 
     spec = load_unregistered_fallback(scratch)
-    assert spec.value_source == "rules"
+    assert spec.value_source == "design_default", (
+        "结构内有字段回落 ⇒ 标志不得再声称'整块已核'（裁定甲）"
+    )
     assert any("method_class" in n for n in spec.notes), spec.notes
     assert spec.method_class == "generic", "缺失子键取设计逐字回落值"
 

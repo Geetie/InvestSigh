@@ -368,7 +368,18 @@ def test_trigger_real_rules_records_rules_source_without_note(scratch: Path, rea
 
 
 def test_trigger_missing_on_hit_key_records_note(scratch: Path, real_rules) -> None:
-    """★ 裁定 ③-2：阈值在、`on_hit.keep_original_judgment_time` 缺 ⇒ `rules` + note 点名该子键。"""
+    """★ 裁定（第五轮·甲）：阈值在、`on_hit.keep_original_judgment_time` 缺
+    ⇒ `value_source == "design_default"` + note 点名该子键。
+
+    ★ **口径变更史**：本用例原断言 `value_source == "rules"`（第三轮裁定 ③-2 的"节存在即
+      `rules`"实现口径）。主理人第五轮采纳 **(甲)**：标志的单位必须等于它声称覆盖的单位
+      —— 结构内**有**字段回落而标志仍写 `rules`，只读标志的下游会读成「整块已核」
+      （`V-11` 类别轴 / `G-62` 不可区分）。故此处翻转为 `design_default`。
+
+    ★ **反向对照（`G-05`，同文件另一条用例）**：`test_trigger_real_rules_records_rules_source_without_note`
+      用**真文件**（三个字段齐备）断言**仍报 `rules` 且零 note** —— 否则标志会退化成
+      "永远 `design_default`"，与"永远 `rules`"一样没用。
+    """
     import yaml
 
     real_rules(scratch, "review.yaml")
@@ -377,7 +388,9 @@ def test_trigger_missing_on_hit_key_records_note(scratch: Path, real_rules) -> N
     doc["forced_recheck"]["on_hit"] = {"action": "enqueue_recheck_task"}
     path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
     trigger = load_recheck_trigger(scratch)
-    assert trigger.value_source == "rules"
+    assert trigger.value_source == "design_default", (
+        "结构内有字段回落 ⇒ 标志不得再声称'整块已核'（裁定甲）"
+    )
     assert any("keep_original_judgment_time" in n for n in trigger.notes), trigger.notes
     assert trigger.keep_original_judgment_time is True, "缺失子键取设计逐字回落值"
 
@@ -407,7 +420,14 @@ def test_missing_on_hit_key_is_flagged_by_binding(
 
     ★ 这条**必须靠"判存在性"**而不是"比值"：加载器在缺键时回落**设计值 `True`**，
       而"应该有的值"**也是 `True`** ⇒ `trigger.keep != DESIGN_…` **恒为假**，
-      门禁**永远判不出来**（值撞成同一个数）。故改按**文档原文**单独判存在性。
+      **单靠值比较**永远判不出来（值撞成同一个数）。故改按**文档原文**单独判存在性。
+
+    ★★ **第五轮补的次序约束**：裁定（甲）之后，缺该子键会让 `trigger.value_source`
+      变成 `design_default`，而 `_rule_binding_violations` 里有一条"`value_source != rules`
+      ⇒ 报读不到值并**早退**"。若存在性判据排在早退**之后**就会被吞掉 ⇒ 只剩笼统消息、
+      **信息更少**。故本条同时锁**次序**：断言输出里有**具名**的
+      `keep_original_judgment_time 缺失`（早退吞掉时不会有这条具名消息）。
+      —— 与 `valuation.check` 的 D-1「早退吞违例」**同一形状**（`G-62` 家族）。
     """
     import yaml
 
@@ -416,14 +436,19 @@ def test_missing_on_hit_key_is_flagged_by_binding(
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     doc["forced_recheck"]["on_hit"].pop("keep_original_judgment_time")
     path.write_text(yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
-    # 先确证"比值"这条路确实判不出来：加载器仍报 rules 且值仍为 True（与"应该有的值"相同）
+    # 先确证"单靠比值"这条路确实判不出来：加载器回落的设计值 True 与"应该有的值"相同。
+    # ★ 注意：**`value_source` 现在能判出来了**（甲生效后 = `design_default`）——
+    #   这正是甲的价值；但它只给"整块未核"，给不出"缺的是哪个子键"，故具名判据仍需保留。
     trigger = load_recheck_trigger(scratch)
-    assert trigger.value_source == "rules"
     assert trigger.keep_original_judgment_time is True
+    assert trigger.value_source == "design_default"
     proc = run_script("scripts/pricelayer/daily_explain.py", scratch, "--no-report")
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "DAILY-RULE-BINDING" in proc.stdout
-    assert "keep_original_judgment_time 缺失" in proc.stdout
+    assert "keep_original_judgment_time 缺失" in proc.stdout, (
+        "具名判据被早退吞掉了（信息反而更少）—— 检查 _rule_binding_violations 里的次序\n"
+        + proc.stdout
+    )
 
 
 def test_missing_threshold_key_fails_loudly_without_claiming_fallback(

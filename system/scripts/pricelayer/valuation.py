@@ -107,10 +107,13 @@ class ValuationError(PriceLayerError):
 class UnregisteredFallback:
     """`rules/valuation-methods.yaml::unregistered_fallback` 的解析结果（**带来源标注**）。
 
-    - `value_source`：`"rules"` = 取自规则文件；`"design_default"` = 文件/键缺失，取
-      **设计逐字值**（`Ch5 §D.1` 末句的 `generic` + "并标注"）。
-    - `notes`：**`value_source == "design_default"` 时必非空** —— 逐条写明缺的是什么
-      （主理人裁定 ③-2：`design_default` 必须打 note，否则单独特调本函数就看不出"缺键"）。
+    - `value_source`：`"rules"` = **本结构全部字段都来自文件**（`method_class` + `mark`
+      都在文件里）；`"design_default"` = **至少一个字段不是从文件读到的**（逐条见 `notes`）。
+      ★ **主理人第五轮裁定（甲）**：标志的单位 = 它声称覆盖的单位（整个结构）。
+      若结构内**有**字段落到回落值而标志仍写 `rules`，只读本标志的下游就会得到
+      「**整块已核**」——而事实是**部分未核**（`V-11` 类别轴 / `G-62` 不可区分）。
+    - `notes`：记每条**未**从文件读到的字段（裁定 ③-2：`design_default` 必须打 note）。
+      ★ 由构造保证：`notes` 非空 ⟺ `value_source == "design_default"`。
     """
 
     method_class: str
@@ -168,7 +171,11 @@ def load_unregistered_fallback(root: str | Path) -> UnregisteredFallback:
     return UnregisteredFallback(
         method_class=method_class,
         mark=mark,
-        value_source="rules",
+        # ★ 主理人第五轮裁定（甲）：标志的单位 = 它声称覆盖的单位（整个结构）。
+        #   `method_class` 与 `mark` **都**来自文件才叫 `rules`；任一回落 ⇒ `design_default`
+        #   （缺件事实由上面的 `NO_UNREGISTERED_FALLBACK_KEY` note 保留）。
+        #   → 反向对照（`G-05`）：两个字段齐全 ⇒ **必须仍报 `rules`**。
+        value_source="rules" if not notes else "design_default",
         notes=tuple(notes),
     )
 
