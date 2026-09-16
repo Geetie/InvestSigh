@@ -121,6 +121,35 @@ def test_detailed_written_and_skipped_are_disjoint(scratch: Path) -> None:
     assert set(out.written) & set(out.skipped) == set()
 
 
+def test_detailed_normalizes_duplicate_key_within_one_batch(scratch: Path) -> None:
+    """★ 同一批次内出现**重复键**：只写一行，且该 id **不得**同时出现在 `skipped`。
+
+    这是"互斥归一"的**边界取值**（`AppendOutcome` 的 docstring 有说明）。为什么必须钉住它：
+    另一种写法（把批内重复的那个实例直接计进 `skipped`）看起来更"穷尽"，但它会让
+    `written` 与 `skipped` **同时**含 `dv-a` —— 同一对象既"本轮新写入"又"已存在故未写入"，
+    自相矛盾，且会击穿 `pipeline.assert_steps_complete` 的 G-42 互斥校验。
+    ⇒ 归一（以**写入**为准，因为"本轮确实写了这个对象"是更强的事实）是**正确**的一侧。
+
+    同时如实记录该归一的**代价**：`len(written) + len(skipped)` **不**等于传入条数
+    （多重性不在这两个 id 列表的语义里）。幂等性本身不受影响 —— 下一轮重跑会把
+    `dv-a`、`dv-b` **都**如实计入 `skipped`。
+    """
+    out = store.append_derived_value_ids_detailed(
+        scratch, [_derived("dv-a", "0.1"), _derived("dv-a", "0.1"), _derived("dv-b", "0.2")]
+    )
+    assert out.written == ["dv-a", "dv-b"], f"重复键只应写一行：{out}"
+    assert out.skipped == [], f"★ dv-a 本轮**写了** ⇒ 不得说它'已存在故未写入'：{out}"
+    assert set(out.written) & set(out.skipped) == set()
+    assert len(store.read_rows(scratch, store.DERIVED_VALUES_STEM)) == 2, "批内重复键不得重复落库"
+
+    rerun = store.append_derived_value_ids_detailed(
+        scratch, [_derived("dv-a", "0.1"), _derived("dv-b", "0.2")]
+    )
+    assert rerun.written == [] and sorted(rerun.skipped) == ["dv-a", "dv-b"], (
+        f"重跑仍须如实回报两个命中：{rerun}"
+    )
+
+
 def test_detailed_reports_nothing_when_no_candidates(scratch: Path) -> None:
     """★ **反向对照**：上游一件都没得做（`values=[]`）→ 两个集合**都空**。
 
