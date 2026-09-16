@@ -362,28 +362,97 @@ def test_daily_run_coverage_verifiable_blocks_on_illegal_depth(code_root: Path) 
     assert "CV2" in out, out
 
 
-def test_daily_run_task_state_auditable_has_no_discriminating_check(code_root: Path) -> None:
-    """★ **如实登记的缺口**（`registry/criterion_counterexamples.yaml::kind: ineffective`）。
+def test_daily_run_task_state_auditable_blocks_on_illegal_status(code_root: Path) -> None:
+    """`task_state_auditable` 反例：`status` 不可判定 → 任务状态不可核 → 必须红。
 
-    `task_state_auditable` 除 `delivery.yaml` 的声明与 `stage_gate.criterion()` 的声明之外，
-    **全仓库无任何检查**。故本用例断言的是**反面事实**：
-    把 `status` 置为非法值 → 阶段④ 的违例集合与合规输入**完全相同**。
+    ★ 本条**替换**了原先那条 `kind: ineffective` 的探针
+      （`..._has_no_discriminating_check`，缺口 `G9-1` 的临时出口）。
+      原探针断言的是「注入非法 status 后违例集合**完全相同**」——它随补实现**如期变红**，
+      正是探针机制该有的行为；现按裁定把它改成**正向反例**，判别力不降反升
+      （从"证明没在查"变成"证明真的会拦"）。
 
-    ★ 这不是"放行"：它是**可执行的缺口证据** —— 一旦有人真的实现了"任务状态可核"，
-      本用例**当场变红**，从而强制把登记从 `ineffective` 改成 `counterexample`。
-      这比"改一行数据把自己标成 ineffective"强得多（项目铁律 5）。
+    ★ 判据（`施工图 §2 阶段④` 的 `all_tasks_have_status(run_window)` / `Ch8 §C.2`）=
+      「每条任务都有**可判定的** status，**且**落在 `TaskStatus` 合法取值域内」。
+      本用例覆盖该判据的**两种违反形态**（同一判据、同一夹具，故合并在一条用例里，
+      避免为同一判据重复付夹具成本）：
+
+      | 形态 | 输入 | 为什么也必须红 |
+      |---|---|---|
+      | **值非法** | `status="totally_bogus_status"` | 键在但值不在域内 ⇒ 状态不可判定 |
+      | **字段缺失** | 整行无 `status` 键 | 连值都没有 ⇒ 同样不可判定 |
+
+      ★ 只测"值非法"会漏掉"缺字段"，只测"缺字段"会漏掉"值为任意字符串"——
+        两者都是 `not in legal` 判定覆盖的形态，故都要有可执行证据。
+
+    ★ 判别力归因：本用例注入的都是**与其它三条判据无关**的轴
+      （`status` 不参与 `run_date` / 覆盖深度 / 降级引用），且阶段④ 合规基线 `exit 0`
+      （`test_daily_run_compliant_baseline_is_green`），故"红了"只能归因于本判据。
     """
     _daily_compliant(code_root)
     ok_code, ok_out = _gate(code_root, "daily_run")
+    assert ok_code == 0, ok_out
+    _assert_hint_absent(ok_out, "不在 TaskStatus 合法取值域内")
 
+    # 形态一：值非法（键在、值不在域内）
     _write_jsonl(code_root, "tasks", [_task("check_1", "totally_bogus_status")])
-    bad_code, bad_out = _gate(code_root, "daily_run")
+    code, out = _gate(code_root, "daily_run")
+    assert code == 1, f"非法 status 未被拦下（判据没接线）\n{out}"
+    assert "不在 TaskStatus 合法取值域内" in out, out
+    assert "totally_bogus_status" in out, f"违例必须带**实际值**（否则无法定位）\n{out}"
+    assert "check_1" in out, f"违例必须带 task_id（否则无法定位）\n{out}"
+    assert "queued" in out, f"违例必须带**合法取值域**（否则不知道该改成什么）\n{out}"
+    assert _fatal_lines(out) - _fatal_lines(ok_out), "不合规输入未改变违例集合（无判别力）"
 
-    assert _fatal_lines(bad_out) == _fatal_lines(ok_out), (
-        "注入非法 status 后违例集合发生了变化 —— 说明 `task_state_auditable` **已有判别力**："
-        "请把它在 registry/criterion_counterexamples.yaml 里由 ineffective 改为 counterexample，"
-        "并给出 blocked_hint 与反例断言。\n"
-        f"合规: exit={ok_code}\n{ok_out}\n注入: exit={bad_code}\n{bad_out}"
+    # 形态二：字段整体缺失（连值都没有）
+    row = _task("check_1", "done", output_refs=["rec-1"])
+    row.pop("status")
+    _write_jsonl(code_root, "tasks", [row])
+    code2, out2 = _gate(code_root, "daily_run")
+    assert code2 == 1, f"`status` 字段缺失未被拦下\n{out2}"
+    assert "不在 TaskStatus 合法取值域内" in out2, out2
+    assert "None" in out2, f"缺字段必须以 `None` 显形（区分于'值写错'）\n{out2}"
+
+
+def test_daily_run_task_state_auditable_counterexample_is_load_bearing(code_root: Path) -> None:
+    """★ **判别力绑定**：把 `task_state_auditable` 的新检查掏空 → 上面那条反例**必须失效**。
+
+    与 `test_daily_run_coverage_verifiable_counterexample_is_load_bearing` 同源的理由：
+    "已绑定"（AST 里有 `criterion(...)` 字面量）**只证明接了**，不证明**真的在查**。
+    本条把"上面那条反例确实由这处检查驱动"钉成**可执行事实**：
+
+    1. 掏空（只改**副本**的 `stage_gate.py`）后，同一条非法 `status` 输入**不再被拦**
+       （`exit 1 → 0`）—— 若无此现象，说明那条反例是被别的检查顺带拦下的，归因不成立；
+    2. 掏空后 `criteria_bound` **仍是 4** —— 再次证明"绑定数"这个指标**发现不了掏空**。
+
+    ⇒ 两条合起来：**只有数据驱动的反例**能证明"真的在查"；绑定数不能。
+    """
+    _daily_compliant(code_root)
+    _write_jsonl(code_root, "tasks", [_task("check_1", "totally_bogus_status")])
+    code, out = _gate(code_root, "daily_run")
+    assert code == 1 and "不在 TaskStatus 合法取值域内" in out, out
+
+    # 掏空：把新检查的谓词置为恒假（只改副本的 stage_gate.py）
+    gate_src = code_root / GATE
+    text = gate_src.read_text(encoding="utf-8")
+    anchor = "        if not isinstance(got, str) or got not in legal_status:\n"
+    assert anchor in text, "找不到 task_state_auditable 的判定行（实现已变？请更新本用例）"
+    gate_src.write_text(
+        text.replace(anchor, "        if False:  # gutted-for-probe\n"), encoding="utf-8"
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(code_root / GATE), str(code_root), "--no-report", "--stage", "daily_run"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    gutted = proc.stdout + proc.stderr
+    assert proc.returncode == 0, (
+        "掏空 task_state_auditable 的检查后门禁仍拦截 —— 说明那条反例不由此处驱动，"
+        "判别力归因不成立：\n" + gutted
+    )
+    assert "daily_run.criteria_bound: 4" in gutted, (
+        "掏空后 criteria_bound 未保持 4 —— 「绑定数发现不了掏空」这一结论需重新核实：\n" + gutted
     )
 
 
@@ -442,12 +511,21 @@ def test_daily_run_coverage_verifiable_counterexample_is_load_bearing(code_root:
 
 
 def test_expansion_review_append_only_blocks_on_missing_layer(code_root: Path) -> None:
-    """`review_append_only` 反例：三层复盘缺一层 → 阶段⑤ 必须红。
+    """「三层复盘齐备」的反例：缺一层 → 阶段⑤ 必须红。
 
-    ★ **语义错位（如实声明）**：该 id 当前绑定的检查是「三层复盘齐备」，
-      **不是** `delivery.yaml` 声明的 append-only（`(success, failure, pending) ⊆ 记录集`）。
-      本用例证明的是「这个绑定有判别力」，**不能**证明「append-only 被守住」。
-      详见 `reports/ws_criterion_effectiveness_report.md §3 G9-2`。
+    ★ **同一条 id 上有两件不同的事**（如实声明，勿混淆）：
+      ① **本用例**证明的是「三层复盘齐备」这个检查**有判别力**；
+      ② `test_expansion_review_append_only_blocks_on_layer_disappearing` 与
+         `..._when_guard_pathspec_misses_carrier` 证明的是 `Ch10 §D.5` 的**真 append-only**
+         语义已被守（本批次 `G9-2` 补实现）。
+      两者都挂在 `review_append_only` 这一个 id 上 —— 因为 `registry/delivery.yaml` 里
+      **没有**"三层齐备"自己的 id（见报告 §3 G9-2 的实测）。
+
+    ★ **待裁定**：「三层齐备」在全设计区**没有"通过判据"级的逐字出处**
+      （`Ch10 §C.1` 只定义 `eval_layer` 的**取值域**；`§C.4:250` 的 `assert layer in
+      VALID_LAYERS, "三层不得新增/合并"` 也是取值域断言；`施工图:215/234` 只在**退出物**
+      里写了"三层复盘记录"）。team-lead 裁定前，本条**留在 `review_append_only` 上**，
+      不自行政措辞或新增 id（`R-04`）。
     """
     _expansion_compliant(code_root)
     base_out = _gate(code_root, "expansion")[1]
@@ -467,49 +545,180 @@ def test_expansion_review_append_only_blocks_on_missing_layer(code_root: Path) -
     assert _fatal_lines(out) - _fatal_lines(base_out), "不合规输入未改变违例集合（无判别力）"
 
 
-def test_expansion_review_append_only_semantics_have_no_discriminating_check(
+def test_expansion_review_append_only_blocks_on_layer_disappearing(code_root: Path) -> None:
+    """`review_append_only` 反例（**真判别力所在**）：已声明过的 `eval_layer` 从记录集里消失。
+
+    ★ 本条**替换**了原先那条 `kind: ineffective` 的探针
+      （`..._semantics_have_no_discriminating_check`）—— 它随补实现**如期变红**，
+      现按裁定改成**正向反例**。
+
+    ★ 逐字依据 `Ch10 §D.5` 第 3 行：「**禁"只留赢的"**：断言 **某标的的复盘记录集合
+      ⊇ 其历史全部建议（含已验证失败者）**」；第 1 行「三类记录齐全……不可选择性删除」。
+
+    ★ **为什么这条不是重造 append-only 比对**（`G-06` 的关键）：造的那个反例在 **diff 层面
+      完全合法**（纯追加，没有任何既有行被改写）——`append_only_guard` 对它**必然放行**。
+      它违反的是**语义**：用户看到的历史被悄悄收窄。两者被检面不重叠、互补。
+
+    ★ 反例构造（同一任务在追加序上先声明三层、后只剩一层）：
+
+    | 追加序 | 行 | 该行声明的层 |
+    |---|---|---|
+    | 1 | `t1`（`eval_result_history` 含三层） | {research_quality, forecast_quality, investment_result} |
+    | 2 | `t1`（只剩 `research_quality`） | {research_quality} ← **丢了 FQ / IR** |
+
+    ★ 同用例内**顺带**给出**合法**对照（同一任务层集合**单调不减**）→ 该 hint 必须不出现：
+      否则"多层任务"会无差别报错，判据就成了误报源。
+    """
+    _expansion_compliant(code_root)
+    base_out = _gate(code_root, "expansion")[1]
+    _assert_hint_absent(base_out, "消失（此前已声明过）")
+
+    # 合法对照：同一任务多层，且追加序上**只增不减** ⇒ 不报
+    _write_jsonl(
+        code_root,
+        "tasks",
+        [
+            {"task_id": "t1", "eval_result": {"eval_layer": "research_quality"}},
+            {
+                "task_id": "t1",
+                "eval_result": {"eval_layer": "forecast_quality"},
+                "eval_result_history": [
+                    {"eval_layer": "research_quality"},
+                    {"eval_layer": "forecast_quality"},
+                ],
+            },
+            {
+                "task_id": "t1",
+                "eval_result": {"eval_layer": "investment_result"},
+                "eval_result_history": [
+                    {"eval_layer": "research_quality"},
+                    {"eval_layer": "forecast_quality"},
+                    {"eval_layer": "investment_result"},
+                ],
+            },
+            {"task_id": "t2", "eval_result": {"eval_layer": "research_quality"}},
+            {"task_id": "t3", "eval_result": {"eval_layer": "forecast_quality"}},
+        ],
+    )
+    ok_code, ok_out = _gate(code_root, "expansion")
+    _assert_hint_absent(ok_out, "消失（此前已声明过）")
+
+    # 反例：同一任务先声明三层、后只剩一层（纯追加，diff 层面对 append-only 完全合法）
+    _write_jsonl(
+        code_root,
+        "tasks",
+        [
+            {
+                "task_id": "t1",
+                "eval_result_history": [
+                    {"eval_layer": "research_quality"},
+                    {"eval_layer": "forecast_quality"},
+                    {"eval_layer": "investment_result"},
+                ],
+            },
+            {"task_id": "t1", "eval_result": {"eval_layer": "research_quality"}},
+            {"task_id": "t2", "eval_result": {"eval_layer": "forecast_quality"}},
+            {"task_id": "t3", "eval_result": {"eval_layer": "investment_result"}},
+        ],
+    )
+    code, out = _gate(code_root, "expansion")
+    assert code == 1, out
+    assert "消失（此前已声明过）" in out, out
+    assert "t1" in out, f"违例必须带 task_id（否则无法定位是哪条记录被收窄）\n{out}"
+    assert _fatal_lines(out) - _fatal_lines(base_out), "不合规输入未改变违例集合（无判别力）"
+    assert ok_code == 1, (
+        "★ 阶段⑤ 在合规输入下**结构上就是 exit 1**（两条未绑定判据的台账条目），"
+        "故本条反例的归因不靠 red/green 而是靠「专属 hint + 违例集合差」。"
+        "若此处 exit 变成 0，说明阶段⑤ 的绑定状态变了，请重新评估本用例的归因方式。\n" + ok_out
+    )
+
+
+def test_expansion_review_append_only_blocks_when_guard_pathspec_misses_carrier(
     code_root: Path,
 ) -> None:
-    """★ **缺口 G9-2 的可执行证据**：`review_append_only` 的**字面语义**没有被守。
+    """`review_append_only` 反例（`Ch10 §D.5` 第 2 行）：append-only 守卫**没罩住**本真源。
 
-    `registry/delivery.yaml` 的声明是：
-    「复盘 **append-only**（`(success, failure, pending) ⊆ 记录集`，禁选择性删除）」。
+    ★ **为什么"机制存在"不等于"机制生效"**：`append_only_guard` 曾有**既有假绿** ——
+      linked worktree 里钩子导出的 `GIT_DIR` 让 `rev-parse --show-toplevel` 返回 cwd
+      ⇒ pathspec 指错 ⇒ `git diff --cached` **恒空** ⇒ 守卫对任何输入都放行（`G-RC-12`）。
+      这正是"复盘 append-only 没人守"的形态，故必须有一条**可执行反例**钉住它。
 
-    但门禁里与复盘相关的**唯一**判别轴是 `eval_layer` 的**取值集合**。故下列两份输入
-    给出**完全相同**的违例集合：
+    ★ 判据的读法是「**读它的判据、不读它的输出文字**」（`G-06`，team-lead 裁定 2）：
+      本用例把副本 `append_only_guard.py` 的 `facts_pathspec()` 改成指向**别的目录**，
+      然后断言阶段⑤ **变红**并给出"未覆盖本函数所读的 facts/*.jsonl"。
 
-    | 输入 | 语义 |
-    |---|---|
-    | A | 三层齐备，且**保留了**失败 / 待定记录 |
-    | B | 三层齐备，但失败 / 待定记录被**选择性删除**（只剩成功） |
-
-    ⇒ append-only 语义**零判别力**：门禁分不出"保留了失败"与"删掉了失败"。
-      AST 实测该 id 在代码区只出现 1 次（`stage_gate.py:606` 的 `criterion()` 声明本身）。
-
-    ★ 这不是"放行"而是**可执行的缺口证据**：一旦实现 append-only 检查，本用例当场变红，
-      强制把登记从 `ineffective` 改掉。
+    ★ 必须跑**副本那份** `stage_gate.py`（`subprocess`）：真仓库那份的 `_ROOT` 指向真文件，
+      `from scripts.checks.append_only_guard import ...` 会解析到**真仓库**的守卫，
+      于是看不到副本里的改动（与 `bound_criteria()` 同源的坑）。
     """
-    rows_a = [
+    _expansion_compliant(code_root)
+
+    gate_src = code_root / GATE
+    aog_src = code_root / "scripts" / "checks" / "append_only_guard.py"
+    assert aog_src.exists(), f"副本里没有 append_only_guard（夹具跳过清单变了？）: {aog_src}"
+
+    # 掏空：让守卫的 pathspec 指向一个**不覆盖本真源**的 glob（只改副本）
+    aog_text = aog_src.read_text(encoding="utf-8")
+    anchor = '    return f"{rel.as_posix()}/*.jsonl"\n'
+    assert anchor in aog_text, "append_only_guard.facts_pathspec 的实现变了，请更新本用例"
+    aog_src.write_text(
+        aog_text.replace(anchor, '    return f"{rel.as_posix()}/*.bak"\n'), encoding="utf-8"
+    )
+
+    proc = subprocess.run(
+        [sys.executable, str(gate_src), str(code_root), "--no-report", "--stage", "expansion"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    out = proc.stdout + proc.stderr
+    assert proc.returncode == 1, (
+        "append-only 守卫的 pathspec 没罩住本真源，阶段⑤ 却放行了 —— "
+        "『复盘 append-only 真的生效』这条无法被机器证伪：\n" + out
+    )
+    assert "未覆盖本函数所读的 facts/*.jsonl" in out, out
+    assert "aog_covers_carrier: 0" in out, f"覆盖性必须计入 scanned（可观测）\n{out}"
+
+
+def test_expansion_review_append_only_outcome_categories_have_no_check(code_root: Path) -> None:
+    """★ **临时 `ineffective` 登记**：`Ch10 §D.5` 第 1 行「三类记录齐全」**无可检对象**。
+
+    `Ch10 §D.5` 第 1 行逐字：「**三类记录齐全**：成功 / 失败 / `pending`（待判断）各有结构性记录，
+    **不可选择性删除**（`N10.3-04`）」；`施工图:234` 亦写 `(success, failure, pending) ⊆ 记录集`。
+
+    ★ **实测缺口**：`success`/`failure`/`pending` 这个三元组在**整个代码区只出现 1 次** ——
+      `registry/delivery.yaml:132` 的那句声明本身。`schema/models.py` 里**没有**对应枚举，
+      `facts/*.jsonl` 里**没有**对应字段 ⇒ 这条约束**没有可检查的载体**，按 `G-03`
+      只能显式记账为"无被检对象"，**不得当成已验证**。
+
+    ★ 探针断言（`kind: ineffective` 的定义）：把 `outcome` 由 `success`/`failure`/`pending`
+      混搭改成**全 `success`**（即字面语义上的"只留赢的"）→ 阶段⑤ 的违例集合**完全相同**。
+
+    ★ **临时性**：本条**不是**"这条路已经没问题"，而是"等 team-lead 指定 `(success, failure,
+      pending)` 的载体（或确认它属后续阶段待交付）后补实现"。补实现的提交号见报告 §3 G9-2；
+      实现后本探针**当场变红**，强制把登记改掉。
+    """
+    rows_mixed = [
         {"task_id": "t1", "eval_result": {"eval_layer": "research_quality", "outcome": "success"}},
         {"task_id": "t2", "eval_result": {"eval_layer": "forecast_quality", "outcome": "failure"}},
         {"task_id": "t3", "eval_result": {"eval_layer": "investment_result", "outcome": "pending"}},
     ]
-    rows_b = [
+    rows_only_winners = [
         {"task_id": "t1", "eval_result": {"eval_layer": "research_quality", "outcome": "success"}},
         {"task_id": "t2", "eval_result": {"eval_layer": "forecast_quality", "outcome": "success"}},
         {"task_id": "t3", "eval_result": {"eval_layer": "investment_result", "outcome": "success"}},
     ]
 
-    _write_jsonl(code_root, "tasks", rows_a)
-    a_out = _gate(code_root, "expansion")[1]
-    _write_jsonl(code_root, "tasks", rows_b)
-    b_out = _gate(code_root, "expansion")[1]
+    _write_jsonl(code_root, "tasks", rows_mixed)
+    mixed_out = _gate(code_root, "expansion")[1]
+    _write_jsonl(code_root, "tasks", rows_only_winners)
+    winners_out = _gate(code_root, "expansion")[1]
 
-    assert _fatal_lines(b_out) == _fatal_lines(a_out), (
-        "「选择性删除失败记录」后违例集合发生了变化 —— 说明 append-only 语义**已被检查**："
-        "请把 registry/criterion_counterexamples.yaml 里 review_append_only 的 ineffective 条目"
+    assert _fatal_lines(winners_out) == _fatal_lines(mixed_out), (
+        "「只留赢的」后违例集合发生了变化 —— 说明**三类记录**这条已被检查："
+        "请把 registry/criterion_counterexamples.yaml 里 review_append_only 的该 ineffective 条目"
         "改为/补上 counterexample 条目，并更新报告 §3 G9-2。\n"
-        f"A（保留失败）:\n{a_out}\nB（删除失败）:\n{b_out}"
+        f"混搭（success/failure/pending）:\n{mixed_out}\n只留赢的（全 success）:\n{winners_out}"
     )
 
 
@@ -531,12 +740,17 @@ def test_criterion_effectiveness_guard_passes_on_pristine_tree(code_root: Path) 
     assert code == 0, f"登记完整时门禁不应阻断\n{out}"
     assert "scanned " in out, f"未上报 scanned 计数（无法区分「没扫」与「扫了没问题」）\n{out}"
     assert "criteria_bound: 12" in out, out
-    assert "criteria_registry_entries: 13" in out, out
-    assert "counterexample_entries: 11" in out, out
-    assert "ineffective_entries: 2" in out, out
-    assert "criteria_without_counterexample: 1" in out, out
-    assert "task_state_auditable" in out, "无判别力的判据必须逐条可见（G-03）"
+    assert "criteria_registry_entries: 15" in out, out
+    assert "counterexample_entries: 14" in out, out
+    assert "ineffective_entries: 1" in out, out
+    assert "criteria_without_counterexample: 0" in out, out
     assert "review_append_only" in out, "语义错位的判据必须逐条可见（G-03）"
+    # 缺口 `G9-1` 已闭合（`task_state_auditable` 补实现 + 反例由 ineffective 改 counterexample）。
+    # ★ 这条断言是**反向**的：它钉住"该判据**不再**出现在缺口清单里" —— 若有人把登记退回
+    #   `ineffective`（或删掉反例），本断言当场红。
+    assert "判据有效性缺口[daily_run::task_state_auditable]" not in out, (
+        f"`task_state_auditable` 又出现在缺口清单里 —— G9-1 的补实现或登记被退回？\n{out}"
+    )
 
 
 def test_removing_any_registry_entry_makes_guard_fail(code_root: Path) -> None:
@@ -547,13 +761,14 @@ def test_removing_any_registry_entry_makes_guard_fail(code_root: Path) -> None:
     path = code_root / REGISTRY
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     entries = list(doc["counterexamples"])
-    assert len(entries) == 13, "登记条数变了 —— 请同步本用例的期望值"
+    assert len(entries) == 15, "登记条数变了 —— 请同步本用例的期望值"
     for idx, row in enumerate(entries):
         doc["counterexamples"] = entries[:idx] + entries[idx + 1 :]
         path.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
         code, out = _guard(code_root)
-        # `review_append_only` 有两条条目：删掉其中一条时该判据仍有条目 ⇒ 门禁可以放行
-        # （允许多条目正是为了让"所绑定的检查有判别力"与"字面语义未被守"两件事各自留证）。
+        # `review_append_only` 有**多条**条目（1 ineffective + 3 counterexample）：删掉其中一条时
+        # 该判据仍有条目 ⇒ 门禁可以放行。允许多条目正是为了让"所绑定的检查有判别力"、
+        # "字面语义的每个方面各自有证据"、"暂无载体的方面显式记账"三件事各自留证。
         remaining = {
             (str(r.get("stage")), str(r.get("criterion_id")))
             for r in doc["counterexamples"]

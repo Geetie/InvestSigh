@@ -26,10 +26,12 @@ python system/scripts/checks/criterion_effectiveness_guard.py [code_root] [--no-
 | E | **唯一真源自校**：本门禁算出的 `声明 automated 但未绑定` 必须与 `stage_gate.criteria_not_implemented()` **逐阶段相等** —— 否则说明出现了第二套解析/谓词 | `G-06` |
 | F | **不可见不得当已核**：`ineffective`（实测无判别力）的判据、以及"只有 ineffective 条目"的判据（`criteria_without_counterexample`）逐条进 `note` 并计数；未绑定（阶段②③待交付）的判据显式计数 | `G-03` |
 
-★ 一个判据**可同时**有 `counterexample` 与 `ineffective` 条目（三元组 `(stage, criterion_id, kind)`
-  唯一）：前者证明"**所绑定的那个检查**会拦"，后者证明"其**字面语义的某个方面**没被守"。
-  典型例子：`expansion::review_append_only` —— 绑定的检查是「三层复盘齐备」（有判别力），
-  而 `delivery.yaml` 声明的 append-only 语义（`(success, failure, pending) ⊆ 记录集`）**没有被守**。
+★ 一个判据**可以有多条**条目（并允许同时有 `counterexample` 与 `ineffective`）：
+  一条判据本来就可能有多条**互不重叠的违反轴**，压成一条会丢失证据。
+  去重口径是「**测试路径全局唯一**」（防同一测试冒充多条证据），而**不是**判据级唯一。
+  典型例子：`expansion::review_append_only` 有 3 条 `counterexample`
+  （三层缺层 / 已声明层消失 / append-only 守卫没罩住本真源）+ 1 条 `ineffective`
+  （`(success, failure, pending)` 三类记录**无载体**，按 `G-03` 显式记账）。
 
 ★ 为什么 `ineffective` 不是一个"手改一行就绕过"的口子：该条目的测试必须
   **断言"不合规输入下门禁仍然不红"**（即"违例集合与合规输入完全相同"）。
@@ -170,7 +172,7 @@ def _check_registry_shape(
 ) -> list[Violation]:
     """登记表自身的形状与归属校验（A/B 的前置）。"""
     v: list[Violation] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen_tests: dict[str, str] = {}
     for idx, row in enumerate(entries, start=1):
         stage = str(row.get("stage") or "")
         cid = str(row.get("criterion_id") or "")
@@ -193,14 +195,26 @@ def _check_registry_shape(
                     REGISTRY_RELPATH,
                 )
             )
-        # 同一判据**允许**同时有 `counterexample` 与 `ineffective` 条目：
-        # 前者证明"所绑定的那个检查会拦"，后者证明"其字面语义的某个方面没被守"。
-        # 但 (stage, criterion_id, kind) 三元组必须唯一（防重复条目灌水）。
-        if (stage, cid, kind) in seen:
-            v.append(
-                Violation("G9", f"{where}: 判据 {stage}::{cid} 的 {kind} 条目重复登记", REGISTRY_RELPATH)
-            )
-        seen.add((stage, cid, kind))
+        # ★ 同一判据**允许多条** `counterexample`（也允许多条 `ineffective`）：一条判据本来
+        #   就可能有多条**互不重叠**的违反轴（例：`expansion::review_append_only` 有
+        #   ① 三层缺层、② 已声明层消失、③ append-only 守卫没罩住本真源 三个独立被检面），
+        #   把它们压成一条会**丢失证据**。
+        #   故唯一的去重口径改为「**测试路径全局唯一**」—— 防的是同一测试被登记多次冒充多条
+        #   证据（灌水），而不是防同判据多轴。
+        #   义务本身（A：已绑定判据 ≥1 条 counterexample）不受影响。
+        test_ref = str(row.get("test") or "").strip()
+        if test_ref:
+            if test_ref in seen_tests:
+                v.append(
+                    Violation(
+                        "G9",
+                        f"{where}: 测试 {test_ref} 被重复登记（已在 {seen_tests[test_ref]}）"
+                        " —— 同一条测试不得冒充多条反例证据",
+                        REGISTRY_RELPATH,
+                    )
+                )
+            else:
+                seen_tests[test_ref] = where
         if kind == KIND_COUNTEREXAMPLE and not str(row.get("blocked_hint") or "").strip():
             v.append(
                 Violation(

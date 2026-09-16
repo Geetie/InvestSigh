@@ -30,9 +30,12 @@
 #   改变门禁的违例集合。此时必须给出 `reason`，且测试必须**断言"
 #   不合规输入下的违例集合与合规输入完全相同"**。
 #
-# ★ 同一判据**可以同时**有这两种条目（`(stage, criterion_id, kind)` 三元组唯一）：
-#   前者证明"所绑定的那个检查会拦"，后者证明"其字面语义的某个方面没被守"。
-#   本表的 `expansion::review_append_only` 就是这种形态。
+# ★ 同一判据**可以有多条**条目（并允许同时有这两种 kind）：一条判据本来就可能有多条
+#   **互不重叠的违反轴**，压成一条会丢失证据。
+#   去重口径 = 「**测试路径全局唯一**」（防同一测试冒充多条证据），**不是**判据级唯一。
+#   本表的 `expansion::review_append_only` 是最全的例子：3 条 `counterexample`
+#   （三层缺层 / 已声明层消失 / append-only 守卫没罩住本真源）+ 1 条 `ineffective`
+#   （`(success, failure, pending)` 三类记录**无载体**，按 `G-03` 显式记账）。
 #
 #   ★ 为什么 `ineffective` 不是"改一行数据就绕过"的口子：那条探针测试若判据其实有判别力
 #     **当场就红**。所以"谎报 ineffective"要付出写一个必然失败的测试的代价，
@@ -122,6 +125,15 @@ counterexamples:
     blocked_hint: "CV2"
     note: "写一条 research_depth='bogus_depth' 的 company（不在四态内）→ 覆盖深度不可核 → 阶段④ exit 1。★ 该用例另有 `test_daily_run_coverage_verifiable_counterexample_is_load_bearing`：把副本里 coverage_check 换成空 CheckReport 后，**同一条反例即失效（exit 0）** —— 证明这条反例正好钉在审计所指的那个检查上"
 
+  - stage: daily_run
+    criterion_id: task_state_auditable
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_daily_run_task_state_auditable_blocks_on_illegal_status
+    blocked_hint: "不在 TaskStatus 合法取值域内"
+    note: "覆盖两种违反形态（同一判据、同一夹具）：① status='totally_bogus_status'（键在、值不在域内）；② 整行无 status 键。两者都 → 阶段④ exit 1，且违例带 task_id + 实际值 + 合法取值域（可逐行定位）。
+      ★ 该用例另有 `test_daily_run_task_state_auditable_counterexample_is_load_bearing`：把副本里该判定行掏空（谓词置恒假）后 **exit 1 → 0** 而 criteria_bound **仍为 4** —— 证明这条反例正好钉在这处检查上，且证明「绑定数发现不了掏空」。
+      ★ 出处：施工图 §2 阶段④ `all_tasks_have_status(run_window)` / Ch8 §C.2；取值域唯一真源 = schema/models.py::TaskStatus（G-06）。"
+
   # ───────────────────────────── 阶段⑤ expansion ────────────────────────────
   - stage: expansion
     criterion_id: review_append_only
@@ -129,18 +141,31 @@ counterexamples:
     test: tests/injection/test_criterion_effectiveness.py::test_expansion_review_append_only_blocks_on_missing_layer
     blocked_hint: "三层复盘缺层"
     note: "只给 research_quality + forecast_quality 两层复盘记录 → 缺 investment_result 层 → 阶段⑤ exit 1。
-      本条证明的是「该 id 所绑定的检查（三层复盘齐备）**有判别力**」。"
+      本条证明的是「三层复盘齐备**这个检查**有判别力」。
+      ★ **待裁定**：「三层齐备」在全设计区**没有'通过判据'级的逐字出处**（`Ch10 §C.1` 只定义 `eval_layer` 的**取值域**；`§C.4:250` 的 `assert layer in VALID_LAYERS` 亦为取值域断言；`施工图:215/234` 只在**退出物**里写'三层复盘记录'）⇒ `registry/delivery.yaml` 里**没有**它自己的 id，故暂时仍挂在本 id 上。team-lead 裁定前不改措辞、不新增 id（`R-04`）。"
+
+  - stage: expansion
+    criterion_id: review_append_only
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_expansion_review_append_only_blocks_on_layer_disappearing
+    blocked_hint: "消失（此前已声明过）"
+    note: "★ 本批次 `G9-2` 补实现的**真 append-only 判别力**。逐字据 `Ch10 §D.5` 第 3 行「禁'只留赢的'：断言 某标的的复盘记录集合 ⊇ 其历史全部建议（含已验证失败者）」。
+      反例：同一 task 在**追加序**上先声明三层（`eval_result_history`）、后只剩一层 ⇒ 「已声明过的层从记录集里消失」→ 阶段⑤ exit 1。
+      ★ **为什么不与 `append_only_guard` 重复**（`G-06`）：该反例在 **diff 层完全合法**（纯追加、无既有行被改），`append_only_guard` 对它**必然放行**；它违反的是**语义**（历史被悄悄收窄）。两者被检面不重叠、互补。
+      ★ 同用例内含**合法对照**（同一任务层集合**单调不减** → 该 hint 不出现），防止判据对多层任务无差别误报。"
+
+  - stage: expansion
+    criterion_id: review_append_only
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_expansion_review_append_only_blocks_when_guard_pathspec_misses_carrier
+    blocked_hint: "未覆盖本函数所读的 facts/*.jsonl"
+    note: "逐字据 `Ch10 §D.5` 第 2 行「append-only：复盘记录一次写入即不可改（承 `Ch9 §3.4.2` pre-commit 拒改既有行）」。
+      ★ **读它的判据、不读它的输出文字**（`G-06`）：本用例把副本 `append_only_guard.facts_pathspec()` 改成指向别的 glob，断言阶段⑤ 变红且 `scanned aog_covers_carrier: 0`。
+      ★ 为什么必须有这条：该守卫曾有**既有假绿** —— linked worktree 里钩子导出的 `GIT_DIR` 让 `rev-parse --show-toplevel` 返回 cwd ⇒ pathspec 指错 ⇒ `git diff --cached` **恒空** ⇒ 对任何输入都放行（`G-RC-12`）。『机制存在』≠『机制在这个真源上生效』。"
 
   - stage: expansion
     criterion_id: review_append_only
     kind: ineffective
-    test: tests/injection/test_criterion_effectiveness.py::test_expansion_review_append_only_semantics_have_no_discriminating_check
-    reason: "该 id 的**字面语义**（delivery.yaml：append-only，(success, failure, pending) ⊆ 记录集，禁选择性删除）没有任何检查：AST 实测该 id 在代码区只出现 1 次（stage_gate.py:606 的 criterion() 声明本身）。门禁唯一与复盘相关的判别轴是 eval_layer **取值集合**，故『含失败记录』与『失败记录被选择性删除』两种输入给出**完全相同**的违例集合"
-    note: "★ 语义错位（缺口 G9-2）：id 声明的是 append-only，绑定的却是「三层齐备」。本条是**可执行证据**：一旦有人实现 append-only 检查，该探针测试当场变红，强制更新本登记与报告。"
-
-  - stage: daily_run
-    criterion_id: task_state_auditable
-    kind: ineffective
-    test: tests/injection/test_criterion_effectiveness.py::test_daily_run_task_state_auditable_has_no_discriminating_check
-    reason: "除 registry/delivery.yaml 的声明与 stage_gate 的 criterion() 声明之外，全仓库无任何检查（AST 实测该 id 在代码区只出现 1 次：stage_gate.py:575 的声明本身）；把任务 status 置为非法值 totally_bogus_status 时，阶段④ 的违例集合与合规输入**完全相同**（都是 0 条）"
-    note: "本条属**已绑定但无判别力**：'任务状态可核' 当前没有任何可观测的被检谓词（缺口 G9-1）。"
+    test: tests/injection/test_criterion_effectiveness.py::test_expansion_review_append_only_outcome_categories_have_no_check
+    reason: "`Ch10 §D.5` 第 1 行「三类记录齐全：成功 / 失败 / pending（待判断）各有结构性记录，不可选择性删除」**无可检对象**：`success`/`failure`/`pending` 三元组在**整个代码区只出现 1 次**（`registry/delivery.yaml:132` 的声明本身），`schema/models.py` 无对应枚举、`facts/*.jsonl` 无对应字段。故探针实测：把 outcome 由 success/failure/pending 混搭改成**全 success**（字面语义上的『只留赢的』）→ 阶段⑤ 违例集合**完全相同**"
+    note: "★ **临时登记，不是『这条路没问题』**：原因是**载体未定**（等 team-lead 指定 `(success, failure, pending)` 的载体，或确认它属后续阶段待交付）；补实现的提交号见 `reports/ws_criterion_effectiveness_report.md §3 G9-2`。实现后本探针**当场变红**，强制更新本登记（铁律 5）。按 `G-03` 显式记账为『无被检对象』，**不计为已验证**。"
