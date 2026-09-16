@@ -114,6 +114,7 @@ PY="${HOME}/.workbuddy/binaries/python/envs/default/bin/python"
 from __future__ import annotations
 
 import argparse
+import ast
 import dataclasses
 import datetime as dt
 import hashlib
@@ -223,8 +224,9 @@ SCHEDULED_CELLS: tuple[Cell, ...] = (
     Cell("unit", "P1", 13, "13-F §3-4 表", "合并前读数；13-F §④.2 明确要求**满负载**复测（现登记 300s）"),
     Cell("guards", "P1", 20, "13-F §3-4 表", "合并前读数（现登记 300s；主理人裁「纳入 #83 统一收紧」）"),
     Cell(
-        "injection-g", "P1", 24, "taskbook 裁定：分片再平衡后 `f 27 / g 24`（≤32）",
-        "★ 第 14 格（裁定并入）；**已有 1 次**门禁读数 `15.37s/300s`（余量 19.5×）⇒ 只需补第 2 次",
+        "injection-g", "P1", 24, "taskbook 裁定：分片再平衡后 `f 27 / g 24`（≤32，**这是文件/例数上限口径**，非夹具口径）",
+        "★ 第 14 格（裁定并入）；**已有 1 次**门禁读数 `15.37s/300s`（余量 19.5×）⇒ 只需补第 2 次。"
+        "★ **现测（`ast`）= 17 例带重型夹具**（`--plan` 会并列打印并打 ★）",
         assumed=True,
     ),
     Cell(
@@ -254,6 +256,59 @@ UNKNOWN_FIXTURE_CASES = max(
 )
 
 _BY_NAME = {c.name: c for c in SCHEDULED_CELLS}
+
+
+#: 会**真建/真删树**的夹具名（`ast` 枚举 `tests/**/conftest.py` 得出，**不是我猜的名字集**）。
+#: 重型 = 复制整棵 `system/`（`copytree`）；轻量 = 只建几个空目录（`make_minimal_root`/`rmtree`）。
+#: ★ 枚举命令见报告 `§4.1`；**新增夹具名时必须重跑枚举**，否则本量法会**低估**（静默）。
+HEAVY_FIXTURES = ("code_root", "pristine_code_root")
+LIGHT_FIXTURES = ("scratch",)
+
+
+def _measured_fixture_cases(name: str) -> tuple[int, int, str]:
+    """**现测**该批次的"用重型夹具的用例数 / 用轻量夹具的用例数"（`ast`，**零夹具**）。
+
+    ★ 为什么必须在脚本里现测（而不是只抄报告里的数）：本单实测过 ——
+    `13-F`/`V-02` 的引用值与本 SHA 的实测值 **7 个 injection 分片全不符、另有 4 格不符**。
+    引用值不是"错"，是**会过期**（用例增删 / 分片再平衡 / 参数化）。
+    ⇒ `--plan` 因此**自带对账**：引用值与实测值并列，不一致就打 ★（**不静默选一个**）。
+
+    ★ 量法要点（**两条都是我踩过的坑**）：
+    1. `BATCHES[*].argv` 里的 target **既可能是目录也可能是文件**
+       （`injection-*` 是显式**文件清单**）⇒ 只 `rglob` 目录会把分片全量成 `0`（**我第一版就是这样**）；
+    2. **不能 `grep` 数 `def test_`** 来代替（`V-11` 仪器轴：参数化会展开，且本机 `grep` 有方言）。
+
+    返回 `(heavy, light, note)`；量不到时 `note` 非空（**不静默返回 0**）。
+    """
+    from scripts.ops.verify import BATCHES as _B  # 局部别名，避免与模块级 import 名字冲突
+
+    batch = _B.get(name)
+    if batch is None:
+        return 0, 0, f"not_in_BATCHES:{name}"
+    targets = [a for a in batch.argv if a.startswith("tests/")]
+    if not targets:
+        return 0, 0, "no_tests_target_in_argv"
+    heavy = light = 0
+    seen_files = 0
+    for t in targets:
+        p = ROOT / t
+        if not p.exists():
+            return 0, 0, f"target_missing:{t}"
+        files = [p] if p.is_file() else sorted(p.rglob("test_*.py"))
+        for f in files:
+            try:
+                tree = ast.parse(f.read_text(encoding="utf-8"))
+            except (OSError, SyntaxError) as exc:
+                return 0, 0, f"unparsable({exc.__class__.__name__}):{f.name}"
+            seen_files += 1
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                    args = {a.arg for a in node.args.args} | {a.arg for a in node.args.kwonlyargs}
+                    if args & set(HEAVY_FIXTURES):
+                        heavy += 1
+                    if args & set(LIGHT_FIXTURES):
+                        light += 1
+    return heavy, light, ("" if seen_files else "no_test_files_found")
 
 
 def _cell_for(name: str) -> Cell:
@@ -622,24 +677,39 @@ def _render_g60(v: dict) -> list[str]:
 
 
 def _print_plan(cells: tuple[Cell, ...], repeat: int) -> None:
-    total_quota = 0
+    total_ref = total_meas = 0
     print("## 取样计划（`--plan`：**不执行任何批次**）")
     print()
-    print("| 优先级 | 批次 | 登记超时（★ 真源 `BATCHES`） | 夹具用例（引用值） | 项/例 | 本格一次 ≈配额项 | 理由 |")
-    print("|---|---|---|---|---|---|---|")
+    print("| 优先级 | 批次 | 登记超时（★ 真源 `BATCHES`） | 夹具用例（引用值） | 现测 重型/轻量（`ast`） | 项/例 | 本格一次 ≈配额项（引用值） | 理由 |")
+    print("|---|---|---|---|---|---|---|---|")
     for c in cells:
         timeout = BATCHES[c.name].timeout if c.name in BATCHES else None
         t = "—" if timeout is None else f"{timeout:.0f}s"
         cost = c.quota_per_run
-        total_quota += cost * repeat
+        total_ref += cost * repeat
         cases = f"{c.fixture_cases}" + ("（假设）" if c.assumed else "")
-        print(f"| {c.priority} | `{c.name}` | {t} | {cases} | {c.quota_per_case} | ≈{cost:,} | {c.note} |")
+        # ★★ 引用值 vs **现测值** 并列 + 不一致就打 ★（不静默选一个）。
+        m_heavy, m_light, m_note = _measured_fixture_cases(c.name)
+        heavy_based = c.quota_per_case == QUOTA_PER_FIXTURE_CASE
+        if m_note:
+            measured = f"★量不到（{m_note}）"
+            total_meas += cost * repeat          # 量不到 ⇒ 退回引用值（并在列里显形）
+        else:
+            m_val = m_heavy if heavy_based else m_light
+            measured = f"{m_heavy}/{m_light}" + (" ✓" if m_val == c.fixture_cases else " ★")
+            total_meas += m_val * c.quota_per_case * repeat
+        print(f"| {c.priority} | `{c.name}` | {t} | {cases} | {measured} | {c.quota_per_case} | ≈{cost:,} | {c.note} |")
     print()
     print(f"- 单元格数：**{len(cells)}** ｜ 每格重复：**{repeat}** 次 ⇒ 共 **{len(cells) * repeat}** 次批次运行")
-    print(f"- ★ 估算总配额消耗：**≈{total_quota:,} 项**"
+    print(f"- ★ 估算总配额消耗（**引用值**）：**≈{total_ref:,} 项**"
           f"（= Σ 夹具用例 × 每例项数 × {repeat}；重型夹具的 `250` 出处 `13-F §2.6`）")
+    print(f"- ★ 估算总配额消耗（**现测**）：**≈{total_meas:,} 项**"
+          f"　← ★ **以这一列为准**（`ast` 零夹具现测；量不到的格退回引用值，已在列里标 ★）")
     print("- ★ **该估算必须与「全流共享的回合级配额」比**（本会话实测阈值 `99,999`）⇒"
           " 一轮**装不下**，须跨多轮并与其它流**互斥**（卡 `13-M` 不得并发跑批）。")
+    print("- ★ 现测列为 **重型/轻量** 两个数：`29/0` = 29 例用复制整棵树的夹具；`0/100` = 100 例用**轻量根**夹具"
+          "（每例 ≈10 项，见 `Cell.quota_per_case`）⇒ **不能只比一个数**。")
+    print("- ★ 引用值列会**过期**（用例增删 / 分片再平衡 / 参数化）⇒ 不一致时**以现测列为准**，**两列都留痕**。")
     print("- ★ 夹具用例数与「项/例」都是**引用值**（出处见 `source`），会随用例增删与夹具形状漂移 ⇒ 用前请重新量。")
     st = _quota_state()
     if isinstance(st, str):
