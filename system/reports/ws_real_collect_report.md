@@ -341,4 +341,9 @@ restored:
 
 ## 附：提交
 
-- 提交哈希：`<见 ws/real-collect 分支最新提交 / 回传 team-lead>`
+- 分支：`ws/real-collect`（基点 `main = d03418a`）
+- 主提交哈希：`08eddd3256fa29c35c303d91842c0b96bfd7dca2`（14 files changed, 3193 insertions）
+- `pre-commit.sh`：**全部门禁放行**（`append_only`/`rules_lock`/`registry_schema`/`schema_sync`/`conflict_scan`/`no_placeholder`/`injection`/`verification_policy`/`shell_var`/`graph_integrity`）—— 提交未被阻断
+- 提交范围：`raw/`（4 txt + inbox 副本）、`scripts/ingest/real_collector.py`、`facts/*.jsonl`（追加行）、本报告
+- **未提交**（运行产物、非真源）：`system/state.json`、`system/derived/compute_gaps.jsonl`
+
