@@ -121,9 +121,9 @@ BATCHES: Mapping[str, Batch] = {
         "root", "tests/test_ch11_invariants.py（Ch11 不变量）",
         _pytest("tests/test_ch11_invariants.py"), 30.0, _exit_zero,
     ),
-    # ── 并行工作流（ws/compute · ws/graph · ws/claim）交付的批次 ──
+    # ── 并行工作流（ws/compute · ws/graph · ws/claim · ws/decision）交付的批次 ──
     # 由主理人在集成时统一加入（`reports/parallel_workstreams.md §5 I-3`）：
-    # 各 WS **不得**自行改本文件（三方同改必冲突），只报"需新增批次"。
+    # 各 WS **不得**自行改本文件（多方同改必冲突），只报"需新增批次"。
     "compute": Batch(
         "compute", "tests/compute/（确定性计算层）",
         _pytest("tests/compute"), 60.0, _exit_zero,
@@ -140,6 +140,10 @@ BATCHES: Mapping[str, Batch] = {
         "claim", "tests/claim/（主张五态状态机）",
         _pytest("tests/claim"), 30.0, _exit_zero,
     ),
+    "decision": Batch(
+        "decision", "tests/decision/（决策层 triage / gate / rules）",
+        _pytest("tests/decision"), 30.0, _exit_zero,
+    ),
     "gates": Batch(
         "gates", "run_all_gates.py（20 项门禁）",
         ("scripts/ops/run_all_gates.py", "{root}", "--timeout", "30"), 60.0, _exit_zero,
@@ -154,7 +158,7 @@ BATCHES: Mapping[str, Batch] = {
 
 ORDER = (
     "unit", "conflict", "guards", "injection", "root",
-    "compute", "graph", "validators", "claim",
+    "compute", "graph", "validators", "claim", "decision",
     "gates", "stage",
 )
 
