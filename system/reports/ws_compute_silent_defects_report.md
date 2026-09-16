@@ -251,10 +251,25 @@ def compute_valuation(baseline_version, params, *, compute_time):
 - **部分承载**（非零）：`compute_date` ↔ `DerivedValue.computed_at`（**已落库**，逐行可见）；`share_count` 已出现在 `formula` 串内（如 `((1000 - 200) / 100) * 10`），但**非独立字段**。
 - 判定：`§N5.3-02` 列为**必需**链字段；独立字段未落库为**真缺口**。修它需**改冻结的 `schema/models.py::DerivedValue`**（跨工作流共享模型）→ 超本批范围，**登记**。可选方案：把 `share_count`/`compute_date` 并入 `DerivedValue.operands`（审计建议），或给 `DerivedValue` 增 `inputs` 字段——二者均需设计/需求方裁定。
 
-### 4.4 提交与 pre-commit
+### 4.4 提交与 pre-commit（阻断已按主理人指示合规解除）
 
-- **本批唯一提交阻断为 `rules_lock_guard` / `injection_guard` 报 `rules/*.yaml` 为 `0o644`（应 `0o444`）**，根因是 **worktree checkout 不保留只读位**（git 不跟踪 mode read-only bit），与本批改动**无关**（本批未触碰 `rules/**`）。
-- 依主理人指令"红的原因与本次改动无关 → 先报告我、不许 `--no-verify`"，本报告随附阻断详情，**未使用** `--no-verify`，等待主理人处置（见随附 SendMessage）。
+- **提交阻断根因（与本次改动无关）**：`rules_lock_guard` / `injection_guard` 报 `rules/*.yaml` 为 `0o644`（应 `0o444`）。系统性伪影：**git 只跟踪可执行位、不跟踪只读位** → 新 `worktree add` checkout 出的 `rules/` 即 `0644`；本批**未触碰 `rules/**`**（`rules_lock_guard` 三条断言中，② SHA256 与 `registry/rules.lock.json` 一致、③ 无未登记文件，**仅** ① 权限不符）。
+- **合规解除（主理人选 `(b)`）**：仅 `chmod 0444 system/rules/*.yaml`（**只改权限、不改内容、不动 `registry/rules.lock.json`**）。证据：
+
+```console
+$ ls -l system/rules/*.yaml
+-r--r--r-- … system/rules/banned_tokens.yaml     （10 个文件全部 0444）
+$ git status --short system/rules registry        # 空 → 无改动
+$ git diff --stat -- system/rules registry        # 空 → 无改动
+$ sh system/scripts/ops/pre-commit.sh
+  append_only / rules_lock_guard / registry_schema / schema_sync /
+  conflict_scan / no_placeholder_guard / injection_guard / verification_policy_guard
+  → 全 RESULT: PASS（0 violations）
+pre-commit ✓ 全部门禁放行        EXIT=0
+```
+
+- **提交（钩子开启、未用 `--no-verify`）**：`ws(fix-compute): 修 ws/compute 四条静默缺陷（…）`，**17 files changed, +625 / −52**。本报告文件即该提交一部分；本节证据随后续小提交并入。
+- **提交哈希**：`5034beb`（代码+报告主体）；证据增补见下一条提交。
 
 ### 4.5 未触及（明确不在本批）
 
