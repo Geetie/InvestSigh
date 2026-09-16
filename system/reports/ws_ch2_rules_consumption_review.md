@@ -2688,10 +2688,15 @@ done_empty_output_rows == no_change_day_exempt + degraded_empty_output + empty_o
    **完全相同的 2 条违例** ⇒ **继承自 `main`、与本卡无关**。
    （★ 复跑时我先用 `| tail -5` 读它的退出码，那是 `tail` 的 `rc` —— 违反 `口径 17`；
    已改为单独执行取 `rc=1`，见本节末的自查。）
-4. **本卡未跑"整仓 29 条回归"**：`G-60` 的删除配额约束下，本轮只跑了**同源面**
-   （`tests/daily` 全目录 + `tests/injection/test_wiring_guards.py` = **81 passed**）与
-   **14 道 pre-commit 门禁**（全绿）+ **27 道全量门禁**（26 绿 / 1 项继承自 main）。
-   跨面全量回归按纪律留给新的回合（不静默：这是**未跑**，不是**跑过**）。
+4. **本卡未跑"整仓 29 条回归"**：`G-60` 的删除配额约束下，本轮跑了**同源面 + 直接消费面**：
+   `tests/daily` 全目录 + `tests/injection/test_wiring_guards.py`（**81 passed**）、
+   `tests/injection/test_stage_gate.py` + `tests/injection/test_audit_regressions.py`（**24 passed**
+   —— ★ 这一对是**必须**的：`stage_gate.py` **import** `scripts/daily/degrade.py` 的
+   `holds_valid_result()`，而我改了 `degrade.py` 的内部取记录方式）；
+   `tests/guards` 全目录（**108 passed**，见 `#96`）；**14 道 pre-commit 全绿**；
+   **27 道全量门禁**（26 绿 / 1 项继承自 main）。
+   跨面的**其余**批次仍**未跑**（`injection` 的 7 个分片批等）—— 按纪律留给新的回合
+   （不静默：这是**未跑**，不是**跑过**）。
 5. 我**未**改动 `stage_gate.py`（`G-63` 的两个落点仍在）—— 那是另一张卡的范围。
 
 #### 17.16.8 我本轮的自查（又一次把"读数"读成"结论"的前一刻停住）
@@ -2778,7 +2783,9 @@ done_empty_output_rows == no_change_day_exempt + degraded_empty_output + empty_o
   （`G-03`：不靠单一证据），且它守的正是本卡改动的**同一段前置逻辑**。
 
 **回归**：`tests/guards` 全目录 **108 passed**（含 13-O 的 4 条）；`tests/daily` + `test_wiring_guards`
-**81 passed**；**14 道 pre-commit 全绿**；`install_hooks.sh --check` **`rc=0`**（薄壳未漂移）；
+**81 passed**；`tests/injection/test_stage_gate.py` + `test_audit_regressions.py` **24 passed**
+（`stage_gate` 是 `daily/degrade.py` 的**直接消费方**，见 §17.16.7 第 4 条）；
+**14 道 pre-commit 全绿**；`install_hooks.sh --check` **`rc=0`**（薄壳未漂移）；
 `run_all_gates` 27 道 **26 绿**（唯一非零仍是 §17.16.7 已归因的 `traceback.py`，继承自 `main`）。
 
 #### 17.17.5 ★ **同族未改清单**（不越卡面，如实登记 —— `R-04` / "不顺手改"）
