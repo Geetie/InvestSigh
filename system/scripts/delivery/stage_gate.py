@@ -448,6 +448,23 @@ def stage_nvidia_sample_passed(root: Path) -> tuple[bool, list[Violation], dict[
 
     tr = trace_check(root)
     v += tr.violations
+    # ★ 「满足 Ch4 §G 深度」（`Ch11 §B` 阶段② 声明的第 4 条判据）—— 批次 13-A **接线**。
+    #
+    #   实现住 `scripts/valuelayer/completeness.py`（`Ch4 §G.2` 的逐字伪码五项 +
+    #   `§G.3` gap 衔接 + `§G.4` 盈利/未盈利分支），此处**复用**它（`G-06` 唯一真源，
+    #   不在此重造第二套形式完备性校验）。
+    #
+    #   ★ 为什么必须绑（`G9`：绑定 ≠ 会拦，而不绑则连"会拦"都无从谈起）：
+    #     `registry/delivery.yaml` 声明它是 automated，而"声明"与"实现"必须有
+    #     **机器绑定**（铁律 5）—— 不绑的话 Ch4 §G 深度不达标时阶段② **不会红**，
+    #     等于这条判据没接。绑法与其余判据同构：函数体内一处 `criterion(...)` 字面量
+    #     （由 `bound_criteria()` 的 AST 抽取核对），外加**真的调用**校验器。
+    #     配套的可执行反例登记在 `registry/criterion_counterexamples.yaml`
+    #     （`criterion_effectiveness_guard` 会 AST 校验那条测试真实存在且函数名含判据 id）。
+    from scripts.valuelayer.completeness import g_depth_violations
+
+    v += g_depth_violations(root)
+    criterion("nvidia_sample", "chapter4_g_depth", v)
     criterion("nvidia_sample", "six_step_chain_complete", v)
     criterion("nvidia_sample", "derivation_reviewable", v)
     v += assert_criteria_implemented(root, "nvidia_sample")

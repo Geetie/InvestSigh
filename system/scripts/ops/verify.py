@@ -392,6 +392,22 @@ BATCHES: Mapping[str, Batch] = {
         "daily", "tests/daily/（阶段④每日运行：覆盖可核/降级/幂等/调度）",
         _pytest("tests/daily"), 180.0, _exit_zero,
     ),
+    "valuelayer": Batch(
+        # 新增测试目录必须同时加批次，否则 `V-06` 会把新目录判成"未覆盖"（`CONVENTIONS.md::V-06`）。
+        # 由**批次 13-A（Ch4 价值层）**加入（`system/reports/batch13_taskbook.md` 卡 13-A 的
+        # 显式要求："`tests/valuelayer/` 新目录 ⇒ 必须同步在 `verify.py::BATCHES` 加一批"）。
+        # 目标 `tests/valuelayer/` 是**本批次新建**的目录（rollup / route_guard / growth_quality /
+        #   moat_guard / state_machine / completeness 六模块的用例）。
+        # 超时：工作树内**实测 170.15s**（191 passed）→ 按 `V-02` 取**不超过上限的最大值 300s**
+        #   （170 × 4 = 680s 越过 `V-02` 的 300s 上限，与 `daily` / `injection-*` 同一处境）。
+        #   ★ 遗留风险（如实登记）：本批余量仅 **1.76×**，比 `injection-f` 的 2.7× 更薄 ——
+        #     若同一工作树里有第二个 pytest 会话（`V-05` 禁止的情形）并发，本批可能被拖过 300s 而**假红**。
+        #     见到本批超时的**第一步不是改断言**，而是先确认有没有第二个会话在同一工作树里跑。
+        #   ★ 夹具配额：本目录 **28 个用例**用 `code_root` 夹具（实测 `def test_*(… code_root …)`
+        #     计数；其余为纯内存用例，`P-05`），与 `injection-b`（28）/ `injection-d`（29）同一量级。
+        "valuelayer", "tests/valuelayer/（Ch4 价值层：指标集/加总/增长质量/护城河/状态机/完备性）",
+        _pytest("tests/valuelayer"), 300.0, _exit_zero,
+    ),
     "gates": Batch(
         # ★ 不写"多少项"（批次 7 审计）：数字的真源在 `run_all_gates.GATES`，
         #   描述里重复它必然漂移（同一事实曾出现 18/19/20/23 四个值）。
@@ -418,6 +434,7 @@ ORDER = (
     "root",
     "compute", "graph", "validators", "claim", "decision", "transmit", "evidence", "daily",
     "pricelayer",
+    "valuelayer",
     "gates", "stage",
 )
 
