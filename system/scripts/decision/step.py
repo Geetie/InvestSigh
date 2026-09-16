@@ -46,8 +46,20 @@ def make_decision_handler(root: str | Path, *, step_no: int = 6) -> Any:
       ★ 不是"本会产出的 id"：**幂等命中**（同窗口 + 同规则版本重跑）时为空 ——
       命中对象改走 `StepOutcome.skipped`（`pipeline.py` 的 G1-05 空执行守卫现为
       `not step.produced and not step.skipped`，双空才判违例）。
+    - `skipped` = 本次**考察过、但幂等键已存在故未重复写入**的 `recommendation_id`
+      （`Ch9 §3.5` 阶段⑤）——取自 `RunReport.skipped_recommendation_ids`。
+      ★ 为什么必须有它（缺陷 `G-44`，实测）：本处理器被 `chain_steps` 的
+        `_declare_incomplete_when_empty` **恰好**包装（step 5 / step 6 两步、`blocking: true`），
+        其判据是 `not produced and not skipped and incomplete_reason is None`。
+        原先本处理器**不设** `skipped` ⇒ **连续第二次 `run_daily`** 被补上 `incomplete_reason`
+        ⇒ 记 `STATUS_GAP` ⇒ **整轮 `blocked`** —— 而这一轮其实**什么都没坏**：
+        `facts/recommendations.jsonl` 一行未增，是**幂等按设计命中**。
     - `signals_emitted` = 新交易信号数（`buy` / `sell`）；
     - `degraded` = 门拒绝 / **真源输入缺失** / 未出建议 → **显式**标记，不静默。
+
+    ★ **幂等判定不在本模块**（`G-06` 唯一真源）：本处理器只**转述**
+      `run_decide.run_default` 从唯一写入口（`rules.persist_recommendation_detailed`）
+      取回的 `written_ids` / `skipped_ids` 两个互斥集合，**不重算**任何"哪些算已存在"。
 
     ★ `run_date` 作为 **as-of 上界**、`scope` 作为**目标证券选取**，二者均经 `run_default`
       真实使用（见模块 docstring）；输入窗口来自**真源行情**（`<root>/facts/prices.jsonl`），
@@ -66,6 +78,7 @@ def make_decision_handler(root: str | Path, *, step_no: int = 6) -> Any:
         report = run_default(root_path, run_date=run_date, scope=scope)
         return StepOutcome(
             produced=list(report.recommendation_ids),
+            skipped=list(report.skipped_recommendation_ids),
             judgment_change={},
             signals_emitted=int(report.signals_emitted),
             degraded=bool(report.degraded) or not report.recommendation_ids,

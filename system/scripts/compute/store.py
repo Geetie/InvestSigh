@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -28,6 +29,34 @@ from schema.models import DerivedValue
 from schema.store import _file_lock  # 复用唯一文件锁实现（纪律 11 / Ch9 §3.10 J6）
 
 from .contract import DEFAULT_VERSION, ComputeGap
+
+
+@dataclass(frozen=True)
+class AppendOutcome:
+    """一次 `DerivedValue` 追加的**如实结果**（`Ch9 §3.5` 阶段④）。
+
+    | 字段 | 语义 |
+    |---|---|
+    | `written` | **本轮真正新写入**的 `derived_id`（首次某幂等键） |
+    | `skipped` | 本轮**考察过、但键已存在故未写入**的 `derived_id`（幂等命中） |
+
+    ★ **两者互斥**（`pipeline.assert_steps_complete` 的 G-42 互斥校验）：
+      同一个 `derived_id` 不可能**既**是"本轮新写入"**又**是"已存在故未写入"。
+      本类在 `__post_init__` 里**自己断言**这条不变量 —— 违反即**响亮失败**，
+      不把自相矛盾的结果交给上层（否则上层只能靠"相信"）。
+    """
+
+    written: list[str] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        overlap = sorted(set(self.written) & set(self.skipped))
+        if overlap:
+            raise ValueError(
+                f"AppendOutcome 自相矛盾：{overlap} 同时出现在 written 与 skipped —— "
+                "同一 derived_id 不可能既'本轮新写入'又'已存在故未写入'"
+            )
+
 
 DERIVED_DIRNAME = "derived"
 DERIVED_VALUES_STEM = "derived_values"
@@ -95,6 +124,51 @@ def existing_keys(root: str | Path) -> set[tuple[str, str, str]]:
     }
 
 
+def append_derived_value_ids_detailed(
+    root: str | Path,
+    values: Sequence[DerivedValue],
+    *,
+    version: str = DEFAULT_VERSION,
+    skip_existing: bool = True,
+) -> AppendOutcome:
+    """追加 `DerivedValue`，返回 `(written, skipped)` **两个**互斥集合（`AppendOutcome`）。
+
+    ★ **这是"哪些算已存在"的唯一定义处**（`G-06` 唯一真源）：幂等判据 = 键
+      `(derived_id, version, method_version)` 是否已在 `derived/derived_values.jsonl`
+      （`Ch9 §3.5` 阶段④）。**任何**调用方（CLI / step 处理器 / 测试）都只能由此得到
+      "已存在"这件事，**不得**在别处重算 —— 否则同一个问题会有两个答案，
+      而它们总有一天会不一致。
+
+    语义（`Ch9 §3.4.2` 追加式不可变）：
+
+    - 首次某 `(derived_id, version, method_version)` → **写入**，进 `written`；
+    - 同键重跑 → **跳过追加**，进 `skipped`（**不是**"什么都没干"：这是**已完成的判定**）；
+    - 上游重述（同 `derived_id`/`method_version`、**新 `version`**）→ **新键** → **新增行**，
+      旧行保留。
+
+    ★ **互斥归一**：同一 `derived_id` 若在本批次内既有**新键**写入、又有**旧键**命中
+      （例如同名派生值的方法版本升级），则**以写入为准**、`skipped` 里剔除它 ——
+      保证 `written ∩ skipped = ∅`（G-42）。这是**归一**而非丢弃信息：
+      "本轮确实写了这个对象"是更强的事实。
+    """
+    seen = existing_keys(root) if skip_existing else set()
+    written: list[str] = []
+    hits: list[str] = []
+    lines: list[str] = []
+    for value in values:
+        key = (value.derived_id, version, value.method_version)
+        if skip_existing and key in seen:
+            hits.append(value.derived_id)
+            continue
+        seen.add(key)
+        written.append(value.derived_id)
+        lines.append(_dump_row(value, version))
+    _append_lines(root, DERIVED_VALUES_STEM, lines)
+    written_set = set(written)
+    skipped = sorted({i for i in hits if i not in written_set})
+    return AppendOutcome(written=written, skipped=skipped)
+
+
 def append_derived_value_ids(
     root: str | Path,
     values: Sequence[DerivedValue],
@@ -104,29 +178,12 @@ def append_derived_value_ids(
 ) -> list[str]:
     """追加 `DerivedValue`（返回**实际写入**的 `derived_id` 列表）。
 
-    ★ 幂等键 = `(derived_id, version, method_version)`（`Ch9 §3.5` 阶段④：
-      `(company_id, version, method_version)`）。`version` 是**上游基线版本**：
-
-    - 首次某 `(derived_id, version, method_version)` → **写入**（返回其 `derived_id`）；
-    - 同键重跑 → **跳过**（不重复追加）；
-    - 上游重述（同 `derived_id`/`method_version`、**新 `version`**）→ **新键** → **新增行**，
-      旧行保留（追加式不可变，`Ch9 §3.4.2`）。
-
-    `version` 作为 `derived/` 真源的行级列落库（`derived/` 是计算层自有真源；不改冻结的
-    `schema/models.py::DerivedValue`）。逐行 JSON 序列化，`sort_keys=True` 保证可 diff。
+    本函数是 `append_derived_value_ids_detailed` 的**只取写入侧的视图**（既有契约不变：
+    调用方只关心"写进去了什么"）。幂等判定**不在这里重复实现**，见后者的 docstring。
     """
-    seen = existing_keys(root) if skip_existing else set()
-    written: list[str] = []
-    lines: list[str] = []
-    for value in values:
-        key = (value.derived_id, version, value.method_version)
-        if skip_existing and key in seen:
-            continue
-        seen.add(key)
-        written.append(value.derived_id)
-        lines.append(_dump_row(value, version))
-    _append_lines(root, DERIVED_VALUES_STEM, lines)
-    return written
+    return append_derived_value_ids_detailed(
+        root, values, version=version, skip_existing=skip_existing
+    ).written
 
 
 def append_derived_values(

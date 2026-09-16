@@ -408,13 +408,47 @@ def _recommendation_idempotency_key(rec: Recommendation) -> tuple[str, str, str,
     )
 
 
-def persist_recommendation(root: str | Any, rec: Recommendation) -> int:
-    """把建议落 `facts/recommendations.jsonl`（**复用** `schema.store.append_records`）。
+@dataclass(frozen=True)
+class PersistOutcome:
+    """一次建议落库的**如实结果**（`Ch9 §3.5` 阶段⑤）。
 
-    返回**实际写入行数**（新增 → `1`；**幂等命中 → `0`**）。
+    | 字段 | 语义 |
+    |---|---|
+    | `written_ids` | **本轮真正新写入**的 `recommendation_id`（首次该幂等键） |
+    | `skipped_ids` | 本轮**考察过、但幂等键已存在故未写入**的 `recommendation_id` |
 
-    - **幂等**（`P7-4` / `Ch9 §3.5` 阶段⑤）：同一"输入窗口 + 规则版本"重跑 → **不追加**
-      （判据 = `(security_id, start_date, review_date, rule_version)` 已在真源中出现）。
+    ★ **两者互斥**（`pipeline.assert_steps_complete` 的 G-42 互斥校验），由 `__post_init__`
+      自己断言 —— 违反即**响亮失败**，不把自相矛盾的结果交给上层。
+
+    ★ 为什么与 `scripts.compute.store.AppendOutcome` **分开定义**（而非共用一个类型）：
+      两者是**不同层、不同对象**（`DerivedValue` vs `Recommendation`）的落库结果，
+      各自随本人的幂等键演进；合并只会造出一条**假的**跨层耦合。此处模式相同是**同构**，
+      不是第二套实现 —— 幂等判定各自只有一处（本模块的 `persist_recommendation_detailed`、
+      计算层的 `store.append_derived_value_ids_detailed`）。
+    """
+
+    written_ids: tuple[str, ...] = ()
+    skipped_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        overlap = sorted(set(self.written_ids) & set(self.skipped_ids))
+        if overlap:
+            raise ValueError(
+                f"PersistOutcome 自相矛盾：{overlap} 同时出现在 written_ids 与 skipped_ids —— "
+                "同一 recommendation_id 不可能既'本轮新写入'又'已存在故未写入'"
+            )
+
+
+def persist_recommendation_detailed(root: str | Any, rec: Recommendation) -> PersistOutcome:
+    """把建议落 `facts/recommendations.jsonl`，返回 `(written_ids, skipped_ids)` **两个**互斥集合。
+
+    ★ **这是"哪些算已存在"的唯一定义处**（`G-06` 唯一真源）：幂等判据 = 业务键
+      `(security_id, start_date, review_date, rule_version)` 是否已在真源中出现
+      （`Ch9 §3.5` 阶段⑤）。**任何**调用方（CLI / step 处理器 / 测试）都只能由此得到
+      "已存在"这件事，**不得**在别处重算。
+
+    - **幂等命中**（`P7-4`）→ `written_ids=()` + `skipped_ids=(rec.recommendation_id,)`；
+    - **新增** → `written_ids=(rec.recommendation_id,)` + `skipped_ids=()`；
     - **版本链**：新增行取 `version = 既有 `(security_id, start_date)` 行数 + 1`，并写
       `recorded_seq = version`，使 `schema.store.as_of` 对该业务键可取到最新版本。
     - 追加式不可变 + 文件锁 + pydantic 校验由 `schema.store` 统一承担，本模块**不新增**
@@ -423,17 +457,33 @@ def persist_recommendation(root: str | Any, rec: Recommendation) -> int:
     ★ **诚实登记的残留**（`R-04`，**不称为"原子"**）：本函数"先读全量判键、再追加"是**两次**
       独立操作，`append_records` 的 `fcntl` 文件锁**只覆盖追加那一步**——并发写者仍可能
       在读写之间插入同键行（首版为单写者约定，`Ch9 §3.10 J6`；`scripts/compute.store`
-      的 `append_derived_value_ids` 采用同一形态，本处与之保持一致，未额外引入第二条锁）。
+      的 `append_derived_value_ids_detailed` 采用同一形态，本处与之保持一致，未额外引入第二条锁）。
     """
     from schema.store import read_records
 
     rows = read_records(root, "recommendations")
     key = _recommendation_idempotency_key(rec)
     if any(_row_idempotency_key(row) == key for row in rows):
-        return 0
+        return PersistOutcome(skipped_ids=(rec.recommendation_id,))
     version = sum(1 for row in rows if _row_recommendation_identity(row) == _recommendation_identity(rec)) + 1
     stamped = rec.model_copy(update={"version": version, "recorded_seq": version})
-    return append_records(root, "recommendations", [stamped])
+    if not append_records(root, "recommendations", [stamped]):
+        # 未写进任何行，且**不是**幂等命中（键此前不存在）→ 两个集合都为空，
+        # **不得**把它记成"已存在故未写入"（那会是一句谎话）。调用方见 `written=[] skipped=[]`
+        # 应如实判"本步未完成"。
+        return PersistOutcome()
+    return PersistOutcome(written_ids=(rec.recommendation_id,))
+
+
+def persist_recommendation(root: str | Any, rec: Recommendation) -> int:
+    """把建议落 `facts/recommendations.jsonl`（**复用** `schema.store.append_records`）。
+
+    返回**实际写入行数**（新增 → `1`；**幂等命中 → `0`**）。
+
+    本函数是 `persist_recommendation_detailed` 的**只取写入侧的计数视图**（既有契约不变：
+    调用方只关心"写了几行"）。幂等判定**不在这里重复实现**，见后者的 docstring。
+    """
+    return len(persist_recommendation_detailed(root, rec).written_ids)
 
 
 def compare_and_decide(
