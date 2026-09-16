@@ -93,6 +93,18 @@ class StepOutcome:
     judgment_change: dict[str, bool] = field(default_factory=dict)
     signals_emitted: int = 0
     degraded: bool = False
+    # ★ 批次 7 · 集成 `I-1`（张力 `T-08` 的 **A 方案**）新增：
+    #   处理器**已注册**、但其**模型侧 / 上游组件**尚未实现（属阶段②③）时，
+    #   用它**显式声明本步未完成**；编排器据此把该步记为 `STATUS_GAP`（**不是** `ok`）。
+    #
+    #   为什么必须新增这个字段：`StepOutcome` 原先**没有**任何"本步未完成"的表达力 ——
+    #   `run_daily` 对**所有**返回的 outcome 一律记 `STATUS_OK`。于是"注册了一个什么都不做的
+    #   处理器"只能靠 `assert_steps_complete` 的"报 ok 但 produced 为空（空执行）"兜住，
+    #   而那是一条**语义错误**的记录（本步并没有 ok）。A 方案要求"模型侧缺口**显式**标 gap、
+    #   **不静默**"，故必须让处理器自己能说"我没做完，原因是 X"。
+    #
+    #   缺省 `None` = 本步自认完成（既有行为不变，向后兼容）。
+    incomplete_reason: str | None = None
 
 
 # ───────────────────────── 注册表（1–6 步实现 + 7/8 步 hook 预留） ─────────────────────────
@@ -109,18 +121,25 @@ class Pipeline:
         self._register_default_steps()
 
     def _register_default_steps(self) -> None:
-        """**默认注册**首版已实现的步进处理器（`rules/pipeline.yaml::steps[1]`）。
+        """**默认注册**首版已实现的步进处理器（`rules/pipeline.yaml::steps[1..6]`）。
 
         ★ 为什么必须**默认注册**（不要求调用方额外注册）：`rules/pipeline.yaml`（0444 锁定的
-          设计真相源）声明 step 1 = `ingest_public_information` 首版已实现、`blocking: true`、
-          **无 hook**。若靠调用方自觉注册，"编排器能真干活"就不成立（`G-13` 的症结）。
-        ★ 本批次只接 **step 1**（采集入口）。step 2–6 的实现体（核验/传导/估值/决策）属阶段②③，
-          即张力 `T-08`（已上报需求方）；故此处**不注册** 2–6 → 它们仍显式记 `gap` + 置 `blocked`，
-          **不得静默跳过**（`rules/pipeline.yaml::completeness.on_missing: blocked`）。
+          设计真相源）声明 step 1–6 `implemented_in_first_version: true`、`blocking: true`。
+          若靠调用方自觉注册，"编排器能真干活"就不成立（`G-13` 的症结）。
+
+        ★ **批次 7 · 集成 `I-1`（张力 `T-08` 的 A 方案）**：`rules/pipeline.yaml` 声明 step 1–6
+          首版已实现，而 step 2–6 的**模型侧**组件（核验七步 / 关系抽取 / 增长护城河判断）按
+          施工图属阶段②③。A 方案的裁决是：**注册 1–6，算术 / 图 / 决策部分接真实实现，
+          模型侧缺口由处理器显式声明（`StepOutcome.incomplete_reason`）→ 记 `gap` + 置 `blocked`，
+          绝不静默、绝不伪造产物**。注册动作本身不再是免责理由。
+
+          模块归属与设计锚点见 `scripts/orchestrate/chain_steps.py` 的模块 docstring。
         """
+        from scripts.orchestrate.chain_steps import register_chain_steps
         from scripts.orchestrate.ingest_step import ingest_public_information
 
         self.register_step(1, ingest_public_information)
+        register_chain_steps(self)
 
     def _load_config(self) -> dict[str, Any]:
         from config.rules import load_yaml
@@ -175,9 +194,24 @@ class Pipeline:
                 if cfg.get("blocking"):
                     result.blocked = True
                 continue
+            # ★ `incomplete_reason` 非空 = 处理器已注册但**模型侧 / 上游组件未实现**（阶段②③）。
+            #   记 `STATUS_GAP`（**不是** `ok`）并把原因写进 `gap` 与 `result.gaps`。
+            #   若记成 `ok` + 空 `produced`，`assert_steps_complete` 虽仍会拦住（"空执行"），
+            #   但那是**语义错误**的记录 —— 本步并没有 ok。此处据实记 `gap`。
+            status = STATUS_GAP if outcome.incomplete_reason else STATUS_OK
             result.steps.append(
-                StepResult(no, name, STATUS_OK, produced=list(outcome.produced))
+                StepResult(
+                    no,
+                    name,
+                    status,
+                    produced=list(outcome.produced),
+                    gap=outcome.incomplete_reason,
+                )
             )
+            if outcome.incomplete_reason:
+                result.gaps.append(f"step {no} ({name}): {outcome.incomplete_reason}")
+                if cfg.get("blocking"):
+                    result.blocked = True
             for k, v in (outcome.judgment_change or {}).items():
                 result.judgment_change[k] = bool(v) or result.judgment_change.get(k, False)
             result.signals_emitted += int(outcome.signals_emitted or 0)

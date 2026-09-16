@@ -110,7 +110,7 @@ BATCHES: Mapping[str, Batch] = {
         _pytest("tests/conflict"), 30.0, _exit_zero,
     ),
     "guards": Batch(
-        "guards", "tests/guards/（20 守卫 × 退出码契约 + 验证规范）",
+        "guards", "tests/guards/（23 门禁 × 退出码契约 + 验证规范）",
         _pytest("tests/guards"), 60.0, _exit_zero,
     ),
     "injection": Batch(
