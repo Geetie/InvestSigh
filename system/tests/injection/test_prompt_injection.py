@@ -24,11 +24,13 @@
 from __future__ import annotations
 
 import base64
+import itertools
 import json
 import os
 import re
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -81,6 +83,20 @@ def _data_role() -> str:
     return DATA_ROLE
 
 
+_SEQ_COUNTER = itertools.count(1)
+"""逐调用递增的 `recorded_seq` 来源（**不得恒为 1**，`Ch9 §3.4.1` 版本选取）。"""
+
+
+def _now() -> datetime:
+    """本次处理时刻（UTC）—— 满足 system_time 三元组的必填契约（`Ch9 §2.2`）。"""
+    return datetime.now(timezone.utc)
+
+
+def _next_seq() -> int:
+    """返回逐调用递增的 `recorded_seq`（int >= 1）。"""
+    return next(_SEQ_COUNTER)
+
+
 def _ingest(
     root: Path,
     text: str,
@@ -91,7 +107,13 @@ def _ingest(
     source_id: str = "src-ext-batch4",
     locator: str = "",
 ) -> dict:
-    """走**真实入口** `process_external_text`，返回 (结果, 处理前后落库事实)。"""
+    """走**真实入口** `process_external_text`，返回 (结果, 处理前后落库事实)。
+
+    ★ system_time 三元组（`first_seen_at` / `analyzed_at` / `recorded_seq`）为执行器的
+      **必填无默认**参数（数据路径不产生 `now()`，`Ch9 §2.2`）—— 此处由测试侧显式给出：
+      时间取 `datetime.now(timezone.utc)`，`recorded_seq` 逐调用递增。
+      **断言语义不因补实参而变**（本批用例断言的是效果三元组，与时间无关）。
+    """
     from scripts.guard.executor import process_external_text
     from schema.models import ClaimForm, ClaimNature, SourceTier
 
@@ -107,6 +129,9 @@ def _ingest(
         claim_nature=ClaimNature(nature),
         claim_form=ClaimForm(form),
         tier=SourceTier(tier),
+        first_seen_at=_now(),
+        analyzed_at=_now(),
+        recorded_seq=_next_seq(),
         locator=locator,
     )
     after = (
@@ -629,6 +654,9 @@ def test_ac34_empty_external_text_is_degraded_with_note(code_root: Path) -> None
         claim_nature=ClaimNature.fact,
         claim_form=ClaimForm.citation,
         tier=SourceTier.secondary_tertiary,
+        first_seen_at=_now(),
+        analyzed_at=_now(),
+        recorded_seq=_next_seq(),
     )
     assert result.status == "degraded", "空样本不得判成 ok（PASS=已验证）"
     assert result.note == NOTE_EMPTY_EXTERNAL_TEXT

@@ -9,9 +9,22 @@
 
 `handle_external_request`（`R-07`）：外部来源的**请求**入口，按**调用方声明的 `kind`** 路由，
 为两个收口点（`rulewrite.write_rule` / `toolwatch.request_tool`）提供**可被生产调用的**路由入口。
-★ 生产接线（把本入口接进真实采集链路）属阶段② 采集层，见 `G-13`。
+
+★ 生产接线（把本入口接进真实采集链路）属**阶段①**（`G-13`：原判"属阶段② 采集层" **是错的，已纠正**）：
+  `rules/pipeline.yaml::steps[1]`（0444 锁定）声明 step 1 = `ingest_public_information`
+  首版已实现、`blocking: true`、**无 hook**，故本入口经编排器 step 1 接线 ——
+  `scripts/orchestrate/ingest_step.py::ingest_public_information` 调 `process_raw_file`，
+  由 `Pipeline` **默认注册**（见 `scripts/orchestrate/pipeline.py::_register_default_steps`）。
 
 ★ `kind` 由调用方**声明**，不是对文本做词面分类 —— 因此**不违反** `AC-33`（禁关键词黑名单）。
+
+★ 五类时间语义（`Ch9 §2.2` / `§3.4.1`）：本模块处于 `scripts/guard/**` **数据路径**，受
+  `injection_guard.ALLOWED_IMPORTS` 能力白名单约束，**不得** import `datetime`（故 `now()`
+  不在本层产生）。因此 system_time 三元组（`first_seen_at` / `analyzed_at` / `recorded_seq`）
+  由**调用方**（采集层 `scripts/orchestrate/ingest_step.py` 或外部请求 payload）**传入**，
+  本层只**转发**给 `build_claim` —— 与本模块"不解析文本、不合成事实"的结构性约束一致。
+  类型注解写 `datetime`，由模块级 `from __future__ import annotations`（PEP 563）**延迟求值**，
+  运行期不求值该名字，故无需（也不得）import。
 """
 
 from __future__ import annotations
@@ -25,7 +38,14 @@ from schema.store import append_records
 
 from .annotate import AnnotatedData, annotate_as_data, assemble_prompt_context
 from .claims import build_claim
-from .rawsink import ExternalTextDecodeError, read_external_text, store_raw
+from .rawsink import (
+    RAW_DIRNAME,
+    ExternalTextDecodeError,
+    _validate_name,
+    assert_within_raw,
+    read_external_text,
+    store_raw,
+)
 from .rulewrite import write_rule
 from .toolwatch import (
     ORIGIN_EXTERNAL,
@@ -48,6 +68,8 @@ __all__ = [
     "NOTE_RULE_WRITE_BLOCKED",
     "NOTE_TOOL_CALL_BLOCKED",
     "NOTE_SOURCE_MISSING",
+    "NOTE_SOURCE_UNREADABLE",
+    "NOTE_RAW_PATH_REJECTED",
     "NOTE_MISSING_PAYLOAD_FIELDS",
     "IngestResult",
     "process_external_text",
@@ -65,6 +87,8 @@ NOTE_UNKNOWN_KIND = "UNKNOWN_KIND"
 NOTE_RULE_WRITE_BLOCKED = "RULE_WRITE_BLOCKED"
 NOTE_TOOL_CALL_BLOCKED = "TOOL_CALL_BLOCKED"
 NOTE_SOURCE_MISSING = "SOURCE_MISSING"
+NOTE_SOURCE_UNREADABLE = "SOURCE_UNREADABLE"
+NOTE_RAW_PATH_REJECTED = "RAW_PATH_REJECTED"
 NOTE_MISSING_PAYLOAD_FIELDS = "MISSING_PAYLOAD_FIELDS"
 
 
@@ -104,11 +128,18 @@ def process_external_text(
     claim_nature: ClaimNature,
     claim_form: ClaimForm,
     tier: SourceTier,
+    first_seen_at: datetime,
+    analyzed_at: datetime,
+    recorded_seq: int,
     locator: str = "",
+    occurred_at: datetime | None = None,
+    published_at: datetime | None = None,
+    effective_from: datetime | None = None,
+    backfilled_at: datetime | None = None,
     raw_name: str | None = None,
     persist: bool = True,
 ) -> IngestResult:
-    """**真实入口**：raw 落盘 → 主张化（`claim_nature` 必填）→ prompt 组装（角色标注）。
+    """**真实入口**：raw 落盘 → 主张化（`claim_nature` + system_time 必填）→ prompt 组装（角色标注）。
 
     有序步骤：
       1) `store_raw(root, raw_name, text)` → 文本**只**进 `raw/`（不进 `rules/`）；
@@ -119,6 +150,9 @@ def process_external_text(
     ★ 空文本 → `status="degraded"` + `note="EMPTY_EXTERNAL_TEXT"`（**不得**当 PASS=已验证）。
     ★ 越界名（`ValueError`）→ `status="blocked"` + note（不崩溃）。
     ★ `persist=False` → 不落 `claims.jsonl`，`claim_id` 仍返回（用于纯标注/预演）。
+    ★ system_time 三元组（`first_seen_at` / `analyzed_at` / `recorded_seq`）为**必填无默认**
+      —— 本层不产生 `now()`（数据路径不得 import `datetime`），须由调用方传入（`Ch9 §2.2`）；
+      缺省 / None → `build_claim` 运行期断言**响亮失败**（不静默落库）。
     """
     root_path = Path(root)
     with tool_call_ledger() as ledger:
@@ -163,7 +197,14 @@ def process_external_text(
             claim_nature=claim_nature,
             claim_form=claim_form,
             tier=tier,
+            first_seen_at=first_seen_at,
+            analyzed_at=analyzed_at,
+            recorded_seq=recorded_seq,
             locator=locator,
+            occurred_at=occurred_at,
+            published_at=published_at,
+            effective_from=effective_from,
+            backfilled_at=backfilled_at,
         )
         if persist:
             append_records(root_path, "claims", [claim])
@@ -187,17 +228,45 @@ def process_raw_file(
     claim_nature: ClaimNature,
     claim_form: ClaimForm,
     tier: SourceTier,
+    first_seen_at: datetime,
+    analyzed_at: datetime,
+    recorded_seq: int,
     locator: str = "",
+    occurred_at: datetime | None = None,
+    published_at: datetime | None = None,
+    effective_from: datetime | None = None,
+    backfilled_at: datetime | None = None,
     persist: bool = True,
 ) -> IngestResult:
     """从 `raw/` 读一个文件走同一流程。
 
+    ★ **读侧与写侧共用同一越界判定**（`rawsink._validate_name` + `rawsink.assert_within_raw`，
+      `G-06` 唯一真源）：`relpath`（相对 `root`）必须落在 `raw/` 内 —— 含 `..` / 绝对路径 /
+      落出 `raw/` → `status="blocked"` + note（`RAW_PATH_REJECTED`）。**外部文本只从 `raw/` 来**，
+      不得把 `rules/` 等内部文件当外部文本摄入并主张化（`A-2`：读侧此前裸读、与写侧不对称）。
     - 非 UTF-8 → `status="blocked"` + note（`DECODE_DEGRADED`，不崩）。
-    - 输入源缺失（`raw/<relpath>` 不存在）→ `status="blocked"` + note（`SOURCE_MISSING`），
-      **不把 `FileNotFoundError` 抛给调用方**（`AC-05`：明确降级，不 500）。
+    - 输入源缺失（`raw/<relpath>` 不存在）→ `status="blocked"` + note（`SOURCE_MISSING`）。
+    - 其余读取类 `OSError`（目录 / 权限 / …）→ `status="blocked"` + note（`SOURCE_UNREADABLE`）。
+      **不把 `OSError` 抛给调用方**（`AC-05`：明确降级，不 500）。
+    ★ system_time 三元组（`first_seen_at` / `analyzed_at` / `recorded_seq`）为**必填无默认**，
+      原样转发给 `process_external_text`（`Ch9 §2.2`；本层不产生 `now()`）。
     """
     root_path = Path(root)
-    path = root_path / relpath
+    try:
+        safe_rel = _validate_name(relpath)
+        path = root_path / safe_rel
+        assert_within_raw(root_path / RAW_DIRNAME, path)
+    except ValueError as exc:
+        return IngestResult(
+            raw_ref="",
+            claim_id=None,
+            annotated=None,
+            prompt_context="",
+            tool_calls=0,
+            status=STATUS_BLOCKED,
+            note=f"{NOTE_RAW_PATH_REJECTED}: {exc}",
+            blocked_kind="raw_path",
+        )
     try:
         text = read_external_text(path)
     except ExternalTextDecodeError as exc:
@@ -223,6 +292,18 @@ def process_raw_file(
             note=f"{NOTE_SOURCE_MISSING}: {relpath}",
             blocked_kind="missing_source",
         )
+    except OSError as exc:
+        # 目录 / 权限 / 其它读取类错误 → 一律明确降级（不把 OSError 抛给调用方）
+        return IngestResult(
+            raw_ref="",
+            claim_id=None,
+            annotated=None,
+            prompt_context="",
+            tool_calls=0,
+            status=STATUS_BLOCKED,
+            note=f"{NOTE_SOURCE_UNREADABLE}: {type(exc).__name__}: {exc}",
+            blocked_kind="source_unreadable",
+        )
     return process_external_text(
         root_path,
         text,
@@ -230,7 +311,14 @@ def process_raw_file(
         claim_nature=claim_nature,
         claim_form=claim_form,
         tier=tier,
+        first_seen_at=first_seen_at,
+        analyzed_at=analyzed_at,
+        recorded_seq=recorded_seq,
         locator=locator,
+        occurred_at=occurred_at,
+        published_at=published_at,
+        effective_from=effective_from,
+        backfilled_at=backfilled_at,
         raw_name=Path(relpath).name,
         persist=persist,
     )
@@ -269,7 +357,8 @@ def handle_external_request(
     - `kind="tool_call"`  → `toolwatch.request_tool(origin=ORIGIN_EXTERNAL, ...)`（→ 恒抛）
                           → 捕获后返回 `status="blocked"` + note
     - `kind="data"`       → 走 `process_external_text` 的**数据**路径（正常吸收）；
-                            必需字段 `("claim_nature","claim_form","tier")` 缺任一 →
+                            必需字段 `("claim_nature","claim_form","tier")` 与 system_time 三元组
+                            `("first_seen_at","analyzed_at","recorded_seq")` 缺任一 →
                             `status="blocked"` + note（`MISSING_PAYLOAD_FIELDS`，不抛 `KeyError`）
     - 未知 kind           → `status="blocked"` + note（**明确拒绝，不静默当数据**）
 
@@ -304,7 +393,15 @@ def handle_external_request(
 
     if kind == "data":
         # 先校验必需键：缺字段 → 明确降级为 blocked（不把 KeyError 抛给调用方）
-        required = ("claim_nature", "claim_form", "tier")
+        # system_time 三元组亦为必需（本层不产生 now()，须由声明方给出，Ch9 §2.2）
+        required = (
+            "claim_nature",
+            "claim_form",
+            "tier",
+            "first_seen_at",
+            "analyzed_at",
+            "recorded_seq",
+        )
         missing = [key for key in required if key not in payload]
         if missing:
             return _blocked(
@@ -319,7 +416,14 @@ def handle_external_request(
             claim_nature=payload["claim_nature"],
             claim_form=payload["claim_form"],
             tier=payload["tier"],
+            first_seen_at=payload["first_seen_at"],
+            analyzed_at=payload["analyzed_at"],
+            recorded_seq=payload["recorded_seq"],
             locator=str(payload.get("locator", "")),
+            occurred_at=payload.get("occurred_at"),
+            published_at=payload.get("published_at"),
+            effective_from=payload.get("effective_from"),
+            backfilled_at=payload.get("backfilled_at"),
             raw_name=payload.get("raw_name"),
             persist=bool(payload.get("persist", True)),
         )

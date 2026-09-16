@@ -451,9 +451,10 @@ def test_placeholder_mention_in_shell_comment_passes(code_root: Path) -> None:
 # 工程师已把 B/C 加固为「结构化 + 对不可判定形式 fail-closed」。
 #
 # 下面的探针把这一加固钉死：① 4 条**必须被拦**（曾可绕过）；② 1 条**反向对照必须放行**
-# （证明 fail-closed 没退化成"见 append_records 就杀"）；③ 2 条**已知静态局限必须放行**
-# —— 它们**记录事实**而非把缺口说成不存在：将来若有人把静态判据做全了，这两条会红，
-# 逼其**显式**更新预期。
+# （证明 fail-closed 没退化成"见 append_records 就杀"）；③ 2 条**运行期计算的写入目标必须放行**
+# —— 能力白名单（`ALLOWED_IMPORTS` / `ALLOWED_DUNDERS`）**不覆盖**运行期计算的写入目标：
+# 属 `R-06` 意义上的「**超出静止判据能力、且不以静止判据承担保证**」；完整保证由运行时效果断言承担。
+# 它们**记录事实**而非把缺口说成不存在：将来若有人把静态判据做全了，这两条会红，逼其**显式**更新预期。
 #
 # ★ 断言一律取**退出码**，不取守卫输出里的说明文字（措辞可改，行为不可改）——
 #   故**不传 `rule_hint`**：`injection_guard` 的说明文字可能被并发地做"仅措辞"改动。
@@ -552,12 +553,13 @@ def test_injection_guard_allows_literal_non_recommendation_stem(code_root: Path)
 
 
 def test_injection_guard_known_static_limit_constant_in_receiver(code_root: Path) -> None:
-    """★ **已知静态局限**：常量拼接落在**接收者**位置 → 当前 exit 0（放行）。
+    """★ **运行期计算的写入目标**：常量拼接落在**接收者**位置 → 当前 exit 0（放行）。
 
     `(root / 'facts' / ('recommend' + 'ations.jsonl')).write_text('x')`：
-    目标名由**运行期** `str.__add__` 计算得到，静态上不可判定 —— 属**原理上**的局限，
-    不是缺陷。
+    目标名由**运行期** `str.__add__` 计算得到，静态上不可判定。
 
+    **准确表述**：能力白名单（`ALLOWED_IMPORTS` / `ALLOWED_DUNDERS`）**不覆盖**运行期计算的
+    写入目标 —— 属 `R-06` 意义上的「**超出静止判据能力、且不以静止判据承担保证**」。
     **完整保证由运行时效果断言承担**：处理外部文本前后 `facts/recommendations.jsonl`
     的**行数不变**（见 `tests/injection/test_prompt_injection.py` 的效果三元组 (b)）。
 
@@ -572,18 +574,20 @@ def test_injection_guard_known_static_limit_constant_in_receiver(code_root: Path
         "    (root / 'facts' / ('recommend' + 'ations.jsonl')).write_text('x')\n",
     )
     assert proc.returncode == 0, (
-        "接收者位置的常量拼接**已**被静态判据覆盖 —— 请显式更新本『已知静态局限』用例"
-        "（并同步 injection_guard.py 的 KNOWN_STATIC_LIMIT note）\n"
+        "接收者位置的常量拼接**已**被静态判据覆盖 —— 请显式更新本用例的预期"
+        "（此形态属运行期计算的写入目标，能力白名单不覆盖它）\n"
         f"{proc.stdout}\n{proc.stderr}"
     )
 
 
 def test_injection_guard_known_static_limit_fstring_open_target(code_root: Path) -> None:
-    """★ **已知静态局限**：写入目标名藏在**变量**里 → 当前 exit 0（放行）。
+    """★ **运行期计算的写入目标**：写入目标名藏在**变量**里 → 当前 exit 0（放行）。
 
     `open(f'{root}/facts/{stem}.jsonl', 'a')`：目标名由 f-string + 变量拼出，
-    静态不可判定 —— 属**原理上**的局限，不是缺陷。
+    静态不可判定。
 
+    **准确表述**：能力白名单（`ALLOWED_IMPORTS` / `ALLOWED_DUNDERS`）**不覆盖**运行期计算的
+    写入目标 —— 属 `R-06` 意义上的「**超出静止判据能力、且不以静止判据承担保证**」。
     **完整保证由运行时效果断言承担**（同上，效果三元组 (b) 的 `recommendations.jsonl`
     行数不变）。将来静态判据做全了，这条会红，逼其**显式**更新预期。
     """
@@ -595,6 +599,7 @@ def test_injection_guard_known_static_limit_fstring_open_target(code_root: Path)
         "        fh.write('x')\n",
     )
     assert proc.returncode == 0, (
-        "变量化的写入目标**已**被静态判据覆盖 —— 请显式更新本『已知静态局限』用例\n"
+        "变量化的写入目标**已**被静态判据覆盖 —— 请显式更新本用例的预期"
+        "（此形态属运行期计算的写入目标，能力白名单不覆盖它）\n"
         f"{proc.stdout}\n{proc.stderr}"
     )

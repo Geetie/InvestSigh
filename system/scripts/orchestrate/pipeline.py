@@ -106,6 +106,21 @@ class Pipeline:
         self._step_handlers: dict[int, StepHandler] = {}
         self._publish_hook: Callable[[RunResult], None] | None = None
         self._verify_hook: Callable[[RunResult], None] | None = None
+        self._register_default_steps()
+
+    def _register_default_steps(self) -> None:
+        """**默认注册**首版已实现的步进处理器（`rules/pipeline.yaml::steps[1]`）。
+
+        ★ 为什么必须**默认注册**（不要求调用方额外注册）：`rules/pipeline.yaml`（0444 锁定的
+          设计真相源）声明 step 1 = `ingest_public_information` 首版已实现、`blocking: true`、
+          **无 hook**。若靠调用方自觉注册，"编排器能真干活"就不成立（`G-13` 的症结）。
+        ★ 本批次只接 **step 1**（采集入口）。step 2–6 的实现体（核验/传导/估值/决策）属阶段②③，
+          即张力 `T-08`（已上报需求方）；故此处**不注册** 2–6 → 它们仍显式记 `gap` + 置 `blocked`，
+          **不得静默跳过**（`rules/pipeline.yaml::completeness.on_missing: blocked`）。
+        """
+        from scripts.orchestrate.ingest_step import ingest_public_information
+
+        self.register_step(1, ingest_public_information)
 
     def _load_config(self) -> dict[str, Any]:
         from config.rules import load_yaml
@@ -169,8 +184,8 @@ class Pipeline:
             result.degraded = result.degraded or bool(outcome.degraded)
 
         # ── G1-05（`Ch1 §F`）：8 步完整性 —— **在编排器里真的调用它** ──
-        # 第二轮独立审计指出：本函数此前**零调用**，而
-        # `rules/pipeline.yaml:68` 的 `guard:` 与 `skills/aichain-daily/SKILL.md`
+        # 阶段① 缺口登记 `D-14` 指出：本函数此前**零调用**，而
+        # `rules/pipeline.yaml::completeness.guard` 与 `skills/aichain-daily/SKILL.md`
         # 都把它写成"承载 G1-05 的守卫" → 声明存在、事实不存在（假接线）。
         # 现在它就在主流程里：步不全 → 记 gap + 置 blocked（不得报成功）。
         for viol in assert_steps_complete(result, self.hooks_registered()):

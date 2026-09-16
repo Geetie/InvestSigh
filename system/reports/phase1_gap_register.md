@@ -11,7 +11,7 @@
 | # | 缺口 | 设计锚点 | 严重度 | 状态 |
 |---|---|---|---|---|
 | **G-01** | **注入防护 10 用例全缺**：base64 藏指令 / 同形字 / 诱导 shell / 伪造分隔符 / 自称官方提权 / 忽略规则买入 / 换基准 / 删反证 / 改规则文件 / 藏表格图片字幕。全仓 `grep base64\|同形字\|homoglyph\|伪造分隔符\|官方提权\|诱导` **零命中** | `施工图 §3.4`（测试资产）· `Ch9 §3.2.1`「注入防护 = B 规则 + C 执行器」 | **高** | `DONE`（证据：`tests/injection/test_prompt_injection.py`（10 正向 AC-13~22 + 10 反向对照 AC-23~32 + AC-34 空样本）；`reports/verify_injection_latest.log` 批次 `injection` **98 passed / exit=0**） |
-| **G-02** | **数据/指令分离执行器未实现**：G-01 的被测对象。设计明确它是 C 档自建项（"规则 = 只读 Git 文件（模型不可写）" + "数据/指令分离执行器 + 测试"） | `Ch9 §3.2.1` 第 6 行 | **高** | ⚠️ **PARTIAL（独立审计否决了 `DONE`）**：**实现已完成且经独立验证**（`scripts/guard/` 7 模块 + `injection_guard` 第 19 项门禁 + `handle_external_request` 路由入口；我逐条复现过四处反事实），**但从未被任何非测试代码调用** —— 真实仓库 `facts/claims.jsonl` = **0 行**、`raw/` 仅 `.gitkeep`，`grep process_external_text\|guard.executor` 在 `tests/` 之外 **0 命中**。按 `§一 底线 2` 属 **Wiring Failure**（能通过 100% 覆盖率测试、主流程从不触发）。生产接线属**阶段② 采集层** → 追踪项 **G-13**。审计报告：`reports/batch4_independent_audit.md` |
+| **G-02** | **数据/指令分离执行器未实现**：G-01 的被测对象。设计明确它是 C 档自建项（"规则 = 只读 Git 文件（模型不可写）" + "数据/指令分离执行器 + 测试"） | `Ch9 §3.2.1` 第 6 行 | **高** | ⚠️ **PARTIAL（独立审计否决了 `DONE`）**：**实现已完成且经独立验证**（`scripts/guard/` 7 模块 + `injection_guard` 第 19 项门禁 + `handle_external_request` 路由入口；我逐条复现过四处反事实），**但从未被任何非测试代码调用** —— 真实仓库 `facts/claims.jsonl` = **0 行**、`raw/` 仅 `.gitkeep`，`grep process_external_text\|guard.executor` 在 `tests/` 之外 **0 命中**。按 `§一 底线 2` 属 **Wiring Failure**（能通过 100% 覆盖率测试、主流程从不触发）。★ 生产接线**不属阶段②**（原判已被推翻，见 `G-13` 的判据纠正）→ 追踪项 **G-13**。审计报告：`reports/batch4_independent_audit.md` · 第二轮 `…_round2.md` |
 | **G-03** | **`facts/` 13/18 个 JSONL 无消费方**：仅 `industry_nodes.jsonl` 有 44 行（且**有写无读**，`§6.2 Empty Execution`）；其余 12 个业务代码零引用、且为空文件 | `Ch9 §3.3.3` / `§十三 第 2 问` | **高**（阶段① 固有） | `PARTIAL`：消费方按设计在 ②–⑤ 阶段随各层交付而产生；**不得据此判"已验证"** |
 | **G-04** | **7 条声明为 `automated` 的通过判据未实现**（本实现已用 `criterion()` 在函数体内**显式绑定**，并在报告里逐条列出）：<br>`nvidia_sample`: `chapter4_g_depth` · `evidence_locatable`<br>`core_chain`: `t01_t14_all_pass` · `graph_and_ask_traceable`<br>`daily_run`: `coverage_verifiable`<br>`expansion`: `research_standard_consistent` · `investment_result_verifiable` | `registry/delivery.yaml` 各阶段 `pass_criteria_testable` | **高** | `OPEN`（阶段②–⑤ 前置；**前置齐备时会直接阻断该阶段**） |
 | **G-05** | **`scripts/{compute,decision,graph,validators}/` 是空包**：施工图把它们列为 ②③ 阶段 C 档承重块（确定性计算 / 三维决策函数 / T12 传播 / `locator_check`） | `施工图 §3.2` | 中（②③ 前置） | `OPEN` |
@@ -78,10 +78,37 @@
 |---|---|---|
 | **D-4（高，且是主理人自己引入的回归）** | `no_placeholder_guard` 的 `FAKE_DATA` / `DEMO_TALK` / `HARDCODED_FALLBACK` **永不命中** —— 早先为消除 docstring 误报把**所有**字符串抹白，等于把探测器一起抹掉（`§一 底线 1` 第一类假交付） | ✅ **已修**（根因有**两个**：抹白过度 + `HARDCODED_FALLBACK` 正则写坏）。改为**只抹白注释与 docstring**、保留普通字符串；新增 4 条回归测试；反向对照实测 **8 条占位全部命中**、docstring 里的 `TODO/占位/mock` **不误报** |
 | **D-1（高）** | 执行器一族**零生产调用方**（真实仓库 `facts/claims.jsonl` = 0 行、`raw/` 仅 `.gitkeep`）→ `§一 底线 2` Wiring Failure，`G-02` 不该 `DONE` | ✅ **已如实纠正**：`G-02` 改 `PARTIAL`；新增追踪项 **G-13**（含明确验收判据） |
-| D-2（中高） | `executor.py` 两条异常逃逸：`process_raw_file` 缺文件 → `FileNotFoundError` 抛给调用方；`handle_external_request(kind="data")` 缺字段 → `KeyError` | `OPEN` —— 待工程师收成 `blocked`（`AC-05` 因此判 FAIL） |
-| D-3（中） | `injection_guard` 的 B/C 断言可一次改写绕过：`getattr(os,"system")(cmd)` → exit 0；变量 / f-string / 路径拼接写 `recommendations` → exit 0 | `OPEN` —— 属 `D-9` 同类（断言不够结构化），待加固 |
-| D-5（中） | `AC-15` 特有断言**真空**：夹具上 `append_only_guard` 报 `staged_facts_files: 0` + note「无被检对象」，其 exit 0 与"追加式不可变未破"**无逻辑关系** | `OPEN` —— 待 QA 改为非真空证据（真 git 仓库路径） |
-| D-6 / D-7 / D-8（低-中） | `raw/` 同名不同内容**静默覆盖**（+ `kind="data"` 允许直传 `raw_name`）；`executor.py` docstring 强度 > 代码；执行器**无日志**（N-3 对执行器不成立） | `OPEN` —— 待工程师 |
+> **第二轮独立审计（换人 · 对抗性）修正了上表**：审计员**自造 24+ 条探针**重测，
+> 结论是 **D-5 / D-6 真闭合**，而 **D-2 / D-3 只闭合了被点名的那几例**（同族残口 + 4 个新绕过仍在），
+> **D-7 文字层反而被我自己的提交引入了新的错误陈述**（见下 A-6）。
+> 判定统计 **PASS 31 / FAIL 3（AC-01 · AC-03 · AC-05）**。报告：`reports/batch4_independent_audit_round2.md`
+
+| 第一轮发现 | 第二轮判定 | 依据 / 现状 |
+|---|---|---|
+| D-2 异常逃逸 | **PARTIAL** | 已拦：缺文件 → `blocked/SOURCE_MISSING`；payload 缺字段 → `blocked/MISSING_PAYLOAD_FIELDS`；`rule_write` 空 payload → `blocked`。**仍逃逸**：路径指向**目录** → `IsADirectoryError`；文件 0000 → `PermissionError`（应 `except OSError`）→ 下称 **A-1** |
+| D-3 B/C 绕过 | **PARTIAL** | 原 4 例全部 `exit 1` 且归因正确、4 条反向对照全 `exit 0` ✓。**但 4 个新绕过仍 `exit 0`**（`__builtins__['__import__']` / `builtins.exec` / `append_records` **别名** / `os.__dict__['system']`）→ 下称 **A-3** |
+| D-5 真空证据 | ✅ **CLOSED** | 审计自证四步：未改动夹具 `exit 0 + staged=0 + 真空 note`（**证明旧断言确为真空**）→ 注入后 `staged=1` 且无真空 note → 反事实改写既有行 `exit 1` → 反事实**删除整份 JSONL** `exit 1` |
+| D-6 静默覆盖 | ✅ **CLOSED** | `same.txt`(版本A) 保留 + `same.<hash>.txt`(版本B)；同内容幂等；前缀碰撞自动加长 8→16；写侧穿越 `ValueError`；经**真执行器**同样两份 |
+| D-7 docstring 强度 | **PARTIAL / 文字层 REGRESSED** | "不再是孤儿"已删 ✓、`KNOWN_STATIC_LIMIT` note 每轮可见 ✓。**但** `executor.py` 新写"生产接线属**阶段②** 采集层"，与本提交自己把 `G-13` 改成**阶段①** **直接相反** → **A-6**（我主理人的时序错误：先要求工程师写"阶段②"，后自己改判为阶段①） |
+| 措辞耦合 | ✅ 已解耦 | `rule_hint` 零残留；且审计**结构性证明**：`CheckReport.passed` 只由 violations 决定、退出码只由 `passed` 决定 ⇒ 改文字**原理上不可能**改退出码 |
+
+### 第二轮新增发现（`A-1`~`A-13`）—— 逐条登记，未闭合者保持 OPEN
+
+| # | 严重度 | 内容 | 状态 |
+|---|---|---|---|
+| **A-1** | 中 | `process_raw_file` 同类异常仍逃逸（`IsADirectoryError` / `PermissionError`）→ 应 `except OSError` | ✅ **已独立复现**（我实测目录路径 → `IsADirectoryError`）；待修 |
+| **A-2** | **中（安全）** | **读侧路径穿越未校验**：`process_raw_file(root, "raw/../rules/scope.yaml")` → `status='ok'`，把 `rules/` 文件内容**写进 `raw/` 并主张化** → **反转了"外部文本只从 `raw/` 来"的前提**。写侧有 `_validate_name`、读侧没有 → **契约不对称**（应复用同一校验，`G-06` 唯一真源） | ✅ **已独立复现**（我实测：`raw/scope.yaml` 生成 + `claim_id` 非空；写侧 `ValueError`）；待修 |
+| **A-3** | 中 | 4 个新绕过（token 全字面量、静态可见）：`__builtins__['__import__']('subprocess')`、`import builtins; builtins.exec(...)`、`from schema.store import append_records as ar`（**别名一次改名**即绕过 C）、`os.__dict__['system']`。**不属于**已声明的 `KNOWN_STATIC_LIMIT`（该 note 只声明"**计算得到的路径**不可判定"）→ 属"**该拦没拦**"。修法成本低：`visit_Subscript` 查字面量 slice；别名预扫描；`Attribute.attr` 末段（`builtins.exec` 漏在末段匹配）；`eval/exec/compile` 的参数是**代码文本**，应用"包含"而非全等 | 待修 |
+| **A-4** | 中 | **D-2 / D-6 的修复零回归测试**（`SOURCE_MISSING` / `MISSING_PAYLOAD_FIELDS` / `DECODE_DEGRADED` / hash 兄弟在 tests 中命中数全为 **0**）→ 与本项目铁律"**没有机器绑定的规范等于不存在**"直接冲突（D-3/D-4 都配了测试，偏偏这两个没配） | 待补 |
+| **A-5** | 低中 | D-6 新增调用点会把 `ExternalTextDecodeError` 抛给调用方（hash 落点已存在且非法 UTF-8 时） | 待修 |
+| **A-6** | 低中 | 两处"阶段②"残留与 `G-13` 新判据**自相矛盾**（`scripts/guard/executor.py` 顶部 docstring；本文件 `§六` 旧句） | ✅ 本节已修正文；`executor.py` 待工程师改 |
+| **A-7** | 低中 | 本登记表未随修复更新（D-2/D-3/D-5/D-6/D-7 五行仍写 `OPEN`；旧句仍称"另开 4 条 OPEN"） | ✅ **本节已修**（改为第二轮判定） |
+| **A-8** | 低中 | **`G-07` 规范在现行仓库上不成立**：`pre-commit.sh` 只跑 **8** 个守卫、`run_all_gates.py` 跑 **20** 个（13 个仅后者），且**无任何机器检查**核对两集合 | 待修（应加机器断言） |
+| **A-9** | 低 | `verification_policy_guard` 的 V-04 用**裸文本包含** `VAR=0` 判定 → 注释里的 `VAR=0` 也会通过（与 `G-04`"注释须抹白"教训反向）；当前是真 `export`，无假通过 | 待修 |
+| **A-10** | 低 | **`AC-05` 第 2 例判据枚举不符**：`rules/` 目录缺失实得 **`exit 1`**（10 条"真源不得删除"违例），而判据写 **`exit 2`** | ⚖️ **主理人裁定：以实测为准，改判据为 `exit 1`**（真源缺失是**内容违例**，不是输入异常；`exit 2` 保留给"参数/路径不存在"类） |
+| **A-11** | 低 | `CONVENTIONS.md §V-02` 表陈旧（写"19 项门禁"实为 20；实测耗时列与审计实测不符） | ✅ **已修** |
+| **A-12** | 低 | `V-01` 规范文字与"正确用法 `--batch all`"的措辞张力（实质风险已由"无 `--batch` 即 exit 2 + 无裸 `tests` 批次"消除） | ✅ **已修**（补一句说明 `all` 也是逐批独立超时且超时即停） |
+| **A-13** | nit | `scripts/orchestrate/pipeline.py` 注释把 `D-14` 误述为"第二轮独立审计指出"，而该文件自 `8b41c94` 起从未改动 | 待修 |
 
 ### ★ 审计员最重要的**概念**判断（我认同，且必须记下来）
 
@@ -100,5 +127,7 @@
 
 **批次 4 不宣告完成。** `G-01`（10 用例）**DONE**；`G-02` 仅 **PARTIAL** ——
 执行器实现与验证都是真的，但**从未被非测试代码调用**，属 `§一 底线 2` 的 Wiring Failure，
-其生产接线（`G-13`）属**阶段② 采集层**，阶段① 内不越阶实现（纪律 12）。
+其生产接线（`G-13`）**不属阶段②** —— `rules/pipeline.yaml`（0444 锁定声明）要求 **step 1–6 首版已实现**，
+故这是**阶段① 编排缺陷 + 声明脱节**（原判"阶段② 采集层"已由主理人推翻，见 `G-13` 行与张力 `T-08`）。
+`AC-01` / `AC-03` 因此**保持 FAIL**，在 `T-08` 裁定与接线完成前**不得标完成**。
 独立审计另开 4 条 `OPEN`（`AC-05` 异常逃逸 / `injection_guard` B·C 可绕过 / `AC-15` 证据真空 / `raw/` 静默覆盖）。
