@@ -1140,6 +1140,8 @@ $ git grep -nE 'RULE_KEY_TAGS|REQUIRED_RULE_KEYS|_rule_binding_violations|SCENAR
 
 ### §12.4 13-A 面：`R8-1` / `R8-2` 两项 **⛔ 无被检对象**（`G-03`：不计为已验证）
 
+> ★★ **本节已被后续推翻，以 §13/§14 为准**：本节的时点是 `main = c591082`（13-A 零领先提交）。**此后** 13-A 进入 `git stash pop` 冲突期、工作面出现 ⇒ **§13 起 13-A 面已有被测对象**（工作区态）。保留本节作**时点证据**（说明"当时为什么不能算已核"），**不要**把这里的"无被检对象"当成当前状态。
+
 ```
 $ git -C .worktrees/ws-ch2-rules log --oneline main..ws/ch4-valuelayer
 (空)      ⇒ ws/ch4-valuelayer = bb8991a = **main 的祖先**，**零领先提交**（13-A 未提交任何东西）
