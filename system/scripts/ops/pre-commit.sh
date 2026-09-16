@@ -9,6 +9,17 @@
 #   不装钩子，追加式不可变就只是一句口号（= 假交付第 2 类：接线失败）。
 #
 # ★ 一律 `exit 非零`，禁 warn-only（纪律 2）。
+#
+# ★★ **退出码契约**（`CONVENTIONS.md G-01`：`0` 放行 / `1` **违规** / `2` **输入错误**）：
+#   本文件里凡"**无法确定被检对象/无法进入被检树**"的前置失败一律 `exit 2` ——
+#   它们不是"你改坏了"，而是"**判据与对象不同源**"（缺 `G-61`）。
+#   卡 13-O 已把 `run_gate` 的"门禁脚本不在被检树"改成 `2`；本卡（`#96`）补齐
+#   **根解析**这一族（三处），使**同一次提交里的输入错误只有一个码**。
+#   ★ 调用点已枚举（`#96`）：① `.git/hooks/pre-commit` 薄壳（`exec sh`；git 只区分"零/非零"，
+#     **不解释 1 与 2 的区别**）② 人工 `sh system/scripts/ops/pre-commit.sh`
+#     ③ `tests/guards/*` 两条测试 ④ `install_hooks.sh --check`（只读内容、不看退出码）。
+#   ⇒ 无任何调用方依赖"非零即违规"这一具体码值，本改动**不改变任何调用方的行为**；
+#     新增的读者是**人**（诊断）与**测试**（契约）。
 
 set -u
 
@@ -25,20 +36,28 @@ REPO_ROOT="$(
   unset GIT_DIR GIT_WORK_TREE GIT_PREFIX
   git rev-parse --show-toplevel 2>/dev/null
 )" || {
-  echo "pre-commit: 无法定位仓库根（git rev-parse 失败）" >&2
-  exit 1
+  echo "pre-commit [INPUT-ERROR] 无法定位仓库根（git rev-parse --show-toplevel 失败）" >&2
+  echo "  ★ 这是**输入错误**（exit=2），**不是**违规：根不明 ⇒ 无从确定判据作用的对象。" >&2
+  echo "  ★ 处置：在**某棵工作树内**执行（cwd 须能做仓库发现），或检查 .git 可读。" >&2
+  exit 2
 }
 if [ -z "$REPO_ROOT" ]; then
-  echo "pre-commit: 仓库根解析为空 —— 拒绝在根不明的情况下跑门禁" >&2
-  exit 1
+  echo "pre-commit [INPUT-ERROR] 仓库根解析为空 —— 拒绝在根不明的情况下跑门禁" >&2
+  echo "  ★ 这是**输入错误**（exit=2），**不是**违规（cwd=${PWD}）。" >&2
+  echo "  ★ 处置：本文件预期由仓库内的 git 钩子或手工 'sh system/scripts/ops/pre-commit.sh' 调用。" >&2
+  exit 2
 fi
 cd "$REPO_ROOT" || exit 1
 
 # ★ 自检：根算错时**响亮失败**，不要让它退化成"所有门都扫不到对象而通过"。
 #   这正是本项目反复对抗的形态：**没有可检对象 ≠ 已验证**（`G-03`）。
+#   ★ 分类（`G-01`）：这是"**根解析可疑 ⇒ 没有可检对象**"，属**输入错误**（`exit 2`），
+#     不是代码违规 —— 与 `run_gate` 的"门禁脚本不在被检树"同族（`#96`）。
 if [ ! -d "$REPO_ROOT/system/scripts" ]; then
-  echo "pre-commit: 根解析可疑 —— '${REPO_ROOT}/system/scripts' 不存在（cwd=${PWD}）" >&2
-  exit 1
+  echo "pre-commit [INPUT-ERROR] 根解析可疑 —— '${REPO_ROOT}/system/scripts' 不存在（cwd=${PWD}）" >&2
+  echo "  ★ 这是**输入错误**（exit=2），**不是**违规：没有可检对象（G-03），不是你的改动有问题。" >&2
+  echo "  ★ 处置：确认在**某棵工作树内**执行；若本文件被复制到别处，请从仓库内跑。" >&2
+  exit 2
 fi
 
 # 解析 Python：优先环境变量，其次隔离 venv，最后退回 python3
