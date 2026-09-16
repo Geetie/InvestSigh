@@ -282,6 +282,34 @@ RESULT: PASS（0 violations）   exit=0
 | `tests/injection/test_guards_reject.py tests/injection/test_guards_defensive.py` | **46 passed** in 222.16s |
 | `tests/injection/test_prompt_injection.py tests/injection/test_rules_lock.py tests/injection/test_time_contract.py` | **32 passed** in 137.21s |
 
+**定稿复核（报告最后提交后，在同一代码 commit `abbe7b3` 上逐条重跑，结果逐条一致）**：
+
+| 命令 | 首次记录 | 定稿复核 |
+|---|---|---|
+| `tests/daily/test_daily_run.py` | 13 passed / 42.70s | **13 passed** in 48.84s |
+| `tests/daily`（整目录） | 44 passed / 160.40s | **44 passed** in 152.71s |
+| `tests/injection/test_wiring_guards.py` | 17 passed / 69.95s | **17 passed** in 55.85s |
+| `tests/injection/test_criterion_effectiveness.py` | 23 passed / 98.99s | **23 passed** in 83.66s |
+| `tests/injection/test_stage_gate.py tests/injection/test_audit_regressions.py` | 24 passed / 121.74s | **24 passed** in 124.56s |
+| `tests/injection/test_idempotency_rows.py tests/injection/test_chain_steps_wiring.py tests/injection/test_append_only.py` | 28 passed / 81.30s | **28 passed** in 95.34s |
+| `tests/injection/test_guards_reject.py tests/injection/test_guards_defensive.py` | 46 passed / 222.16s | **46 passed** in 223.81s |
+| `tests/injection/test_prompt_injection.py tests/injection/test_rules_lock.py tests/injection/test_time_contract.py` | 32 passed / 137.21s | **32 passed** in 179.40s |
+
+（用例数逐条不变，只有耗时随宿主负载波动。）
+
+★ **跑法纠错（如实登记）**：定稿复核时，最后一组用 `$PY -m pytest <3 个文件>` 直接跑**被 SIGTERM（exit=137）掐死**，
+输出只剩 conftest 的警告横幅：宿主 `sitecustomize.py` 的 **Bash 沙箱开关关不掉**（在解释器层）⇒
+每个用例数百次 broker IPC ⇒ 在用例之间卡死且卡点漂移。**改用仓库自带脚本**：
+
+```
+$ sh system/scripts/ops/run_pytest.sh tests/injection/test_prompt_injection.py \
+    tests/injection/test_rules_lock.py tests/injection/test_time_contract.py -q
+32 passed in 179.40s (0:02:59)      exit=0
+```
+
+该脚本导出的 `CODEBUDDY_SAFE_DELETE_SANDBOX=0` / `CODEBUDDY_BROKERED_FS_HOOK_ENABLED=0` 是**跑 pytest 的正确入口**；
+前面几条用裸 `$PY -m pytest` 侥幸跑通，不代表那是最佳跑法。
+
 ★ **一次环境性假红，如实登记**：`test_stage_gate.py + test_audit_regressions.py` 的**第一次**运行
 报 `23 passed, 1 error`，错误是**夹具 setup** 里宿主的 safe-delete shim 失败：
 
@@ -300,6 +328,36 @@ $ $PY system/scripts/ops/run_all_gates.py --timeout 30
   非零计数                               1
   traceback.py                       exit=1        0.12s
 ```
+
+**定稿复核（在同一代码 commit `abbe7b3` 上重跑，`gate exit=1`，逐条一致）**：
+
+```
+$ $PY system/scripts/ops/run_all_gates.py --timeout 30
+  assert_gate_input.py               exit=0        0.39s
+  freeze_guard.py                    exit=0        0.72s
+  launch_guard.py                    exit=0        0.22s
+  module_denylist.py                 exit=0        1.90s
+  no_signal_day.py                   exit=0        0.19s
+  no_placeholder_guard.py            exit=0        3.32s
+  neutrality_check.py                exit=0        0.17s
+  return_guard.py                    exit=0        0.21s
+  anti_padding.py                    exit=0        0.75s
+  gap_to_task.py                     exit=0        0.31s
+  traceback.py                       exit=1        0.24s      ← 唯一非零
+  pipeline.py                        exit=0        0.25s
+  stage_gate.py --stage prep         exit=0        0.79s
+  injection_guard.py                 exit=0        0.97s
+  verification_policy_guard.py       exit=0        0.25s
+  shell_var_guard.py                 exit=0        0.28s
+  graph_integrity_guard.py           exit=0        1.15s
+  locator_check.py                   exit=0        1.28s
+  criterion_effectiveness_guard.py   exit=0        1.76s
+  非零计数                               1
+gate exit=1
+```
+
+★ 注意 `pipeline.py` 门禁本身 `exit=0`、`criterion_effectiveness_guard.py` `exit=0` —— 即
+**本单唯一改动的共享文件与判据有效性门禁都是绿的**。
 
 **这不是本单引入的**——用 `git stash` 把本单 7 个文件全部暂存后的**同一工作树基线**：
 
