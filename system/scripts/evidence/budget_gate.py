@@ -15,6 +15,7 @@
 | **检索** | `max_searches` | 检索次数上限 |
 
 - **取先到者** = 三类里**最先触限**的那一类决定停止点（`Ch6 §D.5`：`research_cap` 给上限，三者取先到者）。
+- ★ **`None` ≠ `0`**（G5）：`None` = **未设上限**（计算类未配置时走 `research_cap`）；`0` = **上限为 0**（不允许任何调用/检索）。二者**不得混同**，`0` 绝不静默当"无上限"（`00_开发Agent开工提示词 §6.1`）。
 - **`research_cap` 仅由经济重要性决定**，与 `tier` / `quality` **无关**（`Ch6 §B.2` 明文禁令）：
   本模块**调用** `scripts/decision/triage.py::research_cap`（**唯一** `BUDGET_MAP` 真源，`G-06`），**不复制**字典表。
 - 有效计算上限 = `min(配置的 max_model_calls, research_cap(claim))` —— 一手但低重要性也不深挖。
@@ -243,7 +244,17 @@ def _time_ratio(deadline: datetime | None, usage: BudgetUsage) -> float:
 
 
 def evaluate_budget(limits: BudgetLimits, usage: BudgetUsage) -> BudgetDecision:
-    """判定是否到限，并给出**取先到者**的结论（纯函数，无副作用；`Ch6 §D.5`）。"""
+    """判定是否到限，并给出**取先到者**的结论（纯函数，无副作用；`Ch6 §D.5`）。
+
+    ★ **`None` 与 `0` 语义严格区分（G5 修复，不得混同）**：
+
+    - `limit is None` = **未设上限**（该类不约束；计算类未配置时走 `research_cap`）→ 不计入到限；
+    - `limit == 0` = **上限为 0**（不允许任何调用 / 检索）→ `used >= 0` 恒真 ⇒ **立即到限**。
+
+    初版写 `if limit is not None and limit > 0`，使 `max_model_calls: 0` **静默等价"无上限"**
+    （审计实测 `used=999` 仍 `exhausted=False`）—— 违反 `00_开发Agent开工提示词 §6.1`
+    （边界必须显式兜底，不得静默）。此处修正：`0` **绝不被吞掉**。
+    """
     ratios: dict[str, float] = {TIME_CLASS: _time_ratio(limits.deadline, usage)}
     binding: list[str] = []
     if limits.deadline is not None and usage.now >= limits.deadline:
@@ -253,12 +264,18 @@ def evaluate_budget(limits: BudgetLimits, usage: BudgetUsage) -> BudgetDecision:
         (COMPUTE_CLASS, usage.model_calls_used, limits.compute_limit),
         (RETRIEVAL_CLASS, usage.searches_used, limits.search_limit),
     ):
-        if limit is not None and limit > 0:
-            ratios[name] = used / limit
-            if used >= limit:
-                binding.append(name)
-        else:
-            ratios[name] = 0.0
+        if limit is None:
+            ratios[name] = 0.0          # 未设上限（≠ 上限为 0）
+            continue
+        if limit <= 0:
+            # 上限为 0（或非法负值）：不允许任何调用 —— 立即到限，且**不静默**。
+            # 比值：`used > 0` 时无可用的有限利用率（0 预算）⇒ inf；`used == 0` ⇒ 1.0（已在限上）。
+            ratios[name] = float("inf") if used > 0 else 1.0
+            binding.append(name)
+            continue
+        ratios[name] = used / limit
+        if used >= limit:
+            binding.append(name)
 
     first: str | None = None
     if binding:

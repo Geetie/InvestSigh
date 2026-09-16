@@ -585,6 +585,25 @@ class Claim(TimeMixin):
     publisher_entity: str = ""
     carrier_platform: str = ""                        # 仅辅助特征，**不参与 tier 判定**（`Ch6 §N6.2-09`）
     origin_claim_id: str | None = None                # 引用链：指向上游主张（T01/T12 基础）
+    independent_evidence_count: int | None = None
+    """**独立佐证基数** —— 该主张**所在内容组**内"独立根"的个数（T-12 契约变更，需求方 2026-09-16 裁定）。
+
+    **口径（逐字对齐 `Ch6 §B.4` / `§C.2` 步骤⑤ / `§C.4`）**：
+    - 它是**基数（count）不是权重（weight）**：`Ch6 §B.4` 明令"独立佐证数量（`independent_evidence_count`，
+      是**基数**不是权重）"，且 **禁止**给来源设固定系数（`N6.3-13`）。
+    - 计数主体 = **同一内容组（指纹相同）内的独立根主张数**；**转述不计**（`Ch6 §F.3`：
+      有共同上游 → 只记 `claim_propagation`，计数不增）。
+    - `Ch6 §C.4` 权威口径：10 篇转述同一匿名订单 ⇒ 根主张的该值 **== 1**。
+
+    **它不包含什么（防止误用）**：
+    - **不含**转述 / 转载 / 二次引用（`§F.3`：与根有共同上游者一律不增）；
+    - **不含**权重、热度、情绪、粉丝量、模型自评分（`Ch6 §B.2` / `N6.3-14` 逐字禁令）；
+    - **不代表"可信度总分"**，**不得**用于给来源排序加权（`Ch6 §B.2` 三轴职责边界）。
+
+    **取值**：`None` = **未计算**（去重步骤尚未运行 / 旧行——`Ch9 §3.4.2` 追加式不可变，
+    既有行不得因新字段报错）；整数 = 该主张作为**根**时的独立佐证基数（由 `scripts/evidence/independence.py`
+    的去重步骤写入）。
+    """
     supersedes: str | None = None                     # 版本链：新版本指向被取代的旧版本
     version_kind: VersionKind | None = None           # 三类版本事件语义（若为本行是修订版）
     locator: str = ""                                 # 定位（页码/段落/表格/视频时间点）
@@ -593,11 +612,49 @@ class Claim(TimeMixin):
     impact_capability: dict[str, Any] = Field(default_factory=dict)
 
 
+class PropagationKind(StrEnum):
+    """`claim_propagation.kind` —— 传播记录的**语义类别**（`Ch6 §C.2` 步骤④ / `§C.3`）。
+
+    ★ 为什么需要它（T-11 契约变更，需求方 2026-09-16 裁定）：
+      `Ch6 §C.3`（误判的纠正入口 / 人工 override）原设计把结果写独立的
+      `facts/claim_alias.jsonl`（`{claim_id, is_independent, reason, operator, at}`）；
+      但 `Ch9 §3.3.3` 把 `facts/` 锁死在 **18 个 JSONL（不得增删改名）** ⇒ `claim_alias.jsonl`
+      **无落点**。裁定：**并入既有 `claim_propagation`**，以其 `kind` 取值
+      `manual_alias_override` 承载"人工确认这两条其实是同一事件" —— **绝不新增第 19 个 JSONL**。
+
+    - `restatement`（**默认**）：自动去重判定的**转述**（`Ch6 §C.2` 步骤④）；
+      ⚠️ **默认值必须使"旧行"合法**：既有 `claim_propagation` 行无 `kind` 字段
+      （`Ch9 §3.4.2` 追加式不可变，不得让既有行失效），取默认即合法。
+    - `manual_alias_override`：**人工别名覆盖**（`Ch6 §C.3`：`dedup_override` 任务结果，
+      `is_independent` 由操作人强制设定，**追加不覆盖原判定**）。
+    """
+
+    restatement = "restatement"
+    manual_alias_override = "manual_alias_override"
+
+
+class AliasOverride(_Base):
+    """人工别名覆盖的载荷（**逐字承载** `Ch6 §C.3` 的四要素）。
+
+    `Ch6 §C.3` 原文：结果写 `{claim_id, is_independent, reason, operator, at}`（追加，不覆盖原判定）。
+    并入 `claim_propagation` 后：`claim_id` → 行的 `propagated_claim_id`；
+    其余四要素 → 本结构。`at` 用 `datetime`（系统时间轴，`Ch9 §2.2`）。
+    """
+
+    is_independent: bool              # 操作人强制设定的独立判定（`Ch6 §C.3`）
+    reason: str                       # 变更理由（可复核）
+    operator: str                     # 操作人
+    at: datetime                      # 操作时刻
+
+
 class ClaimPropagation(TimeMixin):
     """传播记录（`Ch9 §N9.1-13` / `§3.4.7`）。
 
     十篇转述同一匿名订单 = **1 个 event + N 条 propagation**（T01）；
     转述者**不计独立证据**（`Ch6 §N6.2-11`）。
+
+    ★ `kind` / `alias_override`（T-11）：承载 `Ch6 §C.3` 的人工去重覆盖，
+      同时**并入**既有表、**不新增**第 19 个 JSONL（`Ch9 §3.3.3`）。旧行无这两列 ⇒ 取默认（合法）。
     """
 
     propagation_id: str
@@ -606,6 +663,24 @@ class ClaimPropagation(TimeMixin):
     publisher_entity: str = ""
     carrier_platform: str = ""
     independent_evidence: bool = False  # 转述默认 False，不得提升为独立佐证
+    kind: PropagationKind = PropagationKind.restatement   # 语义类别（默认转述；旧行取默认即合法）
+    alias_override: AliasOverride | None = None           # 仅 kind=manual_alias_override 时携带
+
+    @model_validator(mode="after")
+    def _check_alias_override_consistency(self) -> "ClaimPropagation":
+        """`kind` 与 `alias_override` **必须一致**（不得有半截的人工覆盖，`Ch6 §C.3`）。
+
+        - `kind=manual_alias_override` **必须**携带四要素载荷；
+        - 其它 `kind` **不得**携带载荷（避免"标了转述却藏人工判定"）。
+        旧行（无 `kind`、无载荷）走默认 ⇒ 通过。
+        """
+        if self.kind is PropagationKind.manual_alias_override and self.alias_override is None:
+            raise ValueError(
+                "kind=manual_alias_override 必须携带 alias_override（is_independent/reason/operator/at，Ch6 §C.3）"
+            )
+        if self.kind is not PropagationKind.manual_alias_override and self.alias_override is not None:
+            raise ValueError("alias_override 仅在 kind=manual_alias_override 时允许（Ch6 §C.3）")
+        return self
 
 
 # ─────────────────────────── ④ 事件与影响 ───────────────────────────
