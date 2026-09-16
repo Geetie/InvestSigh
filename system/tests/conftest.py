@@ -40,6 +40,46 @@ _COPY_SKIP = {"__pycache__", ".pytest_cache", ".venv", ".work", "index", "report
 # 阶段① 内必然为空的目录，夹具里补出来供注入测试写入
 _ENSURE_DIRS = ("views", "raw", "derived", "snapshots", "index")
 
+# ★★ 夹具的**真源契约**：每个 `code_root` 一律从**空真源**起步。
+#
+# 为什么必须显式做这件事（实测，批次 8 `G-RC-02`）：
+#   夹具用 `copytree(SYSTEM_ROOT, ...)` 复制整个 `system/` —— **包括 `facts/` 与 `raw/`**。
+#   项目此前从没有过真实数据，所以"复制过来也等于空"，这个耦合一直没被发现。
+#   一旦 `ws/real-collect` 落入第一批**真实** claim / 边 / 基线，立刻炸出：
+#     `tests/claim` 8 failed · `tests/graph` 5 failed · `tests/validators` 2 failed。
+#   根因不是数据错、也不是代码错，而是**测试侧契约没随真源演进**：
+#   `test_locator_check` 断言 `NO_CLAIMS`、`test_graph_integrity_guard` 断言 `NO_EDGE_DATA` ——
+#   这些用例要测的是"**无被检对象**"这一分支，可它们却**依赖仓库里恰好没有数据**。
+#
+# 正确契约 = **测试自己声明自己的数据**：夹具给空真源，需要的用例自行 `append_records` 写入。
+# 这样"仓库里有没有真实数据"与"测试是否通过"**彻底解耦**（这也是能让真实数据进主线的前提）。
+_TRUTH_STEMS = (
+    "industry_nodes", "companies", "securities", "business_positions", "products", "relations",
+    "sources", "claims", "claim_propagation", "events", "impacts", "baselines", "prices",
+    "expectations", "benchmarks", "recommendations", "dependency_edges", "tasks",
+)
+
+
+def _reset_truth_source(target: Path) -> None:
+    """把夹具副本的**真源**清空：`facts/*.jsonl` 归零、`raw/` 只留 `.gitkeep`。
+
+    只动**数据**，不动**结构**：18 个 JSONL 仍然全部存在（`Ch9 §3.3.3`「不得增删改名」的断言照旧可测），
+    `raw/` 目录仍在（`full_text_read` 的路径可写）。
+    """
+    facts = target / "facts"
+    if facts.is_dir():
+        for stem in _TRUTH_STEMS:
+            (facts / f"{stem}.jsonl").write_text("", encoding="utf-8")
+    raw = target / "raw"
+    if raw.is_dir():
+        for item in list(raw.iterdir()):
+            if item.name == ".gitkeep":
+                continue
+            if item.is_dir():
+                shutil.rmtree(item, ignore_errors=True)
+            else:
+                item.unlink(missing_ok=True)
+
 
 def _ignore(_dir: str, names: list[str]) -> set[str]:
     """跳过缓存 / 可重建产物 / 夹具自身的工作目录（否则递归复制自己）。"""
@@ -74,6 +114,9 @@ def code_root(request: pytest.FixtureRequest) -> Path:
         for sub in _ENSURE_DIRS:
             (target / sub).mkdir(parents=True, exist_ok=True)
         _make_writable(target)
+        # ★ 空真源契约（见上方 `_reset_truth_source` 的说明）：必须放在 `_make_writable` **之后**，
+        #   否则清空动作会在 0444 的 `raw/` 子项上抛 `PermissionError`。
+        _reset_truth_source(target)
         yield target
     finally:
         shutil.rmtree(target.parent, ignore_errors=True)

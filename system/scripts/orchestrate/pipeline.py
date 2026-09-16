@@ -263,12 +263,40 @@ class Pipeline:
                 gap = f"step {no} 未注册处理器（断点续跑）"
                 result.steps.append(StepResult(no, str(cfg["name"]), STATUS_GAP, gap=gap))
                 result.gaps.append(gap)
+                if cfg.get("blocking"):
+                    result.blocked = True
                 continue
             outcome = handler(run_date, result.scope)
-            result.steps.append(StepResult(no, str(cfg["name"]), STATUS_OK, produced=list(outcome.produced)))
+            # ★ 与 `run_daily` 保持**同一套语义**（批次 7 审计 `B2`）：
+            #   实测两入口曾分歧 —— 同副本同 handler，`run_daily` = step2/3/4/5 gap + blocked=True + 11 gaps，
+            #   而 `resume` = ok + blocked=False + 2 gaps。分歧根因就是下面这行**硬编码 STATUS_OK**：
+            #   它不读 `incomplete_reason`、不传播 `degraded`、不把未完成的 blocking 步置 `blocked`。
+            #   两个入口对同一次运行给出**相反结论**，属于必须消除的不一致（不是"resume 的另一套设计"）。
+            status = STATUS_GAP if outcome.incomplete_reason else STATUS_OK
+            result.steps.append(
+                StepResult(
+                    no,
+                    str(cfg["name"]),
+                    status,
+                    produced=list(outcome.produced),
+                    gap=outcome.incomplete_reason,
+                )
+            )
+            if outcome.incomplete_reason:
+                result.gaps.append(f"step {no} ({cfg['name']}): {outcome.incomplete_reason}")
+                if cfg.get("blocking"):
+                    result.blocked = True
             result.signals_emitted += int(outcome.signals_emitted or 0)
+            result.degraded = result.degraded or bool(outcome.degraded)
             for k, v in (outcome.judgment_change or {}).items():
                 result.judgment_change[k] = bool(v) or result.judgment_change.get(k, False)
+
+        # ── G1-05（`Ch1 §F`）：与 `run_daily` 一致地跑完整性判据（批次 7 审计 `B2`：
+        #   此前 `resume` **从不调用**它，于是"跳过了但什么都没补"也会报成功）。 ──
+        for viol in assert_steps_complete(result, self.hooks_registered()):
+            result.gaps.append(f"G1-05 {viol.reason}")
+            result.blocked = True
+
         self._write_state(result)
         self._write_check_record(result)
         return result
@@ -342,6 +370,13 @@ def assert_steps_complete(result: RunResult, registered_hooks: Mapping[str, bool
     v: list[Violation] = []
     for step in result.steps:
         if step.step <= 6:
+            if step.status == STATUS_SKIPPED:
+                # ★ 断点续跑（`resume`）语义（批次 7 审计 `B2`）：该步在**上一轮已 `ok`**，
+                #   本轮按设计跳过 —— 它不是"本轮未产出"，故**不计** G1-05 违例
+                #   （否则 `resume` 在补跑任何一步时都会恒红，把真违规淹没在噪声里）。
+                #   注意：这是**语义澄清**，不是放宽 —— `run_daily` 永不产生 SKIPPED，
+                #   故它的判据强度**完全不变**。
+                continue
             if step.status != STATUS_OK:
                 v.append(
                     Violation(

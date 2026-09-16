@@ -17,10 +17,10 @@
 | 步 | 流程段 | 设计锚点（`01_产品目标与核心闭环/01_需求拆解.md §2.2` 8 步映射表） | 本步**已实现**的确定性部分 | 本步**未实现**的模型侧部分 |
 |---|---|---|---|---|
 | 2 | 追源去重与核验 | `Ch6 §6.3`（七步）+ `Ch9 N9.1-10~14`；产物 `claims` / `claim_propagation` | **定位核验**（复用 `scripts/validators/locator_check.py`：`full_text_read` 定位机械复查） | `Ch6 §6.3` **七步判定**（追源 / 交叉验证 / 采纳与否） |
-| 3 | 更新公司及产业关系 | `Ch7 §7.1` + `Ch9 N9.1-06~09`；产物 `relations` / `business_positions` / `impacts` | **依赖图完整性**（复用 `scripts/graph/graph_integrity_guard.py`：自环 / 重复边 / 陈旧缓存） | `Ch7 §7.1` **关系抽取**（从证据推出公司间关系） |
+| 3 | 更新公司及产业关系 | `Ch7 §7.1` + `Ch9 N9.1-06~09`；产物 `relations` / `business_positions` / `impacts` | ⚠️ **无** —— 本步**没有任何**被证成的确定性部分；原把"图结构守卫"当成本步实现属**归属错误**，已更正（详见 `make_relation_handler` 的 docstring） | `Ch7 §7.1` **关系抽取**（从证据推出公司间关系 → 三张表的生产） |
 | 4 | 修订增长和护城河判断 | `Ch4 §4.1~4.3` + `Ch9 N9.1-17/18`；产物 `baselines`（`drivers` / `moat`） | —（其输入 `baselines` 本身是模型侧产物，无输入即无可算） | `Ch4 §4.1~4.3` **判断**（增长驱动 / 护城河评估） |
 | 5 | 更新财务与估值假设 | `Ch4 §4.4 + Ch5 §5.3`；产物 `valuation` / `DerivedValue` | ✅ **真实实现**：复用 `scripts/compute/step.py::make_derived_handler`（确定性计算层） | 模型侧假设生成（属阶段③） |
-| 6 | 比较个股与基准预期收益 | `Ch5 §5.4 + Ch7 §7.3`；产物 `benchmarks` / `recommendations` | ✅ **真实实现**：复用 `scripts/decision/step.py::make_decision_handler`（三维决策函数 + 前置门 + 5 规则） | 基准选取与价格抓取（属阶段③） |
+| 6 | 比较个股与基准预期收益 | `Ch5 §5.4 + Ch7 §7.3`；产物 `benchmarks` / `recommendations` | ⚠️ **接缝已通，但当时不可用**：复用 `scripts/decision/step.py::make_decision_handler` —— 审计实测其默认输入是**测试夹具**、会在空仓库上**伪造建议**（`P7-1`），故**不得**称"真实实现" | 基准选取与价格抓取（属阶段③） |
 
 ## 三条不许越的线
 
@@ -109,47 +109,49 @@ def make_verify_handler(root: str | Path, *, step_no: int = 2) -> Callable[[date
 
 
 def make_relation_handler(root: str | Path, *, step_no: int = 3) -> Callable[[date, str], Any]:
-    """step 3 处理器：对**已存在的**依赖边跑**图结构完整性**检查，其余如实声明未实现。
+    """step 3 处理器：**如实声明无产出**（本步**没有**被证成的确定性部分）。
 
-    - **已实现的确定性部分**：`scripts/graph/graph_integrity_guard.py`（`Ch2 §B.3`，命中即 fail）
-      —— 自环边 / 重复边 / 陈旧邻接缓存。
-    - **未实现的模型侧部分**：`Ch7 §7.1` 的**关系抽取**（由证据推出公司间关系），
-      即 `relations` / `business_positions` / `impacts` 的**生产**。本步**不产生**这三张表的行。
-    - `produced` = **本次通过完整性检查的边引用**（`edge_id`）。无边 → 空表 + 记 note
-      （`G-03`：无被检对象**不得**当成"已验证"）。
+    ## ★ 归属更正（批次 7 审计判定为 PARTIAL，此处据实改）
+
+    本处理器**原先把 `scripts/graph/graph_integrity_guard.py` 当作 step 3 的"确定性部分"，
+    并把 `dependency_edges` 的 `edge_id` 当作 step 3 的 `produced` —— 这两点都不成立：**
+
+    1. **归属错**：`Ch7 §7.1` 的正文是**关系数据模型**（`relations` / `business_positions` /
+       `impacts` 三张表怎么建、字段是什么）；而 `graph_integrity_guard` 检的是 `dependency_edges`
+       的**图结构**（自环 / 重复边 / 陈旧缓存），其自身锚点是 `Ch9 §3.4.3`（T12 传播）与 `Ch7 §C.3`
+       （SCC），**不是 `Ch7 §7.1`**。→ 它属于**图结构守卫**，不属于 step 3。
+    2. **产物错**：step 3 声明的产物是 `relations` / `business_positions` / `impacts`；
+       `edge_id` 是**另一张表**（`dependency_edges`）的**既有**对象，不是本步"本次产出"。
+       拿既有对象充 `produced` 与 `C-03` 是**同一类**缺陷（"重算/既有的全部 id"≠"本次真正产出"）。
+    3. **原锚点也是错的**：原先写的 `` `Ch2 §B.3` `` 在该章只有 `Checker-1~5`，不含本判据。
+       （`graph_integrity_guard.py` 自身的模块 docstring 亦有同一处错锚点 —— 已登记为缺口，归 graph 侧修正。）
+
+    → 故本步改为**纯显式缺口**：`produced` 恒为空，`incomplete_reason` 说清缺的是什么。
+    **注意**：`graph_integrity_guard` **并不因此失去调用方** —— 它是 `run_all_gates.py`
+    （第 23 项）与 `pre-commit.sh`（第 ⑩ 项）里的**守卫**，与"step 3 的实现"是两回事。
+
+    ## 缺口内容
+
+    `Ch7 §7.1` 的**关系抽取**（由证据推出公司间关系 → 三张表的**生产**）属模型侧、阶段②③。
+    没有它，本步**无产出**（`produced == []`）→ 编排器记 `gap` + 置 `blocked`（**绝不报成功**）。
     """
-    root_path = Path(root)
-
     def handler(_run_date: date, _scope: str) -> Any:
         from scripts.orchestrate.pipeline import StepOutcome
-        from schema.store import read_records
 
-        from scripts.graph.graph_integrity_guard import check as graph_check
+        return StepOutcome(
+            produced=[],
+            degraded=True,
+            incomplete_reason=(
+                "`Ch7 §7.1` 的**关系抽取**（由证据推出公司间关系 → `relations` / "
+                "`business_positions` / `impacts` 三张表的生产）属模型侧、阶段②③，本批次未交付；"
+                "本步**没有任何被证成的确定性部分**（原把图结构守卫当成本步实现属归属错误，已更正），"
+                f"故无产出。{_T08}"
+            ),
+        )
 
-        report = graph_check(root_path)
-        if not report.passed:
-            bad = "；".join(v.render() for v in report.violations[:5])
-            return StepOutcome(
-                produced=[],
-                degraded=True,
-                incomplete_reason=(
-                    f"依赖图结构完整性未通过（{len(report.violations)} 条违例，`Ch2 §B.3`）：{bad}"
-                ),
-            )
-        edge_ids = sorted(
-            {str(r.get("edge_id")) for r in read_records(root_path, "dependency_edges") if r.get("edge_id")}
-        )
-        residual = (
-            f"`Ch7 §7.1` 的**关系抽取**（由证据推出公司间关系 → `relations` / `business_positions` / "
-            f"`impacts` 三张表）属模型侧、阶段②③，本批次未交付；本次仅完成**依赖图完整性检查**"
-            f"（{len(edge_ids)} 条边）。{_T08}"
-        )
-        if not edge_ids:
-            residual = (
-                "无依赖边数据（`facts/dependency_edges.jsonl` 为空）—— **无被检对象 ≠ 已验证**"
-                "（`G-03`）；" + residual
-            )
-        return StepOutcome(produced=edge_ids, degraded=not edge_ids, incomplete_reason=residual)
+    handler.__name__ = f"update_relations_step_{step_no}"
+    handler.__doc__ = "step 3 更新公司及产业关系（`Ch7 §7.1`）—— 无确定性部分，纯显式缺口，无产出"
+    return handler
 
     handler.__name__ = f"update_relations_step_{step_no}"
     handler.__doc__ = "step 3 更新公司及产业关系（`Ch7 §7.1` + `Ch9 N9.1-06~09`）—— 图完整性已接，关系抽取显式 gap"

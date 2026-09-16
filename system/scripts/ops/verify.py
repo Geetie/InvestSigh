@@ -110,7 +110,12 @@ BATCHES: Mapping[str, Batch] = {
         _pytest("tests/conflict"), 30.0, _exit_zero,
     ),
     "guards": Batch(
-        "guards", "tests/guards/（23 门禁 × 退出码契约 + 验证规范）",
+        # ★ 不写"多少项"（批次 7 审计）：本批跑的是 `tests/guards/`，其契约矩阵**自带真源**
+        #   （`test_exit_code_contract.py::GUARDS` 并 `assert len(GUARDS) == <它自己的数>`），
+        #   与 `run_all_gates.GATES` 的项数是**两个不同的数**。此前我在描述里写过 18 / 19 / 20 / 23
+        #   四种值 —— 同一事实四个数字，且"由对改错"过一次（把 20 改成 23，而 23 是另一批的数）。
+        #   **根治办法 = 不在描述里重复真源**：数字只留在各自的真源里。
+        "guards", "tests/guards/（门禁退出码契约 + 验证规范）",
         _pytest("tests/guards"), 60.0, _exit_zero,
     ),
     "injection": Batch(
@@ -144,8 +149,16 @@ BATCHES: Mapping[str, Batch] = {
         "decision", "tests/decision/（决策层 triage / gate / rules）",
         _pytest("tests/decision"), 30.0, _exit_zero,
     ),
+    "transmit": Batch(
+        # 由主理人在集成时加入（`reports/batch8_parallel_taskbook.md`）：
+        # 新测试目录必须同时加批次，否则 `V-06` 会把新目录判成"未覆盖"（`CONVENTIONS.md::V-06`）。
+        "transmit", "tests/transmit/（Ch7 传导编排引擎）",
+        _pytest("tests/transmit"), 60.0, _exit_zero,
+    ),
     "gates": Batch(
-        "gates", "run_all_gates.py（23 项门禁）",
+        # ★ 不写"多少项"（批次 7 审计）：数字的真源在 `run_all_gates.GATES`，
+        #   描述里重复它必然漂移（同一事实曾出现 18/19/20/23 四个值）。
+        "gates", "run_all_gates.py（全部门禁逐项退出码）",
         ("scripts/ops/run_all_gates.py", "{root}", "--timeout", "30"), 60.0, _exit_zero,
         note="门禁内部已有逐项 30s 硬超时（卡死也算不合格）",
     ),
@@ -158,7 +171,7 @@ BATCHES: Mapping[str, Batch] = {
 
 ORDER = (
     "unit", "conflict", "guards", "injection", "root",
-    "compute", "graph", "validators", "claim", "decision",
+    "compute", "graph", "validators", "claim", "decision", "transmit",
     "gates", "stage",
 )
 
