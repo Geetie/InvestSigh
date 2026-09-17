@@ -10,6 +10,17 @@
 #   → 标 `license_tier=free_quota` / `cost=0`；**不得写入裁决逻辑**（仍须走 Ch6 分级与证据质量流程）；
 #   → **若未来转为付费，须按 Ch2 §N2.1-14 重新评估**。
 #
+# ★ 变更记录（`N6.1-13`「数据来源白名单 + 变更审批」）：
+#   2026-09-17 **需求方批准补入 `tdx`（通达信 MCP 连接器）**。依据与逐项实测见
+#   `system/reports/mcp_setup_brief.md`：tdx 是当时三个可用源中**唯一同时**提供
+#     ① 延迟分钟数（`DelayHQMin: 15`，实测）② 三复权口径（不复权/前复权/后复权，实测可区分）
+#     ③ 公司行动表（分红·拆股，含除息日/每股派息/登记日/派发日/拆股比率）的源；
+#   而这三项分别是 `N9.3-04`（可预期延迟）/ `N9.3-08` + T11（公司行动与复权口径）的必需输入，
+#   且 `iFinD` 实测在**美股与基金两个市场**都取不到公司行动（详见该报告 §四）。
+#   ★ 该连接器**在补登记之前就已连在宿主上并被用于取数** —— 本次是**事后补登记**，
+#     使其从"未授权源"转为在册源，**不是新增采购**；`license_tier` 取 `free_quota`
+#     （未发生付费订阅；若未来转为付费，按 `Ch2 §N2.1-14` 重评）。
+#
 # ★ 单一真源纪律：本文件**不另存** p09 的预算值；预算值只在 `rules/freeze.yaml::p09`。
 # 只读：0444 + SHA256。
 
@@ -44,6 +55,19 @@ sources:
     may_enter_first_version: true
     may_enter_decision_logic: false
     reassessment_rule: "若转为付费，按 Ch2 §N2.1-14 重评"
+  - id: tdx
+    kind: mcp_connector
+    license_tier: free_quota
+    cost: 0
+    may_enter_first_version: true
+    may_enter_decision_logic: false        # ★ 不得写入裁决逻辑
+    reassessment_rule: "若转为付费，按 Ch2 §N2.1-14 重评"
+    # ★ 本条与 westock / iFinD / pandadata **保持逐字段同构**：变更依据（批准日期、`N6.1-13`、
+    #   实测证据出处）写在**文件头注释**里，**不新增** `approved_at` / `approval_anchor` /
+    #   `evidence_ref` 这类元数据键 —— 它们会被 `rule_key_alignment_guard` 判为
+    #   「**在机器上零效力**的声明」（`T-18` 家族）而**响亮判红**。这是本次实测到的：
+    #   我初版加了那三个键 ⇒ 门禁立刻 FAIL（3 violations）。处置择「删键、依据留在注释」，
+    #   而不是把它们登记进豁免表（后者是降噪，前者是**收敛到同构**）。
   - id: websearch_webfetch
     kind: builtin_capability
     license_tier: free_quota

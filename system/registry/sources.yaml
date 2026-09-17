@@ -81,6 +81,26 @@ sources:
     cost: 0
     note: "D-01；若转付费按 Ch2 §N2.1-14 重评"
 
+  # ★ 2026-09-17 补登记（`N6.1-13` 变更审批，需求方批准；同步写入 `rules/data-sources.allowlist.yaml`）。
+  #   补登记原因：该连接器在补登记前**已在宿主连接并被用于取数**，属"未授权源"状态；
+  #   且它是当时唯一同时提供「延迟分钟数 + 三复权口径 + 公司行动表」的源（逐项实测见
+  #   `system/reports/mcp_setup_brief.md`）。`expected_latency` 只填**实测到的那一格**，其余保持 tbd。
+  - source_id: src_tdx_mcp
+    public_entry: "tdx-connector MCP 连接器（通达信）"
+    obtainable_content_type: structured_quotes_and_financials
+    crawl_method: api
+    expected_latency: "美股行情 15 分钟（`DelayHQMin: 15`，2026-09-17 实测）；其余品种/接口未测"
+    update_frequency: tbd
+    access_restriction: none
+    fallback_source_ids: [src_westock_mcp, src_ifind_mcp, src_pandadata_mcp]
+    tier: primary
+    quality_label: tbd                     # 人工核验样本到位前恒 tbd
+    observed_stats: {}
+    health: tbd
+    license_tier: free_quota               # 未发生付费订阅；转付费按 Ch2 §N2.1-14 重评
+    cost: 0
+    note: "实测覆盖：美股行情（setcode=74）· 三复权口径 K 线（tqFlag 0/1/2，可区分）· 公司行动（分红·拆股）。不得写入裁决逻辑"
+
   - source_id: src_company_ir
     public_entry: tbd                      # 公司 IR 站点因公司而异，逐公司登记
     obtainable_content_type: full_text

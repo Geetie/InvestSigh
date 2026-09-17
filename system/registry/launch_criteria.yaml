@@ -22,8 +22,8 @@ required:                        # ★ 首版启动条件——不得含任何�
     anchor: "源稿 §六"
   - id: free_quota_connectors
     requires_paid_subscription: false
-    statement: "免费额度连接器（westock / iFinD / pandadata）可进首版清单"
-    anchor: "D-01"
+    statement: "免费额度连接器（westock / iFinD / pandadata / tdx）可进首版清单"
+    anchor: "D-01；tdx 于 2026-09-17 按 N6.1-13 变更审批补入"
   - id: serverside_persistence
     requires_paid_subscription: false
     statement: "服务端文件持久化（非浏览器本地存储）"
@@ -50,6 +50,8 @@ available_sources:
   - {id: westock,   license_tier: free_quota, cost: 0, requires_paid_subscription: false}
   - {id: iFinD,     license_tier: free_quota, cost: 0, requires_paid_subscription: false}
   - {id: pandadata, license_tier: free_quota, cost: 0, requires_paid_subscription: false}
+  # ★ 2026-09-17 需求方批准补入（N6.1-13 变更审批）；逐项实测见 reports/mcp_setup_brief.md
+  - {id: tdx,       license_tier: free_quota, cost: 0, requires_paid_subscription: false}
 
 # ── 与 allowlist 的关系（单一真源）──────────────────────────────────────
 allowlist_ref: rules/data-sources.allowlist.yaml
