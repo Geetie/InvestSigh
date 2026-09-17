@@ -50,6 +50,12 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from scripts.guard.executor import STATUS_OK, STATUS_SKIPPED, process_raw_file  # noqa: E402
+from scripts.ingest.market_data import (  # noqa: E402
+    MARKET_INBOX_PREFIX,
+    MARKET_INBOX_SUFFIX,
+    ingest_market_inbox,
+    market_inbox_files,
+)
 from scripts.orchestrate.pipeline import StepOutcome  # noqa: E402
 from schema.models import ClaimForm, ClaimNature, SourceTier  # noqa: E402
 from schema.store import read_records  # noqa: E402
@@ -105,13 +111,32 @@ def make_ingest_handler(root: str | Path) -> Callable[[date, str], "StepOutcome"
     return handler
 
 
+def _is_market_spec(name: str) -> bool:
+    """该文件名是否是**行情清单** —— 它归 `scripts/ingest/market_data.py`，**不**归文本处理器。
+
+    ★ 为什么必须显式分流（不加这一条就是**潜伏的错**）：投递口原先把**一切**非点文件
+      都当"待采集外部文本"吸进 `process_raw_file`。若把行情 JSON 投进去，
+      它会被当**文本**解析成一条 claim（把一份行情表读成"某篇来源的内容"）——
+      真源里会多出一条**来源不明的解释性主张**，且没有任何判据会因此变红。
+      ⇒ 按「接缝在投递侧」的同一纪律：**按文件名分派**，不靠后缀猜测内容。
+    """
+    return name.startswith(MARKET_INBOX_PREFIX) and name.endswith(MARKET_INBOX_SUFFIX)
+
+
 def _inbox_files(root: Path) -> list[Path]:
-    """列出投递口下**待采集**的常规文本文件（跳过点文件与子目录），按名排序保证可复现。"""
+    """列出投递口下**待采集的常规文本**文件（跳过点文件、子目录与**行情清单**），按名排序。
+
+    行情清单走 `_is_market_spec` 那条独立通路（见该函数）。
+    """
     inbox = root / INBOX_RELPATH
     if not inbox.is_dir():
         return []
     return sorted(
-        (p for p in inbox.iterdir() if p.is_file() and not p.name.startswith(".")),
+        (
+            p
+            for p in inbox.iterdir()
+            if p.is_file() and not p.name.startswith(".") and not _is_market_spec(p.name)
+        ),
         key=lambda p: p.name,
     )
 
@@ -257,7 +282,24 @@ def ingest_public_information(
         else:
             # 显式降级：该文件未落库（blocked / degraded）—— 不得静默略过。
             degraded = True
-    if not candidates:
-        # 空样本：投递口为空 → 显式降级，不得当成功。
+    # ── 行情清单 → `scripts/ingest/market_data.py`（陷阱校验 + 日历过滤 + 落 `facts/prices.jsonl`）──
+    #
+    # ★ 为什么 step 1 要管这条：`facts/prices.jsonl` 长期**零生产写入方**
+    #   （`gap-prices-no-writer` / `gap-mcp-fetch-not-reproducible`），
+    #   而它是"绝对收益 / 相对收益"主线的必需输入。取数动作属**宿主 A 档**
+    #   （会话里用 MCP 做），**落库逻辑**必须落在版本库里 —— 接缝同样在投递侧。
+    market_files = market_inbox_files(root)
+    if market_files:
+        market_produced, market_skipped, market_degraded, market_notes = ingest_market_inbox(root)
+        for note in market_notes:
+            # `StepOutcome` 没有 notes 字段（不扩公共契约）⇒ 如实打到 stdout，
+            # 保证"剔除了哪些非交易日 / 哪些标的是悬挂引用"在运行输出里**逐字可见**。
+            print(f"[market_data] {note}")
+        produced.extend(market_produced)
+        skipped.extend(market_skipped)
+        degraded = degraded or market_degraded
+
+    if not candidates and not market_files:
+        # 空样本：投递口两类投递物都没有 → 显式降级，不得当成功。
         degraded = True
     return StepOutcome(produced=produced, skipped=skipped, degraded=degraded, signals_emitted=0)

@@ -627,7 +627,11 @@ def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
       必须与写路径（`pipeline._write_check_record` 复用 `degrade.last_valid_result_ref()`）
       同源，否则同一契约在三处各说各话。
     """
-    from scripts.daily.degrade import holds_valid_result
+    # ★ 前提谓词 = **写路径同款**（`is_valid_run_record`），**不是** `holds_valid_result`。
+    #   为什么（2026-09-17 修 `gap-stage-gate-false-red`，完整推导见下方循环处）：后者被验收
+    #   判定器 `acceptance_checks.t13_missing_source_not_fabricated` 钉住**必须保持宽**
+    #   （认「`done` + `output_refs`」），而本判据的前提必须**与写路径同口径**。
+    from scripts.daily.degrade import is_valid_run_record
 
     tasks = _read_jsonl(root / "facts" / "tasks.jsonl")
     check_records = [t.get("check_record") for t in tasks if t.get("check_record")]
@@ -678,22 +682,48 @@ def stage_daily_run_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
     #     分不清"没有失败行"与"谓词恒 False"（两者观测量相同）。同一条命令里给出
     #     "按该谓词真的持有有效结果的行数"，任何一方的恒真 / 恒假都当场可见
     #     （`G-03`：空样本不得当已核）。
+    # ★★ 前提谓词必须与**写路径**同口径（2026-09-17 修，缺口 `gap-stage-gate-false-red`）
+    #
+    #   写路径 `degrade.last_valid_result_ref()` **只认** `is_valid_run_record()`
+    #   （要求带 `check_record`、未失败、未降级）—— 因为它要返回一个**可被引用的 `check_id`**。
+    #
+    #   本判据原先用**更宽**的 `holds_valid_result()` 做前提。那个并集里有一条
+    #   「`status == "done"` 且 `output_refs` 非空」—— 它恰好也是**普通生产任务行**的形态。
+    #   实测库里 3 条 `task_review::*` 就是 `done` + `output_refs=['…']`、**不带 `check_record`**
+    #   （由 `record_eval` 写，不是运行记录）。于是：
+    #     · 判据侧：认为"存在可保留的上次运行结果" ⇒ 失败行**必须**有 `last_valid_result_ref`；
+    #     · 写路径：那 3 条**引用不了**（没有 `check_id`），且库里从未有过一次成功运行
+    #       ⇒ 只能如实给 `None`。
+    #   ⇒ 判据要求引用一个**写路径产不出的东西** ⇒ 结构性不可能 ⇒ **假红**。
+    #   实测 `stage_gate --stage all` = `FAIL(3)`，且**每多跑一天多一条**（第二、三条失败运行）。
+    #
+    #   ⇒ 修法：前提改用 `is_valid_run_record()` —— **它问的问题与写路径答的问题完全一致**。
+    #
+    #   ★ 为什么不直接把 `holds_valid_result()` 改窄（我最初的修法，**已回退**）：
+    #     验收判定器 `graph/acceptance_checks.py::t13_missing_source_not_fabricated` **要求**
+    #     它保持宽 —— 逐字断言 `holds_valid_result({"status": "done", "output_refs": ["rec-1"]})`
+    #     必须为**真**（防"把真的有产出的完成记录误判成无效，从而让降级掩盖真实产出"）。
+    #     实测：改窄谓词后 `ACC-T13` 立刻判红 ⇒ **两处判据对同一谓词的要求相反**，
+    #     冲突点在**本判据的前提选择**，不在谓词本身。⇒ 改判据侧，不动被验收钉住的谓词。
+    #
+    #   ★ 收紧后判据**仍然有效**：只要真有过一次成功运行，本前提即为真、判据随之起效
+    #     （下方 `test_*_still_arms_*` 型用例专门钉这一点：防"为消红而把前提改瘫"）。
     first_day_exempt = 0
     rows_holding_valid_result = 0
     for _idx, t in enumerate(tasks):
         if t.get("status") == "failed" and not t.get("last_valid_result_ref"):
-            if not any(holds_valid_result(_prior) for _prior in tasks[:_idx]):
+            if not any(is_valid_run_record(_prior) for _prior in tasks[:_idx]):
                 first_day_exempt += 1
                 continue
             v.append(
                 Violation(
                     "daily_run",
                     f"{t.get('task_id')} 失败但未保留 last_valid_result_ref"
-                    "（此前已有行持有有效结果 ⇒ 引用本该在，不得置空）",
+                    "（此前已有**成功运行** ⇒ 引用本该在，不得置空）",
                     "facts/tasks.jsonl",
                 )
             )
-        elif holds_valid_result(t):
+        elif is_valid_run_record(t):
             rows_holding_valid_result += 1
     # 时点可核（Ch9 §2.2）：每条 check_record 必须能被 run_date 定位
     for cr in check_records:

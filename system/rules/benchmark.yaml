@@ -21,7 +21,20 @@ benchmark_objects:
       note: "覆盖 AI 硬件 / 基础设施 / 应用（源稿 §「主基准工作候选」）"
     includes_non_listed_assets: true       # AGIX = true（含非上市资产）
     non_listed_assets:
-      disclosure_state: undisclosed        # 缺口单列；**不硬编点值**（承 Ch5 impl §E.1）
+      # ★★ 2026-09-17 实测更正：`undisclosed` → `disclosed`。
+      #   原值 `undisclosed` 是**实现方填的工作假设**（本文件 `freeze_status: unfrozen`），
+      #   当日经**权威来源实测证伪**：官网持仓页（`https://kraneshares.com/etf/agix/`，
+      #   即源稿附录二「来源一」）**逐条列出 7 家非上市资产**的名称 / `% of Net Assets` /
+      #   `Shares Held` / `Market Value($)` / `% NAV`（合计 4.35% NAV），并明示
+      #   `Private Holdings — Data as of 09/16/2026`、另提供 `Full Holdings .CSV`。
+      #   ⇒ 「公开持仓披露延迟」这一事实**可得**，故不再是缺口。
+      #   ★ 本文件**不落点值**（规则 ≠ 数据）：逐条明细属**事实行**（`facts/benchmarks.jsonl`
+      #     的 `non_listed_assets` / `holdings_disclosure_lag`），由 `scripts/ingest/market_data.py`
+      #     按实测清单编译入库。
+      #   ★ 仍**成立**的部分：非上市资产**无法独立建模**（`Ch5 §E.1` 的原始理由）——
+      #     披露的是**公司自报估值**，不是我们可独立复核的估值 ⇒ `sensitivity` 与
+      #     `unverifiable_forecasts` 两个字段**继续必填**（判据 ③⑤ 不变）。
+      disclosure_state: disclosed
       # ★ `T-20` 改名（需求方 2026-09-17 裁定：「不同物 ⇒ `rules/` 侧改名」）：
       #   本键原名 `sensitivity`，与**设计**的 `sensitivity[]`（一组**敏感性项**，见
       #   `05_价格与市场预期研究/02_实现方案.md:224` / `05/01:162`）**同名不同物** ——
@@ -31,7 +44,8 @@ benchmark_objects:
       #   （`schema.models.Benchmark.sensitivity`，`scripts/pricelayer/history_guard.py:336`
       #   的 `row.get("sensitivity")`）—— **不是**本键，故本处改名不影响任何消费者。
       sensitivity_disclosure:
-        disclosure_state: undisclosed
+        # ★ 同上实测更正：权重已按日披露 ⇒ 敏感性**可算**（以「公司自报估值」为输入）。
+        disclosure_state: disclosed
     freeze_status: unfrozen                # 域 = 基准对象（≠ param 的 tbd/frozen）
     return_basis:
       same_start_end: true                 # 同起止时间
