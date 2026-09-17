@@ -33,6 +33,22 @@
 
 ⇒ **测试时看到 `deferred_by_design` / 步骤 7/8 标 gap，是设计如此，不是缺陷。**
 
+### ★ 2026-09-17 更新：step 7 的**产物机制已进版本库**（但 hook 仍未注册）
+
+原先"第 7 步"这条只有声明；现在它的**产物机制**（`produces: [views, snapshots]` 里的 `views`）
+已内化进版本库，**是否注册 `publish_hook` 仍属待裁定**：
+
+| 项 | 现状 |
+|---|---|
+| 机制 | `scripts/views/build.py`（构建三份入口 JSON + `--check` 跑中立守卫）· `scripts/views/render.py`（三份人话 MD + 自包含 `dashboard.html`） |
+| 来源 | 承接自**会话内脚本** `.workbuddy/seed/build_views.py` / `build_readable_views.py`（`gitignore` 内、从不进版本库） |
+| 消费方 | ① 两个 CLI（可复跑，见 `test_prompt_cold_start_e2e.md`）② `tests/unit/test_views.py`（26 条） |
+| **未做的接线** | `Pipeline.register_publish_hook()` **仍无生产调用方** —— 且当下**即使注册也不会触发**：`run_daily` 仅在 `changed and not blocked` 时调它，而实测 `blocked=True` |
+| **待裁定** | 是否现在注册 `publish_hook`（= 把 step 7 从 `deferred_by_design` 里挪出来）。**未自裁**（`R-04`） |
+
+⇒ 测试时看到 `views/` 里三份 JSON + `dashboard.html` 由这两个 CLI 产出、而步骤 7 仍标
+`deferred_by_design`，**这不矛盾**：机制在、编排钩子未注册。
+
 ---
 
 ## 二、规则层：3 个 `pointer_skeleton`（只声明结构位，不实现行为）
@@ -162,6 +178,10 @@
 | 真源某些表 0 行 | **待判定**：可能是"还没采集"，不是"功能没做" | `G-03`：0 行 ≠ 已验证 |
 | 门禁非 0 退出码 / 判据 FAIL | **真缺陷** | `run_all_gates.py` / `stage_gate.py` |
 | ★ **`prices` / `benchmarks` 无生产写入方** | **★ 真缺陷候选**（**不是**设计留空） | 见 §八 |
+| 三个阅读入口由 `views/build.py` + `views/render.py` 产出，而 step 7 仍报 `deferred_by_design` | **设计如此**（机制已进版本库、编排钩子未注册） | §一 的 2026-09-17 更新 |
+| 公司页「当前建议」与每日页「建议变化」**不一致** | **真缺陷**（应为同一 `supersedes` 链末节点；`B-7` 已修，再现即回归） | `batch3_views_internalization_2026-09-17.md §五` |
+| 视图里出现**真源里没有的**数字 / 日期 / 公司名 | **真缺陷**（元断言覆盖构建/渲染源码；真源自身被污染时另需人工核） | 同上 §三 |
+| `daily_page.run_summary.blocked` / `.gaps` 显示"（取不到）" | **设计如此**（`CheckRecord` 无此二字段，且 `state.json` 缺失 ⇒ 如实为空，不臆造） | `gap-check-record-lacks-blocked-and-gaps` |
 
 ---
 

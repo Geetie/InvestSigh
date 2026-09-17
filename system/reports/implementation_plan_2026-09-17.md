@@ -19,10 +19,11 @@
 | — §2.1 `B-1` | ✅ | `rules.decide()` 新增 **P-08 门**（R4 后 / R2 前）+ `build_recommendation` 的 `FalsifiersMissing`。★ 连带发现：测试夹具 `make_forecast` 的缺省驱动**就是**被禁形态 ⇒ 17 条用例同时变红，**那恰是"该缺陷从未被任何判据覆盖过"的证据** |
 | — §2.1 `B-2`（`dependency_edges`） | ⏳ **未做** | 原排期在批次 I 第 4 步 |
 | — §5 批次 I 附带 | ✅ 额外修掉 | ① `step.py` 恒回传 `judgment_change={}`（回执撒谎 ⇒ `G1-02①` 对合法买入日**假红**）② `traceback` 按 `recommendation_id` 去重 → 改按**业务键**（与 `rules.recommendation_business_key` 唯一真源） |
-| **II**（P1：落库路径进版本库） | **部分执行（机制已内化）** | `scripts/ingest/research_ingest.py` + `raw/inbox/research_manifest_2026-09-17.json`；★ **往返等价实测通过**（17 表 / 188 行逐一重建）；`unit` 242 passed |
+| **II**（P1：落库路径进版本库） | **已执行（机制全部内化）** | ① `scripts/ingest/research_ingest.py` + `raw/inbox/research_manifest_2026-09-17.json`（**往返等价实测通过**：17 表 / 188 行逐一重建）；② `scripts/views/build.py` + `render.py`（**三份入口的构建与渲染**，见 `batch3_views_internalization_2026-09-17.md`）；`unit` 268 passed |
 | — §2.2 `B-3`（落库脚本） | ✅ 机制部分 | 见上。★ 内化过程中抓到 **3 个真缺陷**（`quote_hash` 契约写错 / `period_bucket` 年份季度互换 / 幂等键丢版本），逐条见 §0.0 下方与收口报告 |
 | — §2.2 `B-4` / `S-5`（会话产出受控通路） | ✅ | 投递口第三类投递物 `research_manifest_*` + STEP 1 **按文件名分派** |
-| — §7.3 `B-7`（入口与 `supersedes` 链） | ⏳ **未做** | 与 `S-4`（`views` 构建/渲染内化）**一起**做 —— `build_views.py` / `build_readable_views.py` 仍未内化 |
+| — §7.3 `B-7`（入口与 `supersedes` 链） | ✅ **已修** | 根因精确化：原按 `recorded_seq` 比大小，而真实数据 **5 行该值全为 1** ⇒ `>` 从不成立 ⇒ 取到文件第一条（NVIDIA = 被推翻的 v1 `buy`）。改为 `rules.current_recommendation_row()`（`supersedes` 链末节点）；**同一实现也迁到 `decision/rules.py` 供 `traceback`/`review_return` 复用**（原先三处各一份） |
+| — §6 `S-4`（`views` 构建/渲染内化） | ✅ **已做** | `build_views.py` / `build_readable_views.py`（3063 行会话脚本的 views 部分）→ `scripts/views/build.py` + `render.py`；★ 元断言钉死"叙事不得写回代码"（见收口报告 §三） |
 | **III**（`B-9` 提问入口 / `B-10` 事件触发） | ⏳ 未开始 | 源稿点名的两条 ❌ |
 | **IV / V** | ⏳ 未开始 | 需先拍板（§8 的 7 件） |
 
@@ -33,6 +34,9 @@
 | `gap-claim-period-bucket-swapped` | `facts/claims.jsonl` **5 行**的 `impact_capability.period_bucket` = `CY2Q2026`（应 `CY2026Q2`）。**被独立佐证指纹消费**（`Ch9 §3.4.7`）；当前组内一致故**未致错**，但潜伏 | 数据（需裁定更正版与计数口径） |
 | `gap-claim-metric-session-override` | 10 行主张的 `metric` 来自会话**显式覆盖值**（`anthropic-2gw`），不由 `key` 派生 ⇒ 与机制派生约定**不统一** | 口径 |
 | `gap-step6-fact-set-change-not-derived` | `run_decide._run_core` 的 `JudgmentChange(fact_set_changed=True)` **恒真、尚未由数据判定** ⇒ 每日回执恒记"判断已变" | 设计（"判断是否改变"的判定归属） |
+| `gap-check-record-lacks-blocked-and-gaps` | `CheckRecord` **无** `blocked` / `gaps` 字段 ⇒ 这两个数**只能**来自运行态 `state.json`（不在版本库）。视图如实标 `null`，但"每天跑日报"若 `state.json` 丢失就看不到阻断状态 | 契约缺口（建议 `CheckRecord` 补两字段） |
+| `gap-delayed-flag-all-false` | `facts/prices.jsonl` **160 行**的 `delayed` 全为 `False`，而读数实为 09-16 收盘（读于 09-17）⇒ 该二态字段表达力不足（与既有 `gap-delayed-bool-two-state` 同族，本次给出实测计数） | 契约缺口 |
+| `gap-publish-hook-not-registered` | `scripts/views/` 机制已进版本库，但 `Pipeline.register_publish_hook()` **仍无生产调用方**（step 7 仍 `deferred_by_design`）；且当下**即使注册也不触发**（`run_daily` 仅在 `changed and not blocked` 时调用）⇒ **是否现在接线属裁定** | 设计边界（`R-04` 未自裁） |
 
 ---
 

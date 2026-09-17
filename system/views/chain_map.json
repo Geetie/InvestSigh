@@ -956,25 +956,20 @@
  ],
  "data_gaps": [
   {
-   "gap": "上游具名供应商未在本次取得的一手披露中点名",
-   "detail": "NVIDIA 10-Q 的 Item 1A 风险因素在本次取得副本中被截断；先进封装/HBM 供应商的具名关系因此**不得**被断言",
+   "gap": "`facts/implied_requirements.jsonl` 本轮 0 行",
+   "detail": "该表 0 行 ⇒ 依赖它的判断只能如实答'缺口'（`G-03`：0 行 ≠ 已验证）。",
    "blocked_steps": [
-    "第 3 步（部分）"
-   ]
+    "第 6 步（价格隐含要求）"
+   ],
+   "source": "facts/implied_requirements.jsonl（空表扫描）"
   },
   {
-   "gap": "传导路径仅到 1 跳",
-   "detail": "库内 relations 仅 7 条且 NVDA 出边有限，2 跳及以上在库内不存在",
+   "gap": "`facts/dependency_edges.jsonl` 本轮 0 行",
+   "detail": "该表 0 行 ⇒ 依赖它的判断只能如实答'缺口'（`G-03`：0 行 ≠ 已验证）。",
    "blocked_steps": [
-    "第 5 步（多跳）"
-   ]
-  },
-  {
-   "gap": "价格隐含要求（反向估值）本轮 0 行",
-   "detail": "缺 WACC / 高增长年数 / ROIIC 等折现参数（rules/freeze.yaml::p05.algorithm = tbd）",
-   "blocked_steps": [
-    "第 6 步（价格隐含）"
-   ]
+    "第 5 步（撤回追踪 `T12`）"
+   ],
+   "source": "facts/dependency_edges.jsonl（空表扫描）"
   }
  ]
 }

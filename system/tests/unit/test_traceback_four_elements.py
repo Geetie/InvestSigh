@@ -3,8 +3,12 @@
 覆盖 WS-B 在 `scripts/trace/traceback.py` 上交付的两处修复，以及四条边界的**可执行**证据：
 
 1. **版本解析**：同一 `recommendation_id` 有多条版本行（追加式不可变，`Ch9 §3.4.2`）时，
-   取 `version` **最大**的那条作为"当前结论"（`_latest_version_row`）。原实现取**第一条**
+   取 `version` **最大**的那条作为"当前结论"（`latest_version_row`）。原实现取**第一条**
    ⇒ 永远读到 v1 种子行 ⇒ 即便 v2 已补齐 `evidence_version_ids`（含 `dv-…`），判据仍恒红。
+   ★ 2026-09-17：该函数已由 `scripts.trace.traceback` **迁到 `scripts.decision.rules`**
+   （`G-06` 唯一真源）—— 因为 `views/` 的构建也需要同类选择，两处各写一份正是漂移源。
+   本文件仍覆盖它（行为不变），另见 `tests/decision/test_current_recommendation.py` 覆盖
+   **另一个问题**（同一业务键下 `supersedes` 链的末节点，即 `B-7`）。
 2. **`computation` 要素的两条解析路径**（`T-10` 裁决①的配套修复）：不仅能按 `derived_id`
    直接匹配，还能按建议声明的 `evidence_version_ids` 里的 `dv-…` 解析到 `derived/`。
 
@@ -23,9 +27,9 @@ import json
 from pathlib import Path
 
 from conftest import run_gate_inproc
+from scripts.decision.rules import latest_version_row
 from scripts.trace.traceback import (
     ELEMENTS,
-    _latest_version_row,
     traceback as tb_traceback,
     traceback_coverage,
 )
@@ -102,18 +106,23 @@ def _rec_row(
 
 
 def test_latest_version_row_picks_max_version_then_recorded_seq() -> None:
-    """`_latest_version_row` 取 `(version, recorded_seq)` 最大者；同键取**靠后**那条。"""
+    """`latest_version_row` 取 `(version, recorded_seq)` 最大者；同键取**靠后**那条。"""
     v1 = {"recommendation_id": "rec-x", "version": 1, "recorded_seq": 1}
     v2 = {"recommendation_id": "rec-x", "version": 2, "recorded_seq": 2}
     # 乱序输入：当前版本是 v2（不是"文件里第一条"）
-    assert _latest_version_row([v2, v1])["version"] == 2
-    assert _latest_version_row([v1, v2])["version"] == 2
+    assert latest_version_row([v2, v1])["version"] == 2
+    assert latest_version_row([v1, v2])["version"] == 2
     # 同 version：recorded_seq 大者胜
     a = {"recommendation_id": "rec-x", "version": 2, "recorded_seq": 1}
     b = {"recommendation_id": "rec-x", "version": 2, "recorded_seq": 9}
-    assert _latest_version_row([a, b])["recorded_seq"] == 9
+    assert latest_version_row([a, b])["recorded_seq"] == 9
     # 缺 version/recorded_seq：按 (1, 0) 归一，不抛
-    assert _latest_version_row([{}, {"version": 5}])["version"] == 5
+    assert latest_version_row([{}, {"version": 5}])["version"] == 5
+    # ★ 反向对照（`G-05`）：**空集必须响亮** —— 不得凭空猜一个"当前版本"
+    import pytest
+
+    with pytest.raises(ValueError, match="非空"):
+        latest_version_row([])
 
 
 # ─────────────────────────── 2. computation 要素 ───────────────────────────

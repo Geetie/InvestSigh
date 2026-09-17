@@ -514,6 +514,98 @@ def recommendation_business_key(row: Mapping[str, Any]) -> tuple[str, str]:
     return (str(row.get("security_id", "")), str(row.get("start_date", "")))
 
 
+def latest_version_row(rows: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
+    """**同一 `recommendation_id`** 的多条版本行里选**当前版本**（`Ch9 §3.4.2`）。
+
+    排序键 = `(version, recorded_seq)`；同键取**文件中靠后**那条（`>=` 保证后者胜）。
+    `version` 缺省视为 `1`、`recorded_seq` 缺省视为 `0`（与 `Recommendation` 的默认一致）。
+
+    ★ 本函数**原在** `scripts.trace.traceback`（私有名 `_latest_version_row`）。
+      2026-09-17 内化 `views/` 构建时**迁到本模块并公开**：它回答的是"**这条建议的当前版本是哪行**"
+      —— 属决策域语义，且消费方已有三处（`traceback` / `review_return` / `views.build`）。
+      三处各写一份正是本仓最高频的漂移源（`G-06`／`G-45`），故收敛到唯一真源。
+
+    ★ 注意与 `current_recommendation_row()` 的**分工**：
+
+    | 函数 | 回答的问题 | 分组 |
+    |---|---|---|
+    | 本函数 | "**同一条**建议有多版，哪版是当前" | 按 `recommendation_id` |
+    | `current_recommendation_row()` | "**同一个业务键**下，哪条建议是当前"（可能换了 id） | 按业务键 + `supersedes` 链 |
+    """
+    best: Mapping[str, Any] | None = None
+    best_key: tuple[int, int] | None = None
+    for row in rows:
+        key = (int(row.get("version") or 1), int(row.get("recorded_seq") or 0))
+        if best_key is None or key >= best_key:
+            best_key = key
+            best = row
+    if best is None:  # pragma: no cover - 调用方保证 rows 非空
+        raise ValueError("latest_version_row() 需要非空 rows（不得对空集猜一个版本）")
+    return best
+
+
+def supersedes_map(rows: Sequence[Mapping[str, Any]]) -> dict[str, str]:
+    """`{被取代的 recommendation_id → 取代它的 recommendation_id}`。
+
+    ★ 一次修正**可能换 id**（本仓实测形态：`rec-sec-nvda-2026-08-03` →
+      `rec-sec-nvda-2026-08-03-session-review`，后者 `supersedes` 前者）。
+      此时"哪条是当前"**不能只看 `version`/`recorded_seq`** —— 实测这两行**都是** `version=1`
+      且 `recorded_seq=1` ⇒ 任何按数值取最大的实现都退化成"取文件里第一条或最后一条"，
+      即**取决于行的物理顺序**。`supersedes` 才是这个关系的**显式声明**。
+
+    ★ 同一行被多条行取代（分叉）时保留**首个**声明者，并由 `current_recommendation_row()`
+      的多头检测如实报出 —— 不在此处静默择一。
+    """
+    out: dict[str, str] = {}
+    for row in rows:
+        target = str(row.get("supersedes") or "").strip()
+        if not target:
+            continue
+        rid = str(row.get("recommendation_id") or "")
+        out.setdefault(target, rid)
+    return out
+
+
+def current_recommendation_row(rows: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
+    """**同一业务键**的一组建议行 → 取"当前建议"（`supersedes` 链的**末节点**）。
+
+    算法：① 由 `supersedes_map()` 得到"谁取代了谁"；② 末节点 = **没有**被任何行取代的那条；
+    ③ 若末节点不唯一（链条分叉）或为空（链成环），**回退**到 `latest_version_row()` 并
+    由 `current_recommendation_multihead()` 让调用方如实报出（**不静默**）。
+
+    ★★ **为什么必须有这个函数**（`B-7`，2026-09-17 冷启动实测）：
+      `views/company_pages.json` 的 `current_recommendation` 原先按 `recorded_seq` 取最大，
+      而真实数据里全部 5 行的 `recorded_seq` **都是 1** ⇒ `>` 比较**从不成立** ⇒ 取到
+      **文件中第一条** = `rec-sec-nvda-2026-08-03`（v1、`buy`、已实现收益依据）——
+      即**已被评审明确推翻的旧建议**被当作"当前建议"渲染给读者；同一页的"反证"却取自
+      取代它的那条（`pending`）⇒ **同页不同源、自相矛盾**。
+      `traceback` 也踩同一形态（靠 `>=` 取到靠后那条纯属**巧合**，不是按语义选对）。
+
+    ★ 结论：**"哪条是当前"必须由图关系决定，不能由行的物理顺序决定。**
+    """
+    if not rows:
+        raise ValueError("current_recommendation_row() 需要非空 rows")
+    superseded = supersedes_map(rows)
+    heads = [r for r in rows if str(r.get("recommendation_id") or "") not in superseded]
+    if len(heads) == 1:
+        return heads[0]
+    # 回退：链成环（heads 空）或分叉（heads >1）—— 一律按版本水位取一条，并让调用方报出。
+    return latest_version_row(heads or rows)
+
+
+def current_recommendation_multihead(rows: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+    """该组里 `supersedes` 链的**末节点不唯一**时，返回全部末节点 id（唯一时返回空元组）。
+
+    供消费方如实记 note（`R-03`：降级要**显式可见**）—— 判据不因数据分叉而静默择一。
+    """
+    if not rows:
+        return ()
+    superseded = supersedes_map(rows)
+    heads = [str(r.get("recommendation_id") or "") for r in rows
+             if str(r.get("recommendation_id") or "") not in superseded]
+    return tuple(heads) if len(heads) > 1 else ()
+
+
 def _recommendation_identity(rec: Recommendation) -> tuple[str, str]:
     """从 `Recommendation` 取业务键 `(security_id, start_date)`（版本链分组键）。"""
     return (rec.security_id, rec.start_date.isoformat())

@@ -24,8 +24,7 @@
     "company-nvidia"
    ],
    "source": "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027",
-   "source_tier": "primary",
-   "discovery_note": "事件发现时间 = 系统首次获得（first_seen_at）；**先显示发现，完成分析后才更新判断**"
+   "source_tier": "primary"
   },
   {
    "event_id": "evt-nvda-q3fy27-guidance",
@@ -35,8 +34,7 @@
     "company-nvidia"
    ],
    "source": "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027",
-   "source_tier": "primary",
-   "discovery_note": "事件发现时间 = 系统首次获得（first_seen_at）；**先显示发现，完成分析后才更新判断**"
+   "source_tier": "primary"
   },
   {
    "event_id": "evt-nvda-supply-commitments-279b",
@@ -46,8 +44,7 @@
     "company-nvidia"
    ],
    "source": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/nvda-20260726.htm",
-   "source_tier": "primary",
-   "discovery_note": "事件发现时间 = 系统首次获得（first_seen_at）；**先显示发现，完成分析后才更新判断**"
+   "source_tier": "primary"
   },
   {
    "event_id": "evt-tsmc-q2-2026-earnings",
@@ -57,8 +54,7 @@
     "company-tsmc"
    ],
    "source": "https://pr.tsmc.com/chinese/news/3326",
-   "source_tier": "primary",
-   "discovery_note": "事件发现时间 = 系统首次获得（first_seen_at）；**先显示发现，完成分析后才更新判断**"
+   "source_tier": "primary"
   },
   {
    "event_id": "evt-amd-q2-2026-earnings",
@@ -68,10 +64,10 @@
     "company-amd"
    ],
    "source": "https://amd.com/zh-cn/newsroom/press-releases/amd-2q-2026-earnings.html",
-   "source_tier": "primary",
-   "discovery_note": "事件发现时间 = 系统首次获得（first_seen_at）；**先显示发现，完成分析后才更新判断**"
+   "source_tier": "primary"
   }
  ],
+ "important_information_note": "事件发现时间 = 系统首次获得（`first_seen_at`）；**先显示发现，完成分析后才更新判断**。",
  "affected_companies": [
   {
    "impact_id": "imp-nvda-01-dc-demand",
@@ -166,15 +162,6 @@
  "recommendation_changes": [
   {
    "company_id": "company-nvidia",
-   "recommendation_id": "rec-sec-nvda-2026-08-03",
-   "action": "buy",
-   "status": "active",
-   "change_reason": "meets_buy_conditions",
-   "supersedes": null,
-   "falsifiers": []
-  },
-  {
-   "company_id": "company-nvidia",
    "recommendation_id": "rec-sec-nvda-2026-08-03-session-review",
    "action": "pending",
    "status": "uncertain",
@@ -184,7 +171,18 @@
     "Q3 FY2027 实际收入 < $105.84B（指引下沿）⇒ 需求扩张被证伪",
     "GAAP 毛利率连续两季 < 74.0% ⇒ 75% 平台毛利可持续被证伪",
     "数据中心收入同比增速连续两季 < 50% 且先进封装/HBM 交期同时回落 ⇒ 供给紧缺支撑被证伪"
-   ]
+   ],
+   "first_seen_at": "2026-09-17T08:47:00Z"
+  },
+  {
+   "company_id": "company-nvidia",
+   "recommendation_id": "rec-sec-nvda-2026-08-03",
+   "action": "buy",
+   "status": "active",
+   "change_reason": "meets_buy_conditions",
+   "supersedes": null,
+   "falsifiers": [],
+   "first_seen_at": null
   },
   {
    "company_id": "company-tsmc",
@@ -196,7 +194,8 @@
    "falsifiers": [
     "HPC 平台收入连续两季环比下滑",
     "先进制程（≤7nm）收入占比跌破 70%"
-   ]
+   ],
+   "first_seen_at": "2026-09-17T08:47:00Z"
   },
   {
    "company_id": "company-microsoft",
@@ -207,7 +206,8 @@
    "supersedes": null,
    "falsifiers": [
     "Azure 收入增速回落至 30% 以下且资本开支继续上升"
-   ]
+   ],
+   "first_seen_at": "2026-09-17T08:47:00Z"
   },
   {
    "company_id": "company-amd",
@@ -219,31 +219,36 @@
    "falsifiers": [
     "AMD 数据中心收入连续两季环比下滑",
     "Helios 出货时间表推迟两个季度以上"
-   ]
+   ],
+   "first_seen_at": "2026-09-17T08:47:00Z"
   }
  ],
  "next_verification_nodes": [
   {
-   "company_id": "company-nvidia",
-   "review_date": "2026-11-25"
-  },
-  {
-   "company_id": "company-tsmc",
+   "company_id": "company-amd",
+   "recommendation_id": "rec-sec-amd-2026-08-03-session-review",
    "review_date": "2026-11-25"
   },
   {
    "company_id": "company-microsoft",
+   "recommendation_id": "rec-sec-msft-2026-08-03-session-review",
    "review_date": "2026-11-25"
   },
   {
-   "company_id": "company-amd",
+   "company_id": "company-nvidia",
+   "recommendation_id": "rec-sec-nvda-2026-08-03-session-review",
+   "review_date": "2026-11-25"
+  },
+  {
+   "company_id": "company-tsmc",
+   "recommendation_id": "rec-sec-tsmc-2026-08-03-session-review",
    "review_date": "2026-11-25"
   }
  ],
  "unfinished_verification": [
   {
    "kind": "未完成核验",
-   "detail": "claim.status=pending_verification（尚未做交叉验证/采纳判定）",
+   "detail": "`claim.status=pending_verification`（尚未做交叉验证 / 采纳判定）",
    "refs": [
     "claim-src-amd-q2-2026-pr-anthropic-2gw-mi450",
     "claim-src-amd-q2-2026-pr-dc-rev-q2-2026",
@@ -257,37 +262,75 @@
  "stale_or_delayed_data": [
   {
    "kind": "行情时效",
-   "detail": "行情为 2026-09-16 美东收盘（延迟 1 日，非实时报价）",
+   "detail": "160 条价格快照（5 只证券），区间 2026-08-03..2026-09-16；真源 `delayed` 标记：全部为假",
    "as_of": "2026-09-16",
-   "delayed": true
+   "delayed": false
   }
  ],
- "failed_research_tasks": [
+ "failed_tasks": [
   {
-   "kind": "研究任务失败",
    "task_id": "task_check_2026-09-17_full",
+   "kind": "运行回执",
    "status": "failed",
    "last_valid_result_ref": null
   },
   {
-   "kind": "研究任务失败",
    "task_id": "task_degrade::2026-09-17::full",
+   "kind": "降级标记",
+   "status": "failed",
+   "last_valid_result_ref": null
+  },
+  {
+   "task_id": "task_check_2026-09-17_full_r1",
+   "kind": "运行回执",
    "status": "failed",
    "last_valid_result_ref": null
   }
  ],
  "run_summary": {
   "changed": false,
-  "signals_emitted": 1,
+  "signals_emitted": 0,
   "degraded": true,
   "blocked": true,
-  "gaps": 8,
-  "note": "有 1 条由系统默认路径产出的 buy（已由会话评审覆盖为待判断）；无变化日产信号本身构成一条真实缺陷（见报告）。"
+  "gaps": 10,
+  "note": "读数来源：state.json::run_2026-09-17_full、check_record::check_2026-09-17_full_r1。 ★ 无变化日产出 0 条新信号 = **正确状态**（`Ch1 §D.3` 反 KPI）。"
  },
  "reviews_separated": {
-  "research_quality": "证据链完整、定位与引文双向可复查；转述已去重不计独立佐证",
-  "forecast_quality": "默认决策路径把已实现收益当预期收益（price_expectation + timing）",
-  "investment_result": "已实现相对收益可算（NVDA +3.63% vs AGIX +2.98%）；基准**预测**仍缺（benchmark_forecast）",
-  "note": "三层**分别报告，不合并为单一评分**"
- }
+  "research_quality": {
+   "error_axis": [],
+   "note": "research_quality 层本轮**无**错误方向可归因（证据链完整、定位可复查）。"
+  },
+  "forecast_quality": {
+   "error_axis": [
+    "timing",
+    "price_expectation"
+   ],
+   "note": "一条错误可跨多个方向：此处即 `price_expectation` + `timing`。"
+  },
+  "investment_result": {
+   "error_axis": [
+    "benchmark_forecast"
+   ],
+   "note": "`benchmark_forecast` 方向：基准的**预测**仍缺（只算出了已实现相对收益）。"
+  },
+  "note": "三层**分别报告，不合并为单一评分**（`Ch10 §C.1`）。"
+ },
+ "data_gaps": [
+  {
+   "gap": "`facts/implied_requirements.jsonl` 本轮 0 行",
+   "detail": "该表 0 行 ⇒ 依赖它的判断只能如实答'缺口'（`G-03`：0 行 ≠ 已验证）。",
+   "blocked_steps": [
+    "第 6 步（价格隐含要求）"
+   ],
+   "source": "facts/implied_requirements.jsonl（空表扫描）"
+  },
+  {
+   "gap": "`facts/dependency_edges.jsonl` 本轮 0 行",
+   "detail": "该表 0 行 ⇒ 依赖它的判断只能如实答'缺口'（`G-03`：0 行 ≠ 已验证）。",
+   "blocked_steps": [
+    "第 5 步（撤回追踪 `T12`）"
+   ],
+   "source": "facts/dependency_edges.jsonl（空表扫描）"
+  }
+ ]
 }

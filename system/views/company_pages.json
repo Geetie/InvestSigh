@@ -150,26 +150,45 @@
     }
    ],
    "current_recommendation": {
-    "recommendation_id": "rec-sec-nvda-2026-08-03",
-    "action": "buy",
-    "status": "active",
+    "recommendation_id": "rec-sec-nvda-2026-08-03-session-review",
+    "action": "pending",
+    "status": "uncertain",
     "horizon": "2q",
     "start_date": "2026-08-03",
-    "review_date": "2026-09-16",
-    "rule_version": "decision-v1",
-    "change_reason": "meets_buy_conditions",
-    "falsifiers": [],
-    "evidence_gaps": [],
-    "verification_conditions": [],
-    "assumptions": [],
-    "supersedes": null,
-    "opportunity_types": []
+    "review_date": "2026-11-25",
+    "rule_version": "decision-v1-session-review",
+    "change_reason": "会话修正：系统默认路径（scripts/decision/run_decide.py::_run_core）把**已实现的区间总回报**当作预期收益，据此产出 buy（rec-sec-nvda-2026-08-03），违反 P-08「不得用 past_return 做收益预测」，且缺 falsifiers。本会话以独立判断覆盖：相对判断被 scenario_method_status=pending 设计性阻塞，且无可辩护的价格隐含假设 ⇒ 结论为**待判断**，不出买入。",
+    "falsifiers": [
+     "Q3 FY2027 实际收入 < $105.84B（指引下沿）⇒ 需求扩张被证伪",
+     "GAAP 毛利率连续两季 < 74.0% ⇒ 75% 平台毛利可持续被证伪",
+     "数据中心收入同比增速连续两季 < 50% 且先进封装/HBM 交期同时回落 ⇒ 供给紧缺支撑被证伪"
+    ],
+    "evidence_gaps": [
+     "无 WACC / 高增长年数 / ROIIC ⇒ 无可辩护的价格区间",
+     "基准相对判断被 rules/scenario.yaml::scenario_method_status=pending 阻塞",
+     "facts/implied_requirements.jsonl 本轮 0 行（反向估值未产出）",
+     "公开预测样本仅 2 份且全为公司指引；无有 raw 定位面的券商预测"
+    ],
+    "verification_conditions": [
+     "FY2027Q3 季报核对收入与 GAAP 毛利率",
+     "FY2027Q4 季报核对毛利率是否见底于 71–72%",
+     "先进封装/HBM 交期与价格（下一季公司口径）"
+    ],
+    "assumptions": [
+     "数据中心收入同比增速维持 50% 以上（FY2027Q2 实际 +117%）",
+     "FY2027Q3 收入落在 $105.84B–$110.16B（指引 ±2%，不含中国数据中心算力收入）",
+     "GAAP 毛利率守住 74.0%±50bp 且不再下台阶",
+     "先进封装/HBM 供给不长期卡住出货"
+    ],
+    "supersedes": "rec-sec-nvda-2026-08-03",
+    "opportunity_types": [
+     "A"
+    ]
    },
    "change_this_run": {
     "baseline_version": 2,
     "version_kind": "forecast_revision",
-    "increment": null,
-    "note": "本日新增 version=2（补齐历史数据引用与计算底稿锚点）；无新信息时**不**制造状态变化"
+    "increment": null
    },
    "expanded": {
     "full_baseline": {
@@ -485,6 +504,7 @@
      }
     ],
     "counter_evidence": {
+     "source_row": "baseline-nvda-001",
      "falsifiers": [
       "Q3 FY2027 实际收入 < $105.84B（指引下沿）",
       "GAAP 毛利率连续两季 < 74.0%",
@@ -494,16 +514,18 @@
       "公司 FY2028 约 +70% 的营收指引尚未兑现（供应受限口径）",
       "Vera Rubin 占 Q3 数据中心收入约 20% 为预期值"
      ],
-     "note": "反证与支持证据同等可见（不默认折叠）"
+     "note": "反证与支持证据同等可见（不默认折叠）；本块取自**研究基线**，与 `current_recommendation.falsifiers`（建议自身）是两个对象"
     },
     "history_versions": [
      {
+      "baseline_id": "baseline-nvda-001",
       "version": 1,
       "conclusion_version": 1,
       "version_kind": null,
       "prev_version_id": null
      },
      {
+      "baseline_id": "baseline-nvda-001",
       "version": 2,
       "conclusion_version": 2,
       "version_kind": "forecast_revision",
@@ -629,8 +651,7 @@
    "change_this_run": {
     "baseline_version": 2,
     "version_kind": "forecast_revision",
-    "increment": null,
-    "note": "本日新增 version=2（补齐历史数据引用与计算底稿锚点）；无新信息时**不**制造状态变化"
+    "increment": null
    },
    "expanded": {
     "full_baseline": {
@@ -879,6 +900,7 @@
      }
     ],
     "counter_evidence": {
+     "source_row": "baseline-tsmc-001",
      "falsifiers": [
       "HPC 平台收入连续两季环比下滑",
       "先进制程（≤7nm）收入占比跌破 70%"
@@ -886,16 +908,18 @@
      "unmet_conditions": [
       "Q3 指引（$44.6–45.8B）尚未兑现"
      ],
-     "note": "反证与支持证据同等可见（不默认折叠）"
+     "note": "反证与支持证据同等可见（不默认折叠）；本块取自**研究基线**，与 `current_recommendation.falsifiers`（建议自身）是两个对象"
     },
     "history_versions": [
      {
+      "baseline_id": "baseline-tsmc-001",
       "version": 1,
       "conclusion_version": 1,
       "version_kind": null,
       "prev_version_id": null
      },
      {
+      "baseline_id": "baseline-tsmc-001",
       "version": 2,
       "conclusion_version": 2,
       "version_kind": "forecast_revision",
@@ -1018,8 +1042,7 @@
    "change_this_run": {
     "baseline_version": 2,
     "version_kind": "forecast_revision",
-    "increment": null,
-    "note": "本日新增 version=2（补齐历史数据引用与计算底稿锚点）；无新信息时**不**制造状态变化"
+    "increment": null
    },
    "expanded": {
     "full_baseline": {
@@ -1257,22 +1280,25 @@
      }
     ],
     "counter_evidence": {
+     "source_row": "baseline-msft-001",
      "falsifiers": [
       "Azure 收入增速回落至 30% 以下且资本开支继续上升"
      ],
      "unmet_conditions": [
       "FY27Q1 约 +45% 的 Azure 增速为预期"
      ],
-     "note": "反证与支持证据同等可见（不默认折叠）"
+     "note": "反证与支持证据同等可见（不默认折叠）；本块取自**研究基线**，与 `current_recommendation.falsifiers`（建议自身）是两个对象"
     },
     "history_versions": [
      {
+      "baseline_id": "baseline-msft-001",
       "version": 1,
       "conclusion_version": 1,
       "version_kind": null,
       "prev_version_id": null
      },
      {
+      "baseline_id": "baseline-msft-001",
       "version": 2,
       "conclusion_version": 2,
       "version_kind": "forecast_revision",
@@ -1380,8 +1406,7 @@
    "change_this_run": {
     "baseline_version": 2,
     "version_kind": "forecast_revision",
-    "increment": null,
-    "note": "本日新增 version=2（补齐历史数据引用与计算底稿锚点）；无新信息时**不**制造状态变化"
+    "increment": null
    },
    "expanded": {
     "full_baseline": {
@@ -1596,6 +1621,7 @@
      }
     ],
     "counter_evidence": {
+     "source_row": "baseline-amd-001",
      "falsifiers": [
       "AMD 数据中心收入连续两季环比下滑",
       "Helios 出货时间表推迟两个季度以上"
@@ -1604,16 +1630,18 @@
       "Helios 尚未出货（2026Q3 起）",
       "Anthropic 2GW 部署首 1GW 自 2027H1"
      ],
-     "note": "反证与支持证据同等可见（不默认折叠）"
+     "note": "反证与支持证据同等可见（不默认折叠）；本块取自**研究基线**，与 `current_recommendation.falsifiers`（建议自身）是两个对象"
     },
     "history_versions": [
      {
+      "baseline_id": "baseline-amd-001",
       "version": 1,
       "conclusion_version": 1,
       "version_kind": null,
       "prev_version_id": null
      },
      {
+      "baseline_id": "baseline-amd-001",
       "version": 2,
       "conclusion_version": 2,
       "version_kind": "forecast_revision",
@@ -1642,8 +1670,7 @@
    "change_this_run": {
     "baseline_version": null,
     "version_kind": null,
-    "increment": null,
-    "note": "本日新增 version=2（补齐历史数据引用与计算底稿锚点）；无新信息时**不**制造状态变化"
+    "increment": null
    },
    "expanded": {
     "full_baseline": null,
@@ -1655,9 +1682,10 @@
     },
     "raw_evidence": [],
     "counter_evidence": {
+     "source_row": "",
      "falsifiers": [],
      "unmet_conditions": [],
-     "note": "反证与支持证据同等可见（不默认折叠）"
+     "note": "反证与支持证据同等可见（不默认折叠）；本块取自**研究基线**，与 `current_recommendation.falsifiers`（建议自身）是两个对象"
     },
     "history_versions": [],
     "study_state": "**尚未完成研究** —— 本页只显示产业位置与研究缺口，不代表'中性'或'没有投资机会'"
@@ -1682,8 +1710,7 @@
    "change_this_run": {
     "baseline_version": null,
     "version_kind": null,
-    "increment": null,
-    "note": "本日新增 version=2（补齐历史数据引用与计算底稿锚点）；无新信息时**不**制造状态变化"
+    "increment": null
    },
    "expanded": {
     "full_baseline": null,
@@ -1695,9 +1722,10 @@
     },
     "raw_evidence": [],
     "counter_evidence": {
+     "source_row": "",
      "falsifiers": [],
      "unmet_conditions": [],
-     "note": "反证与支持证据同等可见（不默认折叠）"
+     "note": "反证与支持证据同等可见（不默认折叠）；本块取自**研究基线**，与 `current_recommendation.falsifiers`（建议自身）是两个对象"
     },
     "history_versions": [],
     "study_state": "**尚未完成研究** —— 本页只显示产业位置与研究缺口，不代表'中性'或'没有投资机会'"
@@ -1715,8 +1743,7 @@
    "change_this_run": {
     "baseline_version": null,
     "version_kind": null,
-    "increment": null,
-    "note": "本日新增 version=2（补齐历史数据引用与计算底稿锚点）；无新信息时**不**制造状态变化"
+    "increment": null
    },
    "expanded": {
     "full_baseline": null,
@@ -1728,9 +1755,10 @@
     },
     "raw_evidence": [],
     "counter_evidence": {
+     "source_row": "",
      "falsifiers": [],
      "unmet_conditions": [],
-     "note": "反证与支持证据同等可见（不默认折叠）"
+     "note": "反证与支持证据同等可见（不默认折叠）；本块取自**研究基线**，与 `current_recommendation.falsifiers`（建议自身）是两个对象"
     },
     "history_versions": [],
     "study_state": "**尚未完成研究** —— 本页只显示产业位置与研究缺口，不代表'中性'或'没有投资机会'"
@@ -1748,8 +1776,7 @@
    "change_this_run": {
     "baseline_version": null,
     "version_kind": null,
-    "increment": null,
-    "note": "本日新增 version=2（补齐历史数据引用与计算底稿锚点）；无新信息时**不**制造状态变化"
+    "increment": null
    },
    "expanded": {
     "full_baseline": null,
@@ -1761,9 +1788,10 @@
     },
     "raw_evidence": [],
     "counter_evidence": {
+     "source_row": "",
      "falsifiers": [],
      "unmet_conditions": [],
-     "note": "反证与支持证据同等可见（不默认折叠）"
+     "note": "反证与支持证据同等可见（不默认折叠）；本块取自**研究基线**，与 `current_recommendation.falsifiers`（建议自身）是两个对象"
     },
     "history_versions": [],
     "study_state": "**尚未完成研究** —— 本页只显示产业位置与研究缺口，不代表'中性'或'没有投资机会'"
@@ -1781,8 +1809,7 @@
    "change_this_run": {
     "baseline_version": null,
     "version_kind": null,
-    "increment": null,
-    "note": "本日新增 version=2（补齐历史数据引用与计算底稿锚点）；无新信息时**不**制造状态变化"
+    "increment": null
    },
    "expanded": {
     "full_baseline": null,
@@ -1794,9 +1821,10 @@
     },
     "raw_evidence": [],
     "counter_evidence": {
+     "source_row": "",
      "falsifiers": [],
      "unmet_conditions": [],
-     "note": "反证与支持证据同等可见（不默认折叠）"
+     "note": "反证与支持证据同等可见（不默认折叠）；本块取自**研究基线**，与 `current_recommendation.falsifiers`（建议自身）是两个对象"
     },
     "history_versions": [],
     "study_state": "**尚未完成研究** —— 本页只显示产业位置与研究缺口，不代表'中性'或'没有投资机会'"
@@ -1814,8 +1842,7 @@
    "change_this_run": {
     "baseline_version": null,
     "version_kind": null,
-    "increment": null,
-    "note": "本日新增 version=2（补齐历史数据引用与计算底稿锚点）；无新信息时**不**制造状态变化"
+    "increment": null
    },
    "expanded": {
     "full_baseline": null,
@@ -1827,13 +1854,41 @@
     },
     "raw_evidence": [],
     "counter_evidence": {
+     "source_row": "",
      "falsifiers": [],
      "unmet_conditions": [],
-     "note": "反证与支持证据同等可见（不默认折叠）"
+     "note": "反证与支持证据同等可见（不默认折叠）；本块取自**研究基线**，与 `current_recommendation.falsifiers`（建议自身）是两个对象"
     },
     "history_versions": [],
     "study_state": "**尚未完成研究** —— 本页只显示产业位置与研究缺口，不代表'中性'或'没有投资机会'"
    }
+  }
+ ],
+ "superseded_recommendations": [
+  {
+   "recommendation_id": "rec-sec-nvda-2026-08-03",
+   "business_key": "sec-nvda@2026-08-03",
+   "replaced_by": "rec-sec-nvda-2026-08-03-session-review",
+   "action": "buy",
+   "status": "active"
+  }
+ ],
+ "data_gaps": [
+  {
+   "gap": "`facts/implied_requirements.jsonl` 本轮 0 行",
+   "detail": "该表 0 行 ⇒ 依赖它的判断只能如实答'缺口'（`G-03`：0 行 ≠ 已验证）。",
+   "blocked_steps": [
+    "第 6 步（价格隐含要求）"
+   ],
+   "source": "facts/implied_requirements.jsonl（空表扫描）"
+  },
+  {
+   "gap": "`facts/dependency_edges.jsonl` 本轮 0 行",
+   "detail": "该表 0 行 ⇒ 依赖它的判断只能如实答'缺口'（`G-03`：0 行 ≠ 已验证）。",
+   "blocked_steps": [
+    "第 5 步（撤回追踪 `T12`）"
+   ],
+   "source": "facts/dependency_edges.jsonl（空表扫描）"
   }
  ],
  "unfinished_research_companies": [

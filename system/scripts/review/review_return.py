@@ -64,7 +64,7 @@ from scripts.compute.returns import (  # noqa: E402
     compute_benchmark_return,
     compute_total_return,
 )
-from scripts.trace.traceback import _latest_version_row  # noqa: E402
+from scripts.decision.rules import latest_version_row  # noqa: E402
 
 # ─────────────────────────── 常量 ───────────────────────────
 
@@ -328,14 +328,14 @@ def _select_primary_benchmark(benchmarks: list[dict[str, Any]]) -> Mapping[str, 
 def _load_recommendation(root: Path, rec_id: str) -> Mapping[str, Any]:
     """读**当前版本**建议：同一 `recommendation_id` 的多版本行取 `(version, recorded_seq)` 最大者。
 
-    ★ 复用 `scripts.trace.traceback._latest_version_row` —— 它是全仓「取当前版本」的**唯一**
+    ★ 复用 `scripts.decision.rules.latest_version_row` —— 它是全仓「取当前版本」的**唯一**
       实现（`G-06` 唯一真源：不在别处重算），此处不另写一遍取版本逻辑。
     """
     rows = store.read_records(root, "recommendations")
     candidates = [r for r in rows if r.get("recommendation_id") == rec_id]
     if not candidates:
         raise CaliberViolation(f"未找到建议 {rec_id}（facts/recommendations.jsonl）")
-    return _latest_version_row(candidates)
+    return latest_version_row(candidates)
 
 
 # ─────────────────────────── 主计算（§D.4 伪代码） ───────────────────────────

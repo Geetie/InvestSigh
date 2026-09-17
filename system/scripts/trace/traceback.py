@@ -36,6 +36,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from scripts._common import CheckReport, Violation, run_checker  # noqa: E402
+from scripts.decision.rules import latest_version_row  # noqa: E402
 
 ELEMENTS = ("evidence", "assumptions", "computation", "prev_version_id")
 
@@ -105,35 +106,6 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     return out
 
 
-def _latest_version_row(rows: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
-    """在**同 `recommendation_id` 的多条版本行**里选出**当前版本**（`Ch9 §3.4.2`）。
-
-    排序键 = `(version, recorded_seq)`；同键取**文件中靠后**那条（`>=` 保证后者胜）。
-
-    ★ **为什么必须取"当前版本"**（本批次实测缺陷，`G-01` 恒红的一类）：
-
-      `facts/*.jsonl` 是**追加式不可变** —— 一次修正 = **追加新版本行**，而**不是**原地改写
-      （`Ch9 §3.4.2`）。于是同一个 `recommendation_id` 在文件里可能有**多条**
-      （v1 种子行 + v2 当前行）。四要素判据问的是"**当前**结论可否反查"，
-      故必须取 **`version` 最大**的那条。
-
-      原实现用 `next(...)` 取**第一条** ⇒ 永远读到 v1 种子行 ⇒ 即便 v2 已补齐
-      `evidence_version_ids`（含 `dv-…`）与 `assumptions`，判据仍恒报缺失。
-      本函数是**唯一**取"当前版本"的地方（`G-06` 唯一真源：不在别处重算）。
-
-    `version` 缺省视为 `1`、`recorded_seq` 缺省视为 `0`（与 `Recommendation` 的默认一致）。
-    """
-    best: Mapping[str, Any] | None = None
-    best_key: tuple[int, int] | None = None
-    for row in rows:
-        key = (int(row.get("version") or 1), int(row.get("recorded_seq") or 0))
-        if best_key is None or key >= best_key:
-            best_key = key
-            best = row
-    assert best is not None  # 调用方保证 rows 非空
-    return best
-
-
 def traceback(root: Path, conclusion_id: str) -> TraceabilityResult:
     """对一条建议/结论做结构化反查。
 
@@ -143,15 +115,20 @@ def traceback(root: Path, conclusion_id: str) -> TraceabilityResult:
     - `computation`：`derived/` 中该结论的 `DerivedValue`（需带 formula + operands + method_version）
     - `prev_version_id`：版本链上一个版本（`supersedes`）
 
-    ★ **版本解析**（本批次修复）：同一 `recommendation_id` 可能有多条版本行（追加式不可变），
-      本函数取 `version` 最大的那条（`_latest_version_row`）作为**当前结论**。
+    ★ **版本解析**：同一 `recommendation_id` 可能有多条版本行（追加式不可变），
+      本函数取 `version` 最大的那条（`rules.latest_version_row`）作为**当前结论**。
+
+    ★★ 2026-09-17 内化 `views/` 时的**收口**：`latest_version_row()` 与
+      `current_recommendation_row()` 已迁到 `scripts.decision.rules`（`G-06` 唯一真源）——
+      本守卫原先**自带一份私有实现**，而 `views` 侧要的是另一个问题（`supersedes` 链），
+      若再各写一份就是**第三次**同形态漂移。现在两个问题的实现都只有一处。
     """
     recs = _load_jsonl(root / "facts" / "recommendations.jsonl")
     baselines = _load_jsonl(root / "facts" / "baselines.jsonl")
     candidates = [r for r in recs if r.get("recommendation_id") == conclusion_id]
     if not candidates:
         raise TraceabilityGap(f"未找到结论/建议: {conclusion_id}")
-    target = _latest_version_row(candidates)
+    target = latest_version_row(candidates)
 
     evidence = list(target.get("evidence_version_ids") or [])
     company_id = target.get("company_id")
@@ -258,7 +235,11 @@ def check(root: Path, sample_size: int = 20) -> CheckReport:
     #
     #   ★ 业务键的**定义**从 `scripts.decision.rules` 取（`G-06` 唯一真源）——
     #     本守卫**另写一份**正是上面这个缺陷的成因，不得重演。
-    from scripts.decision.rules import recommendation_business_key
+    from scripts.decision.rules import (
+        current_recommendation_multihead,
+        current_recommendation_row,
+        recommendation_business_key,
+    )
 
     by_key: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
     ordered_keys: list[tuple[str, str]] = []
@@ -273,7 +254,18 @@ def check(root: Path, sample_size: int = 20) -> CheckReport:
     sample: list[str] = []
     for key in ordered_keys:
         rows = by_key[key]
-        current = _latest_version_row(rows)
+        # ★ 同一业务键下取**当前建议** = `supersedes` 链的末节点（`rules.current_recommendation_row`）。
+        #   原先此处用 `latest_version_row` —— 在真实数据上**恰好**取对（两行的 `(version, recorded_seq)`
+        #   都是 `(1,1)`，靠 `>=` 取到文件里靠后那条），但那是**物理顺序的巧合**，不是按语义选。
+        #   `views/company_pages` 用 `>` 的同族实现就因此取到了**已被推翻的 v1**（`B-7`）。
+        current = current_recommendation_row(rows)
+        heads = current_recommendation_multihead(rows)
+        if heads:
+            report.notes.append(
+                f"业务键 {key[0]}@{key[1]} 的 `supersedes` 链有 {len(heads)} 个末节点（分叉）："
+                + "、".join(heads)
+                + " —— 已按版本水位取一条，但**该结论的\"当前版本\"本身不唯一**，须人工理清"
+            )
         sample.append(str(current.get("recommendation_id")))
         for row in rows:
             rid = row.get("recommendation_id")
