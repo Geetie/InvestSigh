@@ -74,6 +74,13 @@ GATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     # ★ 与方向 1 **共用同一守卫脚本**（不写第二份解析器，`G-06`）：故本处与 `pre-commit.sh`
     #   的登记**一次覆盖两个方向**（`G-07`：门禁必须两处同时登记 —— 本守卫已在两处）。
     ("rule_key_alignment_guard.py", "scripts/checks/rule_key_alignment_guard.py", ()),
+    # ── 批次 13（`WS-G` / `S-07`）：**复盘标记字段不得进入决策函数** ──
+    # `Ch10 §C.1` 逐字：「三个 `eval_result` 新字段（`eval_layer` / `error_axis` / `error_axis_note`）
+    # 均为标记枚举/说明，**不进入决策函数**」。此前这条只写在文档里 ⇒ 把它们接进
+    # `scripts/decision/**`（例如"按错误方向加权"）**没有任何门禁会响**。
+    # 本守卫把 `Ch2 §B.3` Checker-1 的 `is_decision_scope` **排除项**变成可执行断言（函数体级 AST）。
+    # ★ 与 `pre-commit.sh` **同时**登记（`G-07`）。
+    ("error_axis_guard.py", "scripts/checks/error_axis_guard.py", ()),
 )
 
 TIMEOUT_MARK = "TIMEOUT"

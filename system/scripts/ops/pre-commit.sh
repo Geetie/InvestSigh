@@ -291,6 +291,14 @@ run_gate "scenario_tag_binding_guard" "$CODE_ROOT/scripts/checks/scenario_tag_bi
 #    与 `run_all_gates.py::GATES` 的同一行**一次覆盖两个方向**（`G-07`：两处必须一致）。
 run_gate "rule_key_alignment_guard" "$CODE_ROOT/scripts/checks/rule_key_alignment_guard.py" "$CODE_ROOT"
 
+# ⑮ 复盘标记字段不得进入决策函数（`Ch10 §C.1` / `10_02 §G.1`；`S-07`）：
+#    `eval_layer` / `error_axis` / `error_axis_note` 是**复盘标记**，**不进决策函数** ——
+#    此前只写在文档里，把它们接进 `scripts/decision/**` 没有任何门禁会响。
+#    域 = `rules/banned_tokens.yaml::decision_scope` 枚举出的作用域（allowlist，`R-06`）；
+#    判据 = 「决策函数体里是否出现这三个标记名」（标识符/属性/字符串键/形参/关键字实参，函数体级 AST，`G-02`）。
+#    ★ 与 `run_all_gates.py::GATES` **同时**登记（`G-07`）。
+run_gate "error_axis_guard" "$CODE_ROOT/scripts/checks/error_axis_guard.py" "$CODE_ROOT"
+
 # ★ 卡 13-O：先把「输入错误」结掉 —— 它比违规更该先说（`2`：门禁没跑全，结论不成立）。
 #   两者同时出现时**两条都报**，仍以 `exit 2` 结束：此时"跑了哪些、没跑哪些"本身不可信。
 if [ "${INPUT_ERROR}" -ne 0 ]; then

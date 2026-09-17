@@ -165,6 +165,42 @@ def _expansion_compliant(root: Path) -> None:
     )
 
 
+# ── 阶段⑤ 的判据专属标记 / 合规输入（`WS-G` 新增；供本文件底部三条反例复用） ──
+#
+# ★ `_EXP_RS_HINT` / `_EXP_IR_HINT` 是 `stage_expansion_passed()` 里两条新判据的
+#   **专属**标记（只在各自违例文案里出现），故"门禁红了"能归因到**那一条**判据
+#   （`G-02` 判据级归因）。它们是 `registry/criterion_counterexamples.yaml` 里
+#   `research_standard_consistent` / `investment_result_verifiable` 两条的 `blocked_hint`。
+_EXP_RS_HINT = "研究标准不一致（Ch4 §G）"
+_EXP_IR_HINT = "投资结果不可核验（前向记录）"
+
+#: 阶段⑤ 的**前向建议流**合规行（`Ch10 §E.3`）：`recorded_seq` 存在且**单调不减** + **无回填**。
+_EXP_RECS_OK: list[dict] = [
+    {"recommendation_id": "rec-1", "company_id": "co_1", "recorded_seq": 1, "backfilled_at": None},
+    {"recommendation_id": "rec-2", "company_id": "co_1", "recorded_seq": 2, "backfilled_at": None},
+]
+#: 阶段⑤ 的**三层复盘记录**（保证合规输入下观测为 `layers_seen: 3/3`）。
+_EXP_TASKS_OK: list[dict] = [
+    {"task_id": "t1", "eval_result": {"eval_layer": "research_quality"}},
+    {"task_id": "t2", "eval_result": {"eval_layer": "forecast_quality"}},
+    {"task_id": "t3", "eval_result": {"eval_layer": "investment_result"}},
+]
+
+
+def _expansion_env_ok(root: Path) -> None:
+    """阶段⑤ 的**合规**输入 ⇒ `exit 0`（"判别力归因"的前提）。
+
+    ★ 复用 `_nvidia_ch4_compliant()` 的 `Ch4 §G` 环境（baselines/claims/businesses/drivers/
+      relations/implied_requirements/derived_values 一整套）而**不自备第二份** ——
+      自备必然与它漂移（`G-06`：同一事实只留一个存放处）。
+    ★ 该环境的 recommendations 无 `recorded_seq` ⇒ 本函数**覆盖**为带 `recorded_seq` 的前向流，
+      并写三层 `eval_result`（`review_append_only` 与 `investment_result_verifiable` 都据此判）。
+    """
+    _nvidia_ch4_compliant(root)
+    _write_jsonl(root, "recommendations", _EXP_RECS_OK)
+    _write_jsonl(root, "tasks", _EXP_TASKS_OK)
+
+
 def _patch_yaml(path: Path, fn) -> None:
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
     path.write_text(
@@ -660,27 +696,31 @@ def test_daily_run_coverage_verifiable_counterexample_is_load_bearing(code_root:
 # ═════════════════════ 阶段⑤ expansion：1 条判据的反例 ═════════════════════
 
 
-def test_expansion_review_append_only_blocks_on_missing_layer(code_root: Path) -> None:
-    """「三层复盘齐备」的反例：缺一层 → 阶段⑤ 必须红。
+def test_expansion_review_append_only_missing_layer_is_not_a_violation(code_root: Path) -> None:
+    """`T-15` 锁定：缺层**只作观测、不判违例**，且观测**必须可见**（`G-03`）。
 
-    ★ **同一条 id 上有两件不同的事**（如实声明，勿混淆）：
-      ① **本用例**证明的是「三层复盘齐备」这个检查**有判别力**；
-      ② `test_expansion_review_append_only_blocks_on_layer_disappearing` 与
-         `..._when_guard_pathspec_misses_carrier` 证明的是 `Ch10 §D.5` 的**真 append-only**
-         语义已被守（本批次 `G9-2` 补实现）。
-      两者都挂在 `review_append_only` 这一个 id 上 —— 因为 `registry/delivery.yaml` 里
-      **没有**"三层齐备"自己的 id（见报告 §3 G9-2 的实测）。
+    ★ 背景（`T-15`，需求方 2026-09-17 裁定）：`registry/delivery.yaml` 阶段⑤
+      （`delivery_stages[key=expansion]`）的 `pass_criteria_testable` **恰好 3 条**
+      （`research_standard_consistent` / `investment_result_verifiable` / `review_append_only`），
+      而「三层复盘记录」只在 `exit_artifacts` 里 —— 它**没有通过判据身份**。
+      把**退出物**升格成**通过判据** = **新增门槛**（`施工图 §0` 第 1 条，不由实现方定）。
+      ⇒ 缺层**不计违例**；但**观测必须保留**：输出 `expansion.layers_seen: k/3`（`G-03`：不得静默消失）。
 
-    ★ **待裁定**：「三层齐备」在全设计区**没有"通过判据"级的逐字出处**
-      （`Ch10 §C.1` 只定义 `eval_layer` 的**取值域**；`§C.4:250` 的 `assert layer in
-      VALID_LAYERS, "三层不得新增/合并"` 也是取值域断言；`施工图:215/234` 只在**退出物**
-      里写了"三层复盘记录"）。team-lead 裁定前，本条**留在 `review_append_only` 上**，
-      不自行政措辞或新增 id（`R-04`）。
+    ★ 本用例**取代**旧的 `..._blocks_on_missing_layer`（旧断言"缺层 ⇒ exit 1"随 `T-15` 修正
+      **如期失效**）。现改为**观测侧**证据：缺层**不新增任何违例行**，而 `layers_seen` 计数照常可见。
+      ⇒ 在 `registry/criterion_counterexamples.yaml` 里，该条由 `counterexample` **改判为** `ineffective`
+      （对"缺层"这一输入轴，阶段⑤ **无判别力** —— 因为「三层齐备」根本不是判据）。
+
+    ★ **反向**（`AC-01b`）：`review_append_only` 的**真判别力**
+      （「已声明过的层不得从记录集里消失」）仍由
+      `test_expansion_review_append_only_blocks_on_layer_disappearing` 守住，**未被误删**。
     """
     _expansion_compliant(code_root)
-    base_out = _gate(code_root, "expansion")[1]
-    _assert_hint_absent(base_out, "三层复盘缺层")
+    base_code, base_out = _gate(code_root, "expansion")
+    assert "layers_seen: 3/3" in base_out, f"合规输入应报观测出口 `layers_seen: 3/3`\n{base_out}"
+    assert "三层复盘缺层" not in base_out
 
+    # 缺一层（2 层）：不因"缺层"而红，且观测可见 —— 违例集合与合规输入**完全相同**。
     _write_jsonl(
         code_root,
         "tasks",
@@ -689,9 +729,98 @@ def test_expansion_review_append_only_blocks_on_missing_layer(code_root: Path) -
             {"task_id": "t2", "eval_result": {"eval_layer": "forecast_quality"}},
         ],
     )
+    code2, out2 = _gate(code_root, "expansion")
+    assert code2 == base_code, (
+        "缺层改变了阶段⑤ 的退出码 —— 说明「缺层 ⇒ 违例」没有被真正移除（`T-15` 未生效）\n" + out2
+    )
+    assert "layers_seen: 2/3" in out2, f"缺层观测必须可见（`G-03`：不得静默消失）\n{out2}"
+    assert "三层复盘缺层" not in out2, "缺层不得再产生违例（`T-15`）\n" + out2
+    assert not (_fatal_lines(out2) - _fatal_lines(base_out)), (
+        "缺层**新增了**违例行 —— `T-15` 修正未生效\n" + out2
+    )
+
+    # 只给 1 层：同样不因"缺层"而红（`AC-01` 逐字形态），观测可见。
+    _write_jsonl(
+        code_root,
+        "tasks",
+        [{"task_id": "t1", "eval_result": {"eval_layer": "research_quality"}}],
+    )
+    code1, out1 = _gate(code_root, "expansion")
+    assert code1 == base_code, "三层只填 1 层时不应因'缺层'而红（`T-15`）\n" + out1
+    assert "layers_seen: 1/3" in out1, f"缺层观测必须可见（`G-03`）\n{out1}"
+    assert not (_fatal_lines(out1) - _fatal_lines(base_out)), out1
+
+
+def test_expansion_research_standard_consistent_blocks_on_form_incomplete(code_root: Path) -> None:
+    """`research_standard_consistent` 反例：扩展后的公司**未过同一把尺**（`Ch4 §G`）⇒ 阶段⑤ 红。
+
+    ★ 判据实现 = **复用** `scripts/valuelayer/completeness.py::g_depth_violations()`
+      （阶段② 已用它判 `Ch4 §G`）—— **不重造第二套 §G 判据**（`G-06`）。
+      "一致" = 扩展后的公司也走**同一把尺**；`stage_expansion_passed()` 只把它的结论
+      **重新归属**到本判据名下（`G-02` 判据级归因）。
+
+    ★ 判别力归因（`G-05`）：合规输入下专属标记 `_EXP_RS_HINT` **不出现**且阶段⑤ `exit 0`；
+      违约输入下出现且**新增**违例集 —— 证明确实是本判据拦下的。
+      反例 = 把 `moat`（④）与 `valuation_inputs`（⑤）两个 section 的载体清空
+      （字段在、值是合法空数组，但实质无内容）—— 与 `chapter4_g_depth` 反例同族的 §G 形态。
+    """
+    _expansion_env_ok(code_root)
+    base_code, base_out = _gate(code_root, "expansion")
+    assert base_code == 0, f"合规输入下阶段⑤ 应 `exit 0`（判别力归因的前提）\n{base_out}"
+    _assert_hint_absent(base_out, _EXP_RS_HINT)
+
+    row = dict(_CH4_BASELINE_OK)
+    row["moat"] = []
+    row["valuation_inputs"] = {}
+    _write_jsonl(code_root, "baselines", [row])
+
     code, out = _gate(code_root, "expansion")
     assert code == 1, out
-    assert "三层复盘缺层" in out, out
+    assert _EXP_RS_HINT in out, out
+    assert _fatal_lines(out) - _fatal_lines(base_out), "不合规输入未改变违例集合（无判别力）"
+
+
+def test_expansion_investment_result_verifiable_blocks_on_backfilled_row(code_root: Path) -> None:
+    """`investment_result_verifiable` 反例（轴①）：前向流里出现**回填行** ⇒ 阶段⑤ 红。
+
+    ★ 依据 `Ch10 §E.3` / `N10.3-10`/`N10.3-11`：投资结果只能来自**前向记录流**
+      （真实时间戳、**不可回填**）；**回放 ≠ 能力**（`10_01 §2.5`「历史回放致命陷阱」）。
+      反例 = 把前向流最后一行打上 `backfilled_at` ⇒ 该行是回填/回放，不是前向记录。
+    """
+    _expansion_env_ok(code_root)
+    base_code, base_out = _gate(code_root, "expansion")
+    assert base_code == 0, f"合规输入下阶段⑤ 应 `exit 0`（判别力归因的前提）\n{base_out}"
+    _assert_hint_absent(base_out, _EXP_IR_HINT)
+
+    recs = [dict(r) for r in _EXP_RECS_OK]
+    recs[-1]["backfilled_at"] = "2026-09-17T00:00:00Z"
+    _write_jsonl(code_root, "recommendations", recs)
+
+    code, out = _gate(code_root, "expansion")
+    assert code == 1, out
+    assert _EXP_IR_HINT in out, out
+    assert _fatal_lines(out) - _fatal_lines(base_out), "不合规输入未改变违例集合（无判别力）"
+
+
+def test_expansion_investment_result_verifiable_blocks_on_non_monotonic_seq(code_root: Path) -> None:
+    """`investment_result_verifiable` 反例（轴②）：追加序上 `recorded_seq` **非单调** ⇒ 阶段⑤ 红。
+
+    ★ 依据 `Ch9 §3.4.2`（`facts/*.jsonl` **行序即时序**）：前向流一旦被整体重排
+      （例如把历史回放结果混入并重排），"行序 ≠ 时序" ⇒ 无法据以核验"结果来自前向记录"。
+      反例 = 交换两条合规行的 `recorded_seq`（`[1,2] → [2,1]`），其余字段**一个不动**（单变量对照）。
+    """
+    _expansion_env_ok(code_root)
+    base_code, base_out = _gate(code_root, "expansion")
+    assert base_code == 0, f"合规输入下阶段⑤ 应 `exit 0`（判别力归因的前提）\n{base_out}"
+    _assert_hint_absent(base_out, _EXP_IR_HINT)
+
+    recs = [dict(r) for r in _EXP_RECS_OK]
+    recs[0]["recorded_seq"], recs[1]["recorded_seq"] = recs[1]["recorded_seq"], recs[0]["recorded_seq"]
+    _write_jsonl(code_root, "recommendations", recs)
+
+    code, out = _gate(code_root, "expansion")
+    assert code == 1, out
+    assert _EXP_IR_HINT in out, out
     assert _fatal_lines(out) - _fatal_lines(base_out), "不合规输入未改变违例集合（无判别力）"
 
 

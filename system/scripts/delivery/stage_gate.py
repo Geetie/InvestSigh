@@ -771,27 +771,121 @@ def _declared_eval_layers(task: Mapping[str, Any]) -> set[str]:
     return out
 
 
-def stage_expansion_passed(root: Path) -> tuple[bool, list[Violation], dict[str, int]]:
-    """研究标准一致（Ch4 §G）+ 投资结果可核验 + 复盘 **append-only**。
+def stage_expansion_passed(root: Path) -> tuple[bool, list[Violation], dict[str, Any]]:
+    """研究标准一致（`Ch4 §G`）+ 投资结果**可核验**（前向记录）+ 复盘 **append-only**。
 
-    ★ `research_standard_consistent` 与 `investment_result_verifiable` 已在
-      `registry/delivery.yaml` 声明为 automated，本函数**尚未实现** →
-      由 `assert_criteria_implemented()` 在前置产物齐备时阻断。
+    三条判据**均已真接线**（`registry/delivery.yaml` 阶段⑤ 声明 automated 的三条全在函数体内绑定）：
 
-    ★ `review_append_only` 的**真检查**（缺口 `G9-2` 补实现）逐字据 `Ch10 §D.5`，
-      见函数体内两处 `① / ②` 的注释。要点：**不重造 append-only 比对**（`G-06`），
-      而是①读 `append_only_guard` 的**判据**确认它覆盖本真源，②判**语义单调性**
-      （两处被检面互不重叠，见 ② 的注释）。
+    | 判据 | 检查落点 |
+    |---|---|
+    | `research_standard_consistent` | **复用** `scripts/valuelayer/completeness.py::g_depth_violations()`（阶段② 已用它判 `Ch4 §G`）—— **同一把尺**（`G-06` 唯一真源） |
+    | `investment_result_verifiable` | 本函数内：断言投资结果来自**前向记录流**（`facts/recommendations.jsonl`），非回放/回填（`Ch10 §E.3`） |
+    | `review_append_only` | 本函数内：① `append_only_guard` 覆盖本真源 ②「已声明过的层不得从记录集里消失」（`Ch10 §D.5`） |
+
+    ★ `T-15`（需求方 2026-09-17 裁定：「一律采取主理人推荐值」）：
+      **「三层复盘齐备」不升格为通过判据、不计违例**。可核的肯定事实：
+      `registry/delivery.yaml` 阶段⑤（`key: expansion`）的 `pass_criteria_testable`
+      **恰好 3 条**（`research_standard_consistent` / `investment_result_verifiable` /
+      `review_append_only`），而「三层复盘记录」只在 `exit_artifacts` 里 —— 它**没有通过判据身份**。
+      把**退出物**升格成**通过判据** = **新增门槛**（`施工图 §0` 第 1 条，不由实现方定）。
+      ⇒ 三层齐备与否**只作观测**：输出 `expansion.layers_seen: k/3` 的 note + 计数，
+      **不 append Violation**（故三层只填 1 层时阶段⑤ **不因「缺层」而红**）。
+      ★ **观测必须保留**（`G-03`：不允许静默消失）—— 见下方 `layers_seen` 计数与其 `scanned` 输出。
+
+    ★ 与「**已声明过的层不得从记录集里消失**」（函数体内 ②）是**两件事**，勿混：
+      前者 = 「三层齐备度」观测（只计数、不判）；后者 = `Ch10 §D.5` 的 **append-only 语义**
+      （禁"只留赢的"）—— 它是 `review_append_only` 的**真判别力**所在，**必须保留**。
+
+    ★ `investment_result_verifiable` 的**落点登记（★ 待与 `WS-F` 对齐）**：`WS-F` 正并行交付
+      `scripts/review/capability_source.py`（`§E.3` 的 `assert_capability_from_forward_only` /
+      `assert_forward_not_backfilled`）。它**到位后本判据应改为复用**它（`G-06`）；
+      当前按 `§E.3` 的**语义**在本函数内实现（真源 = `facts/recommendations.jsonl`）。
     """
     tasks = _read_jsonl(root / "facts" / "tasks.jsonl")
     eval_records = [t.get("eval_result") for t in tasks if t.get("eval_result")]
     if not eval_records:
         return _deferred("expansion", "facts/tasks.jsonl 中的 eval_result（三层复盘记录）", "Ch10 §N10.3-01")
     v: list[Violation] = []
+
+    # ── 「三层齐备度」= **观测，不是判据**（`T-15`）──────────────────────────────
+    #
+    # ★ 这里**没有** `Violation`：把「三层复盘齐备」升格成通过判据 = **新增门槛**
+    #   （`施工图 §0` 第 1 条）。故三层齐备与否**只作观测**，并把计数带进 `scanned`
+    #   （输出 `expansion.layers_seen: k/3`），使"缺层"这件事**可见但不阻断**（`G-03`）。
+    three_layers = ("research_quality", "forecast_quality", "investment_result")
     layers = {e.get("eval_layer") for e in eval_records}
-    for need in ("research_quality", "forecast_quality", "investment_result"):
-        if need not in layers:
-            v.append(Violation("expansion", f"三层复盘缺层: {need}", "facts/tasks.jsonl"))
+    layers_seen = sum(1 for need in three_layers if need in layers)
+
+    # ── ① `research_standard_consistent`（`Ch4 §G`）—— 复用阶段② 的**同一把尺** ──
+    #
+    # ★ 「一致」= 扩展后的公司也走**同一把尺**：判据实现**复用**
+    #   `scripts/valuelayer/completeness.py::g_depth_violations()`（阶段② 已用它判 `Ch4 §G`），
+    #   **不重造第二套 §G 判据**、**不并列白名单**（`G-06` 唯一真源；无并列白名单 ⇒ 无口径漂移）。
+    #   ★ 这里只把它的**结论**重新归属到本判据名下（判定仍由 `g_depth_violations` 作），
+    #     使「门禁红了」能**归因到本判据**（`G-02` 判据级归因）。
+    from scripts.valuelayer.completeness import g_depth_violations
+
+    for orig in g_depth_violations(root):
+        v.append(
+            Violation(
+                "expansion",
+                "研究标准不一致（Ch4 §G）—— 复用 `g_depth_violations`：扩展后的公司未过**同一把尺**："
+                f"{orig.reason}",
+                orig.file or "facts/baselines.jsonl",
+            )
+        )
+    criterion("expansion", "research_standard_consistent", v)
+
+    # ── ② `investment_result_verifiable`（`Ch10 §E.3`：能力唯一来源 = **前向**建议流）──
+    #
+    # ★ `Ch10 §E.3` / `N10.3-04`/`N10.3-10`/`N10.3-11`：投资结果只能来自**前向记录流**
+    #   （`facts/recommendations.jsonl` 的真源子集：真实时间戳、**不可回填**）；**回放 ≠ 能力**。
+    # ★ 可判定 + 可穷尽（`R-06`；两条断言，域 = 前向流全行）：
+    #     ① 前向流里**不得**出现**回填行**（`backfilled_at` 非空）；
+    #     ② 追加序上 `recorded_seq` **存在且单调不减**（行序即时序，承 `Ch9 §3.4.2` append-only）。
+    recs = _read_jsonl(root / "facts" / "recommendations.jsonl")
+    ir_hint = "投资结果不可核验（前向记录）"
+    if not recs:
+        v.append(
+            Violation(
+                "expansion",
+                f"{ir_hint}：前向建议流 facts/recommendations.jsonl 为空 ⇒ 投资结果**无被检对象**，"
+                "不得据『为空』判「可核验」（`G-03`：无被检对象 ≠ 已验证）",
+                "facts/recommendations.jsonl",
+            )
+        )
+    else:
+        for row in recs:
+            if row.get("backfilled_at") is not None:
+                rid = row.get("recommendation_id") or row.get("security_id") or "<unnamed>"
+                v.append(
+                    Violation(
+                        "expansion",
+                        f"{ir_hint}：{rid} 是**回填行**（`backfilled_at` 非空）却出现在**前向**建议流里"
+                        " ⇒ 投资结果来自回放/回填、不是前向记录（`Ch10 §E.3` / N10.3-10/11）",
+                        "facts/recommendations.jsonl",
+                    )
+                )
+        seqs = [row.get("recorded_seq") for row in recs]
+        if not all(isinstance(s, int) and not isinstance(s, bool) for s in seqs):
+            v.append(
+                Violation(
+                    "expansion",
+                    f"{ir_hint}：前向建议流有行**缺 `recorded_seq`**（或类型非法）⇒ 无法核验"
+                    "『行序即时序』（`Ch9 §3.4.2` append-only）",
+                    "facts/recommendations.jsonl",
+                )
+            )
+        elif seqs != sorted(seqs):
+            v.append(
+                Violation(
+                    "expansion",
+                    f"{ir_hint}：`recorded_seq` 在追加序上**不单调不减** {seqs} ⇒ 行序不等于时序，"
+                    "无法据以核验『结果来自前向记录』（`Ch9 §3.4.2` append-only）",
+                    "facts/recommendations.jsonl",
+                )
+            )
+    criterion("expansion", "investment_result_verifiable", v)
 
     # ═══ `review_append_only`（`Ch10 §D.5`）—— 两个**互不重叠**的被检面 ═══
     aog_pathspec = ""
@@ -876,6 +970,12 @@ def stage_expansion_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
     criterion("expansion", "review_append_only", v)
     v += assert_criteria_implemented(root, "expansion")
     return (not v), v, {
+        # ★ `T-15` 的**观测出口**（`G-03`：不允许静默消失）：`scanned` 里逐条打印为
+        #   `scanned expansion.layers_seen: k/3`，使"三层齐备度"**可见但不阻断**。
+        #   ★ 该值是**显式字符串** `"k/3"`（`scanned` 其余项是计数；`scanned` 全包只作
+        #     "扫到了什么"的展示袋，无消费者对其做算术 —— 见 `_common.run_checker` 的打印）。
+        "layers_seen": f"{layers_seen}/3",
+        "layers_expected": len(three_layers),
         "eval_records": len(eval_records),
         "aog_covers_carrier": aog_covers,
         "aog_tracked_files": aog_tracked,

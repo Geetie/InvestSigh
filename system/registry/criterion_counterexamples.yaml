@@ -173,25 +173,23 @@ counterexamples:
   # ───────────────────────────── 阶段⑤ expansion ────────────────────────────
   - stage: expansion
     criterion_id: review_append_only
-    kind: counterexample
-    test: tests/injection/test_criterion_effectiveness.py::test_expansion_review_append_only_blocks_on_missing_layer
-    blocked_hint: "三层复盘缺层"
-    note: "只给 research_quality + forecast_quality 两层复盘记录 → 缺 investment_result 层 → 阶段⑤ exit 1。
-      本条证明的是「三层复盘齐备**这个检查**有判别力」。
-      ★★ **可核的肯定事实**（`delivery.yaml` 是**实现区可核**的声明面；已实测复核）：
-      阶段⑤（`delivery_stages[key=expansion]`）的 `pass_criteria_testable` **恰好 3 条** ——
-      `research_standard_consistent` / `investment_result_verifiable` / `review_append_only`；
-      而 `exit_artifacts: ['三层复盘记录']`。
-      ⇒ 「三层齐备」**只在退出物里，没有通过判据身份**；本 id 名下**没有**它自己的判据 id。
-      （★ 用「可核的肯定事实」而不是「全设计区没有逐字出处」：后者是**穷举式否定**，易被『你搜漏了』反驳。）
-      设计侧佐证：`Ch10 §C.1` 只定义 `eval_layer` 的**取值域**；`§C.4:250` 的
-      `assert layer in VALID_LAYERS` 亦为取值域断言。
-      ★ **已裁定（需求方 2026-09-17：「`T-15` 一律采取主理人推荐值」）—— 「不升格」**：
-      不把「三层复盘齐备」升格为阶段⑤ 的**通过判据**（升格 = 新增门槛，属 `施工图 §0` 第 1 条，
-      不由实现方定）；本条检查**保留在本 id 名下**（判别力不丢，见上面的可核肯定事实）。
-      ★ **观测必须保留**（`G-03`：不允许静默消失）：阶段⑤ 输出 `expansion.layers_seen: k/3`
-      的**显式 note + 计数** —— 该输出属 `scripts/delivery/stage_gate.py` 的 **expansion 段**，
-      **不在 `WS-D` 的写权范围**（任务卡 §2 禁写），已作为**移交项**随报告送 `team-lead`。"
+    kind: ineffective
+    test: tests/injection/test_criterion_effectiveness.py::test_expansion_review_append_only_missing_layer_is_not_a_violation
+    reason: "「三层复盘齐备」**不是判据**（需求方 2026-09-17 裁定 `T-15`：把**退出物**升格成**通过判据** = 新增门槛，
+      属 `施工图 §0` 第 1 条，不由实现方定）⇒ `WS-G` 已把 `stage_gate.py` 里那条「缺层 → Violation」
+      （原第 792-794 行）**移除**，只保留**观测**（`expansion.layers_seen: k/3` + 计数）。
+      故对『缺层』这一输入轴，阶段⑤ 的**违例集合与合规输入完全相同**：实测 `layers_seen` 由 3/3 变 2/3 或 1/3，
+      但**不新增任何 `[FATAL]` 行** ⇒ 该轴**无判别力**（它已不是判据）。"
+    note: "★ 本条由旧的 counterexample（`blocked_hint: 三层复盘缺层`）**改判**而来，**不是新发现**：
+      `T-15` 修正前，缺层确实 append 一条 `Violation`，旧登记是**有效**的 counterexample；
+      修正后该违例消失 ⇒ 旧断言不可能成立 ⇒ 按 `G-03` 改登记为 `ineffective`（**无判别力**），
+      **而不是删除它** —— 保留 `T-15` 的裁定与理由供后人追溯（删掉会让『为什么没有缺层反例』无从查证）。
+      ★ **观测必须保留**（`G-03`：不允许静默消失）：缺层虽不判违例，但 `layers_seen` 计数**必须照常输出** ——
+      本探针测试（`..._missing_layer_is_not_a_violation`）同时钉住这一点（`layers_seen: 2/3` / `1/3` 可见）。
+      ★ **未受影响**（`AC-01b`）：`review_append_only` 的**真判别力**（`Ch10 §D.5`「已声明过的层不得从记录集里消失」）
+      仍由另两条 counterexample 守住，**未被误删**。
+      ★ 设计侧佐证：`Ch10 §C.1` 只定义 `eval_layer` 的**取值域**；`§C.4:250` 的
+      `assert layer in VALID_LAYERS` 亦为取值域断言；`施工图:215/234` 只在**退出物**里写了『三层复盘记录』。"
 
   - stage: expansion
     criterion_id: review_append_only
@@ -224,3 +222,45 @@ counterexamples:
       补实现的提交号见 `reports/ws_criterion_effectiveness_report.md §3 G9-2`。实现后本探针**当场变红**，
       强制更新本登记（铁律 5）。按 `G-03` 显式记账为『无被检对象』，**不计为已验证**。
       ★ 推荐方案（**只写，未实现**，供需求方拍板）：在**现有**复盘记录真源（`facts/tasks.jsonl` 的 `eval_result` / `eval_result_history`）上加 `result_kind ∈ {success, failure, pending}`（**复用单一真源、不新建表** —— `facts/` 表集合不得增删改名），并配 `(success, failure, pending) ⊆ 记录集` 的可执行反例。详见报告 §6.5 ②。"
+
+  # ── `WS-G` 补：阶段⑤ 两条**新绑定**判据的反例（此前声明 automated 但函数体内未绑定）──
+  #    `registry/delivery.yaml` 阶段⑤ 的 `pass_criteria_testable` 这 3 条，`WS-G` 前只绑了
+  #    `review_append_only`；`research_standard_consistent` / `investment_result_verifiable`
+  #    声明为 automated 却**未绑定**（`assert_criteria_implemented()` 在前置齐备时会阻断）。
+  #    `WS-G` 把两条都绑进 `stage_expansion_passed()` 函数体（字面量 `criterion(...)`），
+  #    并在此登记**可执行反例**（`criterion_effectiveness_guard` 的义务：已绑定 ⊆ 已登记）。
+
+  - stage: expansion
+    criterion_id: research_standard_consistent
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_expansion_research_standard_consistent_blocks_on_form_incomplete
+    blocked_hint: "研究标准不一致（Ch4 §G）"
+    note: "`WS-G` 绑定。判据实现 = **复用** `scripts/valuelayer/completeness.py::g_depth_violations()`
+      （阶段② 已用它判 `Ch4 §G`）—— **不重造第二套 §G 判据**（`G-06` 唯一真源）；
+      `stage_expansion_passed()` 只把它的**结论重新归属**到本判据名下（`G-02` 判据级归因）。
+      「一致」= 扩展后的公司也走**同一把尺**（`施工图` 第 215/234 行）。
+      反例：合规输入下阶段⑤ `exit 0`；把 baseline 的 `moat`（④）与 `valuation_inputs`（⑤）两个
+      section 清空（字段在、值是合法空数组）⇒ `Ch4 §G 形式完备性未过` ⇒ 阶段⑤ exit 1 且输出含本判据专属标记。
+      合规对照断言该标记**不出现**（判别力归因，`G-05`）。"
+
+  - stage: expansion
+    criterion_id: investment_result_verifiable
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_expansion_investment_result_verifiable_blocks_on_backfilled_row
+    blocked_hint: "投资结果不可核验（前向记录）"
+    note: "`WS-G` 绑定。依据 `Ch10 §E.3` / `N10.3-10`/`N10.3-11`：投资结果只能来自**前向记录流**
+      （`facts/recommendations.jsonl` 的真源子集：真实时间戳、**不可回填**）；**回放 ≠ 能力**（`10_01 §2.5`）。
+      反例（轴①）：前向流的最后一行打上 `backfilled_at` ⇒ 回填/回放行出现在前向流里 ⇒ 阶段⑤ exit 1 且含专属标记。
+      ★ **待对齐 `WS-F`**：`WS-F` 并行交付 `scripts/review/capability_source.py`（`§E.3` 的
+      `assert_capability_from_forward_only` / `assert_forward_not_backfilled`）。它到位后本判据
+      应改为**复用**它（`G-06`）；当前按 `§E.3` 的语义在本函数内实现（真源 = `facts/recommendations.jsonl`）。"
+
+  - stage: expansion
+    criterion_id: investment_result_verifiable
+    kind: counterexample
+    test: tests/injection/test_criterion_effectiveness.py::test_expansion_investment_result_verifiable_blocks_on_non_monotonic_seq
+    blocked_hint: "投资结果不可核验（前向记录）"
+    note: "轴②（`Ch9 §3.4.2`：`facts/*.jsonl` **行序即时序**）：前向流一旦被整体重排（行序 ≠ 时序），
+      就无法据以核验『结果来自前向记录』（例如把历史回放结果混入并重排）。
+      反例：交换两条合规行的 `recorded_seq`（[1,2]→[2,1]），其余字段**一个不动**（单变量对照）⇒
+      阶段⑤ exit 1 且含专属标记。"
