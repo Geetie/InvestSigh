@@ -153,6 +153,7 @@
 | 现象 | 归类 | 依据 |
 |---|---|---|
 | 步骤 7/8 报 `gap` / `deferred_by_design` | **设计如此** | §一 |
+| 步骤 2/3/4 报 `gap`（"模型侧、阶段②③ 未交付"） | **设计如此**（`T-08` A 方案） | §一 |
 | `load_transmit_params` 抛 `FileNotFoundError: rules/transmission.yaml` | **设计如此**（未落地） | §三 |
 | `BudgetConfigMissing`（缺 `budget.yaml` 且无显式缺省） | **设计如此**（未落地） | §三 |
 | 复盘收益 `status=blocked_by_caliber` + 四个缺失键 | **设计如此**（`p10` 未冻结） | §六 |
@@ -160,3 +161,20 @@
 | `views/event_studies.jsonl` 为空 → `NOT_EVALUATED` | **设计如此**（六结果视图未落，`G-03` 显式记账） | `traceback_coverage.py` 输出 |
 | 真源某些表 0 行 | **待判定**：可能是"还没采集"，不是"功能没做" | `G-03`：0 行 ≠ 已验证 |
 | 门禁非 0 退出码 / 判据 FAIL | **真缺陷** | `run_all_gates.py` / `stage_gate.py` |
+| ★ **`prices` / `benchmarks` 无生产写入方** | **★ 真缺陷候选**（**不是**设计留空） | 见 §八 |
+
+---
+
+## 八、★ 真缺陷候选（**不是**"设计上不做"，测试时请区别对待）
+
+### 8.1 `prices` / `benchmarks` 没有生产写入方
+
+| 项 | 内容 |
+|---|---|
+| **实测方法** | 全仓扫 `append_records(..., "prices"/"benchmarks")` 写入点 + 扫 `rules/` 计划清单 |
+| **实测结果** | **除 `tests/` 外零写入点**（唯一的正式写入出现在 `tests/unit/test_schema_expand.py:627`）。`scripts/ingest/` 四件（`seed_industry_nodes` / `real_collector` / `public_fetcher` / `fetch_manifest`）**只处理文本**（sources / claims），**不碰行情** |
+| **为什么是缺陷而不是设计留空** | 施工图 §1.3 把"取数"划为 **A 档 = 用 WorkBuddy（MCP 连接器）** —— 那是说**取数动作**由宿主做；但**「取到的行情 → `facts/prices.jsonl`」这一段落库**在源稿里是**核心主线的必需环节**（`N10.3-04` 同区间绝对/相对收益、`Ch3 §N3.4-06/07` 基准收益），**设计没有把它列为"首版不做"**，而是**没有任何实现** |
+| **后果（实测）** | `daily/run.py` 的 `blocked=True` 里，**步骤 5/6 各 2 条 gap 全部**指向「`facts/benchmarks.jsonl` 或 `prices` 为空」⇒ **收益比较主线整条走不通**；`review_return` 永远停在 `blocked_by_no_price` / `blocked_by_no_benchmark`（即便 `p10` 冻结也一样） |
+| **测试期怎么办** | 见 `test_run_sheet_batched.md` **批次 0**：在会话里用 MCP 连接器（`westock-mcp` / `pandadata` / `tdx-connector`）取数，再经 `schema.store.append_records` 落库。**★ 落库这一动作目前只能由 Agent 手工做，没有脚本** —— 这本身就是要向需求方/实现方提的那条缺口 |
+| **建议** | 要么补一个 `scripts/ingest/market_data.py`（把连接器返回值映射成 `PriceSnapshot` / `Benchmark` 行），要么明确裁为"首版由 Agent 在会话内落库"。**在裁定前，不要把它当"设计如此"放过** |
+
