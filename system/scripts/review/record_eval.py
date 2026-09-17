@@ -30,6 +30,17 @@
 `_COMPOSITE_FIELD_NAMES`（`scripts/review/` **非** `decision` / `graph` 作用域，模块级不触发），
 **绝不**进入任何决策 / 排序 / 门槛逻辑。`assert_no_composite_score()` 是**检查器**（负向断言），
 其函数体**不含**被禁词字面量。
+
+## 版本更正（追加式，`Ch9 §3.4.2`）
+
+复盘记录**一次写入即不可改**：要更正（例如补齐 `output_refs` 回写）**只能追加一版**，
+而不是就地改写历史行。`record_eval(..., new_version=True)` 即该入口：
+
+- **同一 `task_id` / 同一 `idempotency_key`**（同一逻辑复盘），`recorded_seq` **严格递增**
+  ⇒ 版本序不倒挂（消费方按 `schema.store.as_of`，即"同业务键取 `recorded_seq` 最大者"取当前版本）；
+- `recorded_seq` **必须显式给出且大于该 `task_id` 现有最大值**，否则拒绝
+  （见 `_assert_version_monotonic`，与 `scripts/claim/transition.py::_next_recorded_seq` 同纪律）；
+- 历史版本**不被删除**（供 as-of 回看）；两者同 `task_id` 共存于追加式真源。
 """
 
 from __future__ import annotations
@@ -153,6 +164,8 @@ def record_eval(
     recorded_at: datetime | None = None,
     recorded_seq: int | None = None,
     backfilled_at: datetime | None = None,
+    output_refs: Iterable[str] = (),
+    new_version: bool = False,
     apply: bool = True,
 ) -> EvalResult:
     """落一条三层复盘记录（`Ch10 §C.4`）—— **append-only** 追加到 `facts/tasks.jsonl`。
@@ -170,6 +183,14 @@ def record_eval(
 
     幂等（承 `Ch9` 幂等键、`scripts/daily/degrade.py` 同纪律）：同一
     `idempotency_key = review::{layer}::{target_ref}` 已存在 → **不重复追加**。
+
+    参数 `output_refs`：该复盘任务的**可追溯回写**（`T14`：`done` 必须有非空 `output_refs`）。
+      默认空（历史调用行为不变）；更正既有记录时用它补齐回写。
+
+    参数 `new_version=True`（**追加更正版**，`Ch9 §3.4.2`）：**跳过**幂等去重，按同一
+      `task_id` / 同一幂等键**追加一版新行**；此时 `recorded_seq` 必须显式给出且**严格大于**
+      该 `task_id` 现有最大值（见 `_assert_version_monotonic`），否则抛 `ValueError`。
+      历史版本**不改不删**。
 
     参数 `apply=False` → **只校验、不落库**（供预演 / 纯校验用例）。
 
@@ -198,11 +219,15 @@ def record_eval(
     # 负向断言：一条复盘记录**本身**不得携带综合评分字段（合法记录必过，见反向对照用例）。
     assert_no_composite_score([record])
 
+    out_refs = [str(ref) for ref in output_refs]
     if apply:
         root = Path(code_root) if code_root is not None else _ROOT
         key = _idempotency_key(layer, target_ref)
-        if not _already_recorded(root, key):
-            tid = task_id or f"task_review::{layer}::{target_ref}"
+        tid = task_id or f"task_review::{layer}::{target_ref}"
+        if new_version:
+            # ★ 追加**更正版**：同一逻辑复盘（同 task_id / 同幂等键）被追加了一版。
+            #   版本序必须**严格递增**（`Ch9 §3.4.2`）—— 否则拒绝（不猜值、不倒挂）。
+            _assert_version_monotonic(root, tid, recorded_seq)
             task = _build_task(
                 record=record,
                 task_id=tid,
@@ -211,6 +236,20 @@ def record_eval(
                 recorded_at=recorded_at,
                 recorded_seq=recorded_seq,
                 backfilled_at=backfilled_at,
+                output_refs=out_refs,
+            )
+            # 唯一写入口（`Ch9 §3.4.2`）：**不**自写文件、**不**就地改既有行。
+            append_records(root, "tasks", [task])
+        elif not _already_recorded(root, key):
+            task = _build_task(
+                record=record,
+                task_id=tid,
+                idempotency_key=key,
+                status=task_status,
+                recorded_at=recorded_at,
+                recorded_seq=recorded_seq,
+                backfilled_at=backfilled_at,
+                output_refs=out_refs,
             )
             # 唯一写入口（`Ch9 §3.4.2`）：**不**自写文件、**不**就地改既有行。
             append_records(root, "tasks", [task])
@@ -230,6 +269,47 @@ def _already_recorded(root: Path, idempotency_key: str) -> bool:
     return False
 
 
+def _as_int(value: Any) -> int:
+    """把 `recorded_seq` 之类取值归一为 `int`；非整数（含缺失 / `None` / 字符串）按 `0`。
+
+    ★ 用 `isinstance` 判定而非 `try/except ... continue` —— 后者会**吞异常**
+      （命中 `no_placeholder_guard` 的 `SWALLOW_EXCEPTION_CONTINUE`）。
+    ★ 显式排除 `bool`：`bool` 是 `int` 子类，否则 `True` 会被当成版本号 `1`。
+    """
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _max_recorded_seq(root: Path, task_id: str) -> int:
+    """该 `task_id` 在真源里现有的最大 `recorded_seq`（缺 / 非整数按 `0` 处理，不猜值）。"""
+    best = 0
+    for row in read_records(root, "tasks"):
+        if str(row.get("task_id") or "") != task_id:
+            continue
+        best = max(best, _as_int(row.get("recorded_seq")))
+    return best
+
+
+def _assert_version_monotonic(
+    root: Path, task_id: str, recorded_seq: int | None
+) -> None:
+    """更正版（`new_version=True`）必须带**严格大于现有最大**的 `recorded_seq`。
+
+    与 `scripts/claim/transition.py::_next_recorded_seq` 同纪律：**不猜值、不倒挂**
+    （`Ch9 §3.4.2`：追加式版本表以 `recorded_seq` 区分版本；消费方按 `as_of` 取最大者）。
+    缺值 / 不大于现有最大 → 抛 `ValueError`（**不写半截数据**）。
+    """
+    if recorded_seq is None:
+        raise ValueError(
+            f"更正版必须显式给出 recorded_seq（Ch9 §3.4.2）；task_id={task_id}"
+        )
+    current_max = _max_recorded_seq(root, task_id)
+    if int(recorded_seq) <= current_max:
+        raise ValueError(
+            f"recorded_seq={recorded_seq} 不大于 task_id={task_id} 现有最大 {current_max} "
+            "—— 版本序倒挂，拒绝（Ch9 §3.4.2）"
+        )
+
+
 def _build_task(
     *,
     record: EvalResult,
@@ -239,15 +319,21 @@ def _build_task(
     recorded_at: datetime | None,
     recorded_seq: int | None,
     backfilled_at: datetime | None,
+    output_refs: Sequence[str],
 ) -> Task:
     """把一条 `EvalResult` 包成可落库的 `Task`（`facts/tasks.jsonl` 的行模型 = `Task`）。
 
     `eval_target_ref`（Ch9 版本 id 机制）与 `reason` / `version`（`Ch2 §E change_log` 口径）
     为**复用**字段 —— 落 `parent_context`，**不**改 `EvalResult` schema（`Ch10 §C.1`）。
 
+    `output_refs`（`T14` 可追溯回写）由调用方给出：复盘任务写成 `done` 即**必须有非空回写**，
+    否则被 `G1-04` / `ASKTRACE-WRITEBACK` 判为空执行 —— 即本次更正修复的那条既有契约。
+
     `eval_result`（**当前那条**）与 `eval_result_history`（**追加式累积**）均写入本记录：
     首次写入时二者一致，正是"当前指针 + 追加式日志"的标准形态
     （`schema/models.py::Task.eval_result_history` 注明 append-only）。
+    ★ 更正版（`new_version=True`）**另起一行**：跨版本的累积由**追加式行序列**承载
+      （多行同 `task_id`，`recorded_seq` 递增），本行的 `eval_result_history` 仍是本行那条。
     """
     persisted = PersistedEvalResult(
         eval_layer=EvalLayer(record.eval_layer),
@@ -266,7 +352,7 @@ def _build_task(
         status=status,
         idempotency_key=idempotency_key,
         input_refs=[record.eval_target_ref],
-        output_refs=[],
+        output_refs=list(output_refs),
         parent_context=parent_context,
         first_seen_at=recorded_at,
         analyzed_at=recorded_at,

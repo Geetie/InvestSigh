@@ -28,6 +28,12 @@ python system/scripts/tasks/gap_to_task.py [code_root]
 ⇒ `done` + 空 `output_refs` **合法当且仅当** `check_record` 存在且（`changed is False` **或**
 `degraded is True`）；否则仍按 `G1-04` 判空执行。★★ 此前只认 ① ⇒ **降级轮被误报成空执行**
 （`G-64`：假红；实测四态表见 `is_degraded_empty_output()`）。
+
+★ **版本化真源口径**（`Ch9 §3.4.1` / `§3.4.2`）：本守卫逐条判据跑在每个 `task_id` 的
+**当前版本**上（`recorded_seq` 最大者，经 `current_task_versions` → `schema.store.as_of` 选取）；
+被跳过的历史版本**显式计数**（`scanned["tasks_historical_skipped"]` + `HISTORICAL_VERSIONS_SKIPPED`）。
+这是**版本语义**，**不是放宽**：① 逐行判会把"同 `task_id` 的更正版"误判成"幂等键重复（同缺口建了两次单）"；
+② 旧版缺 `output_refs` 会被误报空执行。真实重复（同幂等键、**异** `task_id`）去重后仍是两行，照常报警。
 """
 
 from __future__ import annotations
@@ -37,7 +43,7 @@ import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
@@ -45,6 +51,7 @@ if str(_ROOT) not in sys.path:
 
 from scripts._common import CheckReport, Violation, run_checker  # noqa: E402
 from scripts._common import EXIT_INPUT_ERROR, EXIT_OK, EXIT_VIOLATION  # noqa: E402
+from schema.store import as_of  # noqa: E402
 
 # ★ 降级判定的**唯一真源**（`G-06`；`G-64` 的修复面）：本文件此前对该模块**零引用**，
 #   于是"本轮是否降级"在 `scripts/daily/degrade.py` 与这里**各有一套局部口径**（同族第 3、4 个谓词）。
@@ -251,6 +258,37 @@ def assert_transition(current: str, target: str) -> None:
         )
 
 
+def current_task_versions(
+    rows: Sequence[Mapping[str, Any]],
+) -> tuple[list[Mapping[str, Any]], int]:
+    """把任务行**收敛到每个 `task_id` 的当前版本**，返回 `(当前版本行, 被跳过的历史版本数)`。
+
+    版本选取的**唯一真源** = `schema.store.as_of`（`Ch9 §3.4.1`："按业务键分组，
+    取 `recorded_seq` 最大者"）—— 本函数是它的**薄包装**（`G-06`：**不重造**选取算法、
+    不引入第二套口径）。同族先例：`valuelayer/completeness.py::current_baselines()`、
+    `delivery/stage_gate.py::_declared_eval_layers()`；
+    同一口径的姊妹实现见 `scripts/graph/traceability.py::current_task_versions`
+    （两处均为对 `as_of` 的薄包装，选取算法**只有一份**）。
+
+    ★ 为什么必须按 `task_id` 取当前版本：`facts/tasks.jsonl` 是**追加式版本表**
+      （`Ch9 §3.4.2`：一次写入即不可改，修正 = **追加**带更大 `recorded_seq` 的新行）。
+      于是同一 `task_id` 可以有多行（历史版本 + 当前版本）。**逐行**判会把**历史版本**
+      当成独立被检对象 —— 旧版缺 `output_refs` 就会被误报，也会把"同 `task_id` 的版本"
+      误判成"幂等键重复（同缺口建了两次单）"（这正是本次修复的成因）。
+
+    ★ **缺 `task_id` 的行不参与分组**（每个自成一个被检对象）—— `as_of` 会把所有缺键行
+      并进同一个 `(None,)` 桶、只留一条（**静默丢弃**，违反 `G-03`）。故此处把它们原样放出，
+      仍逐条判（不因缺键而漏判，也不因缺键而丢行）。
+
+    ★ **不是放宽**（`R-06` ①）：真实重复仍会被抓到 —— 同一 `idempotency_key` 挂在**两个不同**
+      `task_id` 上属**两条独立记录**，去重后两行都在，下面的幂等键去重检查照常报警。
+    """
+    keyed = [row for row in rows if str(row.get("task_id") or "")]
+    unkeyed = [row for row in rows if not str(row.get("task_id") or "")]
+    current = list(as_of(keyed, ["task_id"])) + unkeyed
+    return current, len(rows) - len(current)
+
+
 def check(root: Path) -> CheckReport:
     """守卫：真源中每条任务的状态必须合法、幂等键唯一、**终态必须有输出**。
 
@@ -279,8 +317,21 @@ def check(root: Path) -> CheckReport:
     if not path.exists():
         raise FileNotFoundError(f"缺少真源: {path}")
     rows = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
-    report.scanned["tasks"] = len(rows)
+    # ★ 版本化真源（`Ch9 §3.4.1` / `§3.4.2`）：同 `task_id` 只判**当前版本**（`recorded_seq` 最大者）。
+    #   历史版本**显式计数**（`G-03`），不作为独立被检对象 —— 否则旧版缺产出会假红，
+    #   且同 `task_id` 的版本会被误判成"幂等键重复（同缺口建了两次单）"。
+    current_rows, historical_skipped = current_task_versions(rows)
+    report.scanned["tasks"] = len(current_rows)
+    report.scanned["tasks_all_versions"] = len(rows)
+    report.scanned["tasks_historical_skipped"] = historical_skipped
     report.scanned["terminal_states"] = len(TERMINAL_STATES)
+    if historical_skipped > 0:
+        report.notes.append(
+            f"HISTORICAL_VERSIONS_SKIPPED: facts/tasks.jsonl 共 {len(rows)} 行，"
+            f"其中 {historical_skipped} 行为同 `task_id` 的旧版本；"
+            "本次只判各 `task_id` 的当前版本（追加式版本表，历史版本供 as-of 回看："
+            "`Ch9 §3.4.1` / `§3.4.2`）"
+        )
 
     seen: dict[str, str] = {}
     # ★ 配对计数（`G-43` 的教训）：只看"豁免 0 条"**无法区分**"没有这类行"与"判据恒假"。
@@ -291,7 +342,7 @@ def check(root: Path) -> CheckReport:
     no_change_day_exempt = 0
     degraded_empty_output = 0
     empty_output_violations = 0
-    for row in rows:
+    for row in current_rows:
         key = row.get("idempotency_key", "")
         if key in seen:
             report.violations.append(
