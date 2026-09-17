@@ -1,3 +1,0 @@
-{"gap_id": "dv-gap-benchmark-p01-compute-v1", "method_version": "compute-v1", "missing": ["security_id"], "reason": "p01: 无法解析基准对应证券（未声明 security_id，且行情非唯一证券）", "recorded_at": "2026-09-16T10:32:06.323239+00:00", "subject": "p01"}
-{"gap_id": "dv-gap-benchmark-tbd-compute-v1", "method_version": "compute-v1", "missing": ["security_id"], "reason": "tbd: 无法解析基准对应证券（未声明 security_id，且行情非唯一证券）", "recorded_at": "2026-09-16T10:32:06.323255+00:00", "subject": "tbd"}
-{"gap_id": "dv-gap-benchmark-AGIX-compute-v1", "method_version": "compute-v1", "missing": ["security_id"], "reason": "AGIX: 无法解析基准对应证券（未声明 security_id，且行情非唯一证券）", "recorded_at": "2026-09-17T08:05:53.301327+00:00", "subject": "AGIX"}
