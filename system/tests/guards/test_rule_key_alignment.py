@@ -149,13 +149,15 @@ def test_injecting_at_the_declaring_side_is_blocked(code_root: Path) -> None:
 def test_unregistered_absent_rule_file_is_blocked(code_root: Path) -> None:
     """★ 引用一个**没登记**的不存在规则文件 ⇒ `exit 1`；**已登记**的 ⇒ 绿（`口径 13`）。
 
-    ★ 为什么这条断言必须有两臂：若只有"缺文件就红"，`rules/transmission.yaml` /
-      `rules/budget.yaml`（**按设计刻意未安装**，值待冻结）会让门禁**恒红** ⇒
-      误报刷屏 ⇒ 门禁被关掉（本项目铁律）。若只有白名单，则**任何**拼错的规则文件名
-      都会被"反正有白名单"盖过去。⇒ 两臂同时存在，白名单才不是避难所。
+    ★ 为什么这条断言必须有两臂：若只有"缺文件就红"，任何"值未冻结故暂不安装"的规则文件
+      都会让门禁**恒红** ⇒ 误报刷屏 ⇒ 门禁被关掉（本项目铁律）。若只有白名单，则**任何**
+      拼错的规则文件名都会被"反正有白名单"盖过去。⇒ 两臂同时存在，白名单才不是避难所。
+    ★ 2026-09-17 起 `KNOWN_ABSENT_RULE_FILES` **为空**（原先两条登记的消失条件已履行：
+      `rules/transmission.yaml` 与 `rules/budget.yaml` 均已安装）⇒ 本条改为**按表长分支断言**：
+      表非空时逐条必须有 note；表空时**不得**出现该 note（出现即说明表里有条目没被数到）。
     """
     code, out = run_gate_inproc(GUARD, code_root)
-    assert code == 0, f"未注入时应 exit 0（已登记的两条待安装文件不得恒红），实得 {code}\n{out}"
+    assert code == 0, f"未注入时应 exit 0（已登记的待安装文件不得恒红），实得 {code}\n{out}"
     # ★ 计数**派生自豁免表**（不写死 2）：若某条登记已无人引用（欠账其实已消），
     #   这里的读数会小于表长 ⇒ 用例变红 ⇒ 逼人把那条从表里撤掉（`口径 13` 的过期机制同族）。
     from scripts.checks import rule_key_alignment_guard as G
@@ -164,7 +166,14 @@ def test_unregistered_absent_rule_file_is_blocked(code_root: Path) -> None:
     assert f"whitelisted_absent_rule_files: {registered}" in out, (
         f"应如实报出「{registered} 条已登记的待安装规则文件」计数\n{out}"
     )
-    assert "待安装规则文件" in out, f"每条豁免必须打出 note（不静默）\n{out}"
+    if registered:
+        assert "待安装规则文件" in out, f"每条豁免必须打出 note（不静默）\n{out}"
+    else:
+        # ★ 表空 = 两条撤销都已生效；此时若仍有该 note，说明「表长」与「实际发射」不一致。
+        assert "待安装规则文件" not in out, (
+            f"豁免表已空（{registered} 条），不应再打出「待安装规则文件」note —— "
+            f"若出现，说明扫描到了表外的条目\n{out}"
+        )
 
     # ── 注入：新增一个**没登记**的规则文件引用 ──
     path = code_root / RULES_READER

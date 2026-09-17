@@ -40,6 +40,34 @@ _NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 _DEADLINE = "2025-12-31T00:00:00+00:00"  # 早于 _NOW ⇒ 时间预算已触限
 
 
+@pytest.fixture(autouse=True)
+def _budget_file_hidden_by_default(code_root: Path) -> None:
+    """**默认**把 `rules/budget.yaml` 移走 —— 让本文件回到它写作时的世界。
+
+    ★ 为什么必须这么做（`G-RC-02` / `G-RC-07` 同族，2026-09-17 实测触发）：
+      本文件绝大多数用例用 `defaults=` 构造输入，而 `budget_gate._configured_source()`
+      的解析顺序是 **`rules/budget.yaml` ＞ `freeze p09` 数值映射 ＞ 显式 `defaults`**。
+      该文件于 2026-09-17 落地后，`defaults` 被**整体旁路** ⇒ 13 处用例的**观测输入来源变了**
+      （实测 6 条变红），尽管它们要测的性质（比值 / 零值语义 / 显式缺省链）**一点没变**。
+      ⇒ 显式声明「本文件默认不需要那个文件」，把"仓库里此刻有没有它"从观测里剔出去。
+    ★ 要测**文件在场**的路径，用 `budget_file_present`（见下）。
+    """
+    (code_root / "rules" / "budget.yaml").unlink(missing_ok=True)
+
+
+@pytest.fixture()
+def budget_file_present(code_root: Path) -> Path:
+    """把 `rules/budget.yaml` 从**真仓库**拷回副本 —— 用于测「文件在场 ⇒ 它是第一顺位来源」。
+
+    ★ 与 autouse 的 `_budget_file_hidden_by_default` 配对：一个钉"文件缺失"的路径，
+      一个钉"文件在场"的路径。二者缺一，都会有半条分支无人验证（`T-18` 家族）。
+    """
+    import shutil
+
+    shutil.copy(SYSTEM_ROOT / "rules" / "budget.yaml", code_root / "rules" / "budget.yaml")
+    return code_root
+
+
 def _seed_claim(root: Path, *, status: ClaimStatus = ClaimStatus.pending_verification) -> None:
     """经**唯一写入口**落一条合法 claim（默认 `pending_verification`）。"""
     append_records(
@@ -243,13 +271,22 @@ def test_compute_limit_bounded_by_research_cap(code_root: Path) -> None:
 
 
 def test_missing_budget_config_fails_loud(code_root: Path) -> None:
-    """**AC-09 错误路径**：缺 `rules/budget.yaml` 且无显式缺省 ⇒ `BudgetConfigMissing`（不静默兜底）。"""
+    """**AC-09 错误路径**：缺 `rules/budget.yaml` 且无显式缺省 ⇒ `BudgetConfigMissing`（不静默兜底）。
+
+    ★ 构成"文件缺失"这个输入的是 autouse 的 `_budget_file_hidden_by_default`（2026-09-17 起）
+      —— 于是本用例测的是**缺失路径本身**，而**不是**"仓库里恰好没有它"。
+    """
+    assert not (code_root / "rules" / "budget.yaml").exists(), "夹具应已移走 budget.yaml"
     with pytest.raises(BudgetConfigMissing, match="budget.yaml"):
         load_budget_limits(code_root, importance_class="high")
 
 
 def test_explicit_defaults_used_when_file_absent(code_root: Path) -> None:
-    """缺文件但给**显式**缺省 ⇒ 走 `explicit_defaults`（另一条确定路径，非静默兜底）。"""
+    """缺文件但给**显式**缺省 ⇒ 走 `explicit_defaults`（另一条确定路径，非静默兜底）。
+
+    ★ 同前：文件缺失由 autouse fixture 制造；`source` 的观测值不得由
+      "仓库里此刻有没有这个文件"决定（`G-RC-02` 同族）。
+    """
     limits = load_budget_limits(
         code_root, importance_class="high", defaults={"max_model_calls": 7, "max_searches": 2}
     )
@@ -257,6 +294,30 @@ def test_explicit_defaults_used_when_file_absent(code_root: Path) -> None:
     assert limits.compute_limit == 7
     assert limits.search_limit == 2
     assert any("显式" in note for note in limits.notes)
+
+
+def test_installed_budget_file_is_the_source_of_truth(budget_file_present: Path) -> None:
+    """★ **正向对照**（与上面两条配对）：`rules/budget.yaml` **在**时 ⇒ `source` = 该文件。
+
+    ★ 为什么必须补这一条：上面两条都靠"移走文件"来测**缺失分支**；若只有它们，
+      文件**真的**落地后就没有任何用例证明"它被优先读取" —— 那等于新文件无人验证
+      （`T-18` 家族：写在声明里 ≠ 在机器上有效力）。本用例钉住解析顺序的第 1 顺位。
+    """
+    code_root = budget_file_present
+    assert (code_root / "rules" / "budget.yaml").exists(), "夹具应把 budget.yaml 拷回副本"
+    limits = load_budget_limits(code_root, importance_class="high")
+    assert limits.source == "rules/budget.yaml", f"应优先取已安装的文件，实得 {limits.source!r}"
+    # 三类上限在本文件里取显式降级（`null` ≠ `0`，`G5`）：
+    assert limits.deadline is None, "deadline: null ⇒ 不设时间上限"
+    assert limits.search_limit is None, "max_searches: null ⇒ 不设检索上限"
+    # 计算类：未配置 `max_model_calls` ⇒ 有效上限 = `research_cap`（有确定上界，不是"无上限"）
+    assert limits.compute_limit == limits.research_cap, (
+        f"未配置 max_model_calls 时应走 research_cap，实得 compute={limits.compute_limit} "
+        f"cap={limits.research_cap}"
+    )
+    assert any("research_cap" in n for n in limits.notes), (
+        f"必须如实记 note 说明上限来自 research_cap（不静默）\n{limits.notes}"
+    )
 
 
 def test_unknown_claim_fails_loud(code_root: Path) -> None:

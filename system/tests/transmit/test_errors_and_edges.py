@@ -67,10 +67,18 @@ def test_unresolvable_start_ref_raises(code_root: Path) -> None:
 
 
 def test_params_missing_raises(code_root: Path) -> None:
-    """阈值未传且无 `rules/transmission.yaml` → 响亮失败（不静默兜底）。"""
+    """阈值未传且 `rules/transmission.yaml` **缺失** → 响亮失败（不静默兜底）。
+
+    ★ `rules/transmission.yaml` 已于 2026-09-17 安装（值按 `00_待拍板项清单::B3` ≤3× /
+      `Ch7 §J3` 硬上限 5 / `§J5` 保守键 `undisclosed` 落地）⇒ 本用例**主动移走**该文件再断言，
+      **不再**依赖"仓库里恰好没有它"。
+    ★ 为什么必须改成主动移走（`G-RC-02` 同族）：原先的 `assert not (...).exists()` 把
+      「被测行为」与「仓库当前状态」绑在一起 —— 文件一落地，用例就红，而**代码其实没坏**。
+      观测向量必须由本用例自己制造，不得由"仓库恰好有什么"提供。
+    """
+    (code_root / "rules" / "transmission.yaml").unlink()   # ← 主动制造"缺失"，与仓库现状解耦
     edges = [edge("a", "b", edge_id="e1")]
     fm = fields_map(("e1", fields("b", "e1")))
-    assert not (code_root / "rules" / "transmission.yaml").exists()
     with pytest.raises(FileNotFoundError):
         transmit(code_root, "a", params=None, edges=edges, hop_fields=fm)
 

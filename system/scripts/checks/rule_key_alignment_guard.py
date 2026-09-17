@@ -215,47 +215,19 @@ KNOWN_ZERO_KEY_READS: dict[tuple[str, str], _Waiver] = {}
 #:
 #: ★ **键按 `(文件, 规则文件)` 逐条登记**，不按规则文件名整体豁免 —— 否则将来任何一个
 #:   新模块静默读同一个不存在的文件时，会被这条豁免一起盖住。
-KNOWN_ABSENT_RULE_FILES: dict[tuple[str, str], _Waiver] = {
-    (
-        "scripts/graph/stop.py",
-        "transmission.yaml",
-    ): _Waiver(
-        reason=(
-            "**按设计刻意未安装**（`B3 amplification_cap` / `p04` 等值未冻结），"
-            "且**缺它的读路径响亮失败、不静默兜底**：`load_transmit_params()` 先 `path.exists()` 判、"
-            "缺即 `FileNotFoundError`（实测留痕：`ws_independent_audit_batch8_integration_transmit.md:52-57`）。"
-            "登记处：`ws_graph_report.md:99`（『请主理人在集成时提供该文件』）、"
-            "`ws_ch7_transmit_report.md:161`（所需键 + 建议值）、"
-            "`.workbuddy/memory/2026-09-16.md:711`（『**不创建** `rules/transmission.yaml`：同理（等值未冻结）』）。"
-        ),
-        owner="**主理人**（安装规则文件）；值面归第十一章 `p04` 参数冻结裁定",
-        expected_consumer_by=(
-            "消费者**已在**（`scripts/graph/stop.py::load_transmit_params` / `scripts/transmit/**`）；"
-            "本条等的是**被读的文件**。预期消失条件 = 第十一章 `p04` 冻结后主理人安装 `rules/transmission.yaml`。"
-        ),
-        review_by="2026-09-30",
-    ),
-    (
-        "scripts/evidence/budget_gate.py",
-        "budget.yaml",
-    ): _Waiver(
-        reason=(
-            "**按设计刻意未安装**（三类预算值由 `p09` 冻结后填入，`06/02:320`『第十一章『检索/模型预算』"
-            "参数冻结后填入』），且**缺它的读路径响亮失败、不静默兜底**：`_configured_source()` 先"
-            "`rules_path.exists()` 判 → 退到 `freeze p09` 数值映射 → 再退到**调用方显式** `defaults`；"
-            "三者皆无 ⇒ `BudgetConfigMissing`（`RuntimeError`，`budget_gate.py:179-184`）。"
-            "登记处：`.workbuddy/memory/2026-09-16.md:702`（『缺 `rules/budget.yaml` → "
-            "`BudgetConfigMissing` 响亮失败』）、`:709`（『**不创建** `rules/budget.yaml`：设计原文说"
-            "『参数冻结后填入』，而 `p09.budget = tbd`』）。"
-        ),
-        owner="**主理人**（安装规则文件）；值面归 `p09` 预算参数冻结裁定",
-        expected_consumer_by=(
-            "消费者**已在**（`scripts/evidence/budget_gate.py::_configured_source`）；"
-            "本条等的是**被读的文件**。预期消失条件 = `p09` 冻结后主理人安装 `rules/budget.yaml`。"
-        ),
-        review_by="2026-09-30",
-    ),
-}
+KNOWN_ABSENT_RULE_FILES: dict[tuple[str, str], _Waiver] = {}
+#: ★★ **2026-09-17：本表已清空** —— 两条登记都在同一天履行了各自的「预期消失条件」：
+#:   · `("scripts/graph/stop.py", "transmission.yaml")` → `rules/transmission.yaml` **已安装**
+#:     （值按 `00_待拍板项清单::B3` ≤3× / `Ch7 §J3` 硬上限 5 / `§J5` 保守键 `undisclosed` 落地）；
+#:   · `("scripts/evidence/budget_gate.py", "budget.yaml")` → `rules/budget.yaml` **已安装**
+#:     （三类上限取显式降级：`deadline`/`max_searches` 不设限，`max_model_calls` 未配置 ⇒ 走 `research_cap`）。
+#:   ⇒ 按本表自设的纪律（豁免只在「预期消失条件未满足」期间成立），**同步撤除**，
+#:     **不留在表里当过期豁免** —— 否则豁免表本身会成为新的漂移源。
+#: ★ 但**表结构保留**（空 dict、仍被 `_selfcheck_waivers()` 逐条校验）：
+#:   下一条「引用了按设计尚未安装的规则文件」仍必须按 `口径 13` 四字段登记到这里。
+#: ★ 清空后立刻暴露出一个**真缺陷**（已同批修复，见下方白名单比值处）：
+#:   `ref_pairs` 与 `whitelisted_absent` 同时归零 ⇒ 比值分母为 0 ⇒ `ZeroDivisionError`
+#:   **把整道守卫打崩**。即这道门此前在**全绿时会崩**，只因两个文件按设计未安装而从未暴露。
 
 #: ★ 已登记的"**`rules/` 声明了记录列、但 `scripts/**` 零消费者**"（方向 2，`T-18` 家族）。
 #:
@@ -1148,12 +1120,25 @@ def check(root: Path) -> CheckReport:
     report.scanned["waiver_ratio_reverse_permille"] = (
         1000 * reverse_waived // reverse_columns
     ) if reverse_columns else 0
+    # ★★ 零分母保护（2026-09-17 实测触发的**真缺陷**）：上面三个 `scanned` 早已写了
+    #   `if ... else 0`，但**同一份分母**在下面两条 f-string 里**没有设防** ——
+    #   `rules/transmission.yaml` 与 `rules/budget.yaml` 安装后，`ref_pairs` 归零、
+    #   两条豁免亦撤销（`whitelisted_absent=0`）⇒ `file_total = 0` ⇒ `ZeroDivisionError`
+    #   **把整道守卫打崩**。而那恰恰是**最健康**的状态（没有任何"引用了却不存在的规则文件"）
+    #   —— 即：**这道门此前在全绿时会崩**，只因两个文件按设计未安装（`ref_pairs` 恒为 2）而从未暴露。
+    #   ⇒ 分母为 0 时**显式记 `n/a`**，**不写 `0.0%`**（那会读成"比值为零"，与"无被检对象"混同，`G-03`）。
+    key_pct = f"{100.0 * whitelisted / key_total:.1f}%" if key_total else "n/a（分母为 0）"
+    file_pct = (
+        f"{100.0 * whitelisted_absent / file_total:.1f}%" if file_total else "n/a（分母为 0）"
+    )
     report.notes.append(
         f"白名单比值（`口径 13` 第 3 条）：键 {whitelisted} / {key_total}"
-        f"（{100.0 * whitelisted / key_total:.1f}%）· "
+        f"（{key_pct}）· "
         f"规则文件 {whitelisted_absent} / {file_total}"
-        f"（{100.0 * whitelisted_absent / file_total:.1f}%）。"
+        f"（{file_pct}）。"
         "★ 比值只作**可见性**用：它变高不自动等于缺陷，但**必须有人看过**。"
+        "★ 分母为 0（= 没有任何「引用了不存在的规则文件」的对）时记 `n/a`；"
+        "记 `0.0%` 会把「无被检对象」读成「比值极好」（`G-03`）。"
     )
     # ★ 方向 2（`T-18` 家族）的覆盖面与方法 —— **必须进输出**（读者要能判"这个数能不能用"）。
     report.notes.append(

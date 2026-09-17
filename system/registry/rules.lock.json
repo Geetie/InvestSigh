@@ -15,15 +15,20 @@
       "locked_mode": "0o444",
       "sha256": "71afbd6215273e115940692ba3344bc6e219eecd2b67e4b72d4cb2a1a375af3c"
     },
+    "rules/budget.yaml": {
+      "bytes": 3187,
+      "locked_mode": "0o444",
+      "sha256": "978969611445e653b191a7a67cef3018a77921c8c5f4ddc96f0fdd47a5b957fb"
+    },
     "rules/data-sources.allowlist.yaml": {
       "bytes": 4858,
       "locked_mode": "0o444",
       "sha256": "90d62df5b81b8e315cb0c2eb814bafca251e8296f6c54ae58b227ee17680f3b7"
     },
     "rules/freeze.yaml": {
-      "bytes": 16012,
+      "bytes": 18140,
       "locked_mode": "0o444",
-      "sha256": "eed26a53b0ffe9f137b38438a21e641912ea4b90cd176dee9db5b25ce598352a"
+      "sha256": "cfdc8454e73b38899d709ee0eac5b1e5d4db1dfe7c4833e14a369c79ffbc0308"
     },
     "rules/metric-sets.yaml": {
       "bytes": 8612,
@@ -65,13 +70,18 @@
       "locked_mode": "0o444",
       "sha256": "7d14de8e3fcd3ae29ada7c867bc557c9a24fbd4af8b84e02f5439ae395ac2934"
     },
+    "rules/transmission.yaml": {
+      "bytes": 3639,
+      "locked_mode": "0o444",
+      "sha256": "d733b144be62df71b24407aa6a292b4a647aa2c569715b70ff9c882981db5452"
+    },
     "rules/valuation-methods.yaml": {
       "bytes": 9592,
       "locked_mode": "0o444",
       "sha256": "99a524ada31f50917b9287acf99eb2bced8ad014b3c5b61bf8232e628ce0f1f4"
     }
   },
-  "locked_at": "2026-09-17T06:57:47+00:00",
+  "locked_at": "2026-09-17T07:31:26+00:00",
   "locked_by": "system/scripts/ops/lock_rules.py",
   "note": "本清单是 rules/ 的 SHA256 快照。校验方 scripts/checks/rules_lock_guard.py；改动流程见 lock_rules.py 文档头。",
   "owner_writable": false,

@@ -16,6 +16,29 @@
 # ★ 拍板前恒 tbd（Ch11 §F.1）：`freeze_status = tbd`；`tbd → frozen` 单向、不可原地回退。
 #   每项 `option_set` ≥1 条 `{value, basis}`；`suggested_value` **是建议，不是门槛**。
 #
+# ★★ 2026-09-17 需求方裁定：**11 项一律采用 `suggested_value`**（即"用建议值"）。
+#   **据此不改任何一项的 `freeze_status`** —— 理由三条，缺一不可：
+#     ① 本文件第 16 行逐字写明「`suggested_value` **是建议，不是门槛**」⇒ 建议值**本来就可直接生效**；
+#     ② `config/freeze.py` 已实现该语义：`freeze_status = tbd` 时
+#        `effective_value = suggested_value`，且 `value_source = "suggested"` **显式标注来源**
+#        ⇒ 下游取的**已经是建议值**，无需任何切换动作；
+#     ③ 切换 `tbd → frozen` 是**单向、不可回退**的（第 16 行），且按 `freeze_guard::G11-01`
+#        必须**原子携带** `value` + `confirmed_by` + `confirmed_at` + `version` 三要素齐备；
+#        在"建议值即可用"的前提下做这次不可逆切换，**只增风险不增能力**，
+#        还会与既有的 4 条 `freeze_status == "tbd"` 契约用例（`test_contracts` / `test_schedule_p07`）冲突。
+#   ⇒ 裁定记录在此（**只记注释、不新增键**：往条目里加元数据键会被
+#     `rule_key_alignment_guard` 判为「在机器上零效力」而响亮判红，实测已踩）。
+#
+# ★ 由本裁定连带解锁的动作（同日执行）：
+#   · `rules/transmission.yaml` **已安装**（值按 `00_待拍板项清单::B3` ≤3× / `Ch7 §J3` 硬上限 5 / `§J5` 保守键）；
+#   · `rules/budget.yaml` **已安装**（三类上限取显式降级，见该文件头说明）；
+#   · `rule_key_alignment_guard::KNOWN_ABSENT_RULE_FILES` 中对应的两条豁免**已同步撤除**
+#     （其"预期消失条件"即为"文件安装"，条件既已满足，豁免不得留存）。
+# ★ 仍未定、且**不由本裁定解决**的子键（它们连 `suggested_value` 内部都是 `tbd`）：
+#   `p05.algorithm`（`resolved_at: delivery_stage_2`）· `p10.caliber_terms` 四键 ·
+#   `p07.time_value` · `p09.budget` · `p11.publish_policy`。
+#   这些留 `tbd` **不是缺陷**：`review_return` 会据此如实记 `blocked_by_caliber`（设计允许）。
+#
 # 本文件只读：0444 + SHA256 锁；模型对 rules/ 无写权（Ch9 §3.10 J9 / 纪律 10）。
 
 version: 1
