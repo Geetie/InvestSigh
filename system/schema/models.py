@@ -230,6 +230,19 @@ class RecommendationStatus(str, Enum):
     superseded = "superseded"
 
 
+class PublishedAs(str, Enum):
+    """**发布态**（`Ch8 §A.4` / `N8.3-11` / `S-09`）—— 把"已验证"与"推断"在发布层分开。
+
+    ★ `N8.3-11` 逐字：「有争议的推断以**"推断状态"**发布（显式标记，**不伪装为已验证**）」。
+    ★ `S-09` 明确它「**不改** Ch6 claim 状态」⇒ 与 `RecommendationStatus` 是两个域，不互相推导。
+    ★ 分层口径见 `00_待拍板项清单::A6`（**按对象分层**）：常规 → `verified`；
+      重大建议变化 / 争议推断 → `inferred`；基准变更与对外发布属**流程审批**，不在此表达。
+    """
+
+    verified = "verified"
+    inferred = "inferred"
+
+
 class BenchmarkRole(str, Enum):
     """`Ch3 §C.3`。"""
 
@@ -1889,6 +1902,23 @@ class Recommendation(TimeMixin):
     version_kind: VersionKind | None = None
     supersedes: str | None = None
 
+    published_as: PublishedAs | None = None
+    """**发布态**（`Ch8 §A.4` / `N8.3-11` / `S-09`）—— `verified` | `inferred`，未发布则 `None`。
+
+    `Ch8 §A.4` 逐字：`facts/recommendations` / 事件发布对象 新增 `published_as ∈ {verified, inferred}`。
+
+    ★★ 语义（`N8.3-11` 逐字）：「**有争议的推断以"推断状态"发布**（显式标记，**不伪装为已验证**）」。
+      ⇒ 这是**发布层标记**，`S-09` 明确「**不改** Ch6 claim 状态」，故与 `status` 是两个域，不互相推导。
+    ★ 取值来源：`00_待拍板项清单::A6`（已收口，**按对象分层**）——
+      常规研究 / 图谱更新 → 默认自动（`verified`）；**重大建议变化 / 争议推断 → 自动发布但标 `inferred`**；
+      基准变更 → 人工审批；对外公开 → 逐项显式授权（后两者属流程，不在本字段表达）。
+    ★ **未发布时是 `None`，不是 `inferred`**：`None` = "还没发布"，`inferred` = "已发布且是推断态"。
+      把"还没发布"写成 `inferred` 会和"已确认为推断"混为一谈（本仓"取不到不得退化成假值"的同一条纪律）。
+
+    ★ 为什么**追加在这张表上而不是新开一张发布表**：设计把它定义为 `recommendations` 的字段，
+      且发布态与"该条建议"一一对应（`Ch8 §A.2`）；另开表会引入第二个真源（`G-06`）。
+    """
+
     early_judgment: bool = False
     """是否为"提前判断"（结论依赖未兑现假设）。
 
@@ -1952,6 +1982,45 @@ class Task(TimeMixin):
     idempotency_key: str                       # 幂等键：防重复建单
     input_refs: list[str] = Field(default_factory=list)    # 输入引用
     output_refs: list[str] = Field(default_factory=list)   # 输出引用（可追溯回写）
+
+    # ── `Ch8 §C.1` / `N8.2-05`：提问与事件触发的四个时间戳 + 产出清单（**新增字段**）──
+    #   设计逐字（`Ch8 §D.3` 时序图）：① 事件发现时间复用 `first_seen_at`；② 入队时间 = `enqueued_at`；
+    #   ③ 研究完成时间复用 `analyzed_at`；④ 发布结果时间 = `result_published_at`。
+    #   **刻意不叫 `published_at`**（`Ch8 §A.4` 命名说明）：`TimeMixin.published_at` = **来源/事件公开时间**，
+    #   与之**同名不同域**故消歧 —— 这正是本仓 `T-03` 家族（同名不同物）的正面处置。
+    enqueued_at: datetime | None = None
+    """**入队时间**（`Ch8 §C.1` 第 ② 个时间戳）。"建单"的时刻，与 `first_seen_at`（发现）分开记。"""
+
+    result_published_at: datetime | None = None
+    """**结果发布时刻**（`Ch8 §C.1` 第 ④ 个时间戳）。★ 无变化时**不写**（反 KPI：未发布就是未发布）。"""
+
+    outputs: list[str] = Field(default_factory=list)
+    """提问/触发的**产出对象引用**（`Ch8 §C.1`；`N8.2-03` 第 ③ 条硬判据）。
+
+    ★ `Ch8 §C.1` 逐字：「产生的更新（对象引用）」，且 `§C.4` 要求「`outputs` 必须是**对象引用**
+      （**非纯文本**）」⇒ 判据是"回答里有 `claim_id` / `relation_id` 这类 id"，不是"文字写得像"。
+
+    ★★ 与 `output_refs` 的**分工**（两者都是 `list[str]` 对象引用，**极易混**，故逐字写清）：
+
+    | 字段 | 语义 | 出处 |
+    |---|---|---|
+    | `output_refs` | **一次运行的产出并集**（本轮**真正新写入**的对象引用）；失败/阻断/降级时**如实为空** | `Ch8 §E.1` / `§E.4`（降级保留契约） |
+    | `outputs` | **一次提问/事件触发**产出（回写）的对象引用；`N8.2-03` 第 ③ 条判据靠它 | `Ch8 §C.1` / `§C.4` |
+
+    ⇒ 二者**不合并**：`output_refs` 面向"运行有效性问题"（降级时为空是**证据**），
+      `outputs` 面向"这次提问到底改了什么"（为空即**未回写**、判据该红）。
+      把它们并成一个字段会让两条判据互相污染（一类本仓已登记 ≥5 次的漂移源）。
+    """
+
+    conclusion_changed: bool | None = None
+    """该任务是否**改变了已有结论**（`Ch8 §C.1` / `§C.6`；对齐 `Ch7 §D.4 judgment_change`）。
+
+    ★ 取 `bool | None` 而**不是** `bool`：`None` = **尚未判定**（`queued`/`researching` 阶段），
+      `False` = 判定过且没变。设计正文写 `bool`，但若用 `bool`，未运行的任务会**默认 `False`**
+      —— 那就把"还没判断"渲染成"判断为无变化"，与"取不到不得退化成假值"是同一条纪律
+      （本仓 `MEMORY.md §5 铁律 29`）。**默认 `None`，由运行侧显式填。**
+    """
+
     parent_context: dict[str, Any] = Field(default_factory=dict)
 
     # ── 运行成本（N9.1-27）──

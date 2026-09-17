@@ -3501,6 +3501,15 @@
       "title": "PropagationKind",
       "type": "string"
     },
+    "PublishedAs": {
+      "description": "**发布态**（`Ch8 §A.4` / `N8.3-11` / `S-09`）—— 把\"已验证\"与\"推断\"在发布层分开。\n\n★ `N8.3-11` 逐字：「有争议的推断以**\"推断状态\"**发布（显式标记，**不伪装为已验证**）」。\n★ `S-09` 明确它「**不改** Ch6 claim 状态」⇒ 与 `RecommendationStatus` 是两个域，不互相推导。\n★ 分层口径见 `00_待拍板项清单::A6`（**按对象分层**）：常规 → `verified`；\n  重大建议变化 / 争议推断 → `inferred`；基准变更与对外发布属**流程审批**，不在此表达。",
+      "enum": [
+        "verified",
+        "inferred"
+      ],
+      "title": "PublishedAs",
+      "type": "string"
+    },
     "RealSubstitute": {
       "additionalProperties": false,
       "description": "**真实替代方案**（`Ch4 §J.1` 的 `N4.3-03` 实现载体逐字：\n`moat.real_substitutes[{switch_trigger, switching_cost, actual_switch_evidence}]`）。\n\n★ `N4.3-03` 验收：\"替代方案含切换触发/成本/**真实实例**\" —— 故\n  `actual_switch_evidence` 是\"真实发生过切换\"的证据引用，不是推测。",
@@ -3716,6 +3725,23 @@
           },
           "title": "Opportunity Types",
           "type": "array"
+        },
+        "published_as": {
+          "anyOf": [
+            {
+              "description": "**发布态**（`Ch8 §A.4` / `N8.3-11` / `S-09`）—— 把\"已验证\"与\"推断\"在发布层分开。\n\n★ `N8.3-11` 逐字：「有争议的推断以**\"推断状态\"**发布（显式标记，**不伪装为已验证**）」。\n★ `S-09` 明确它「**不改** Ch6 claim 状态」⇒ 与 `RecommendationStatus` 是两个域，不互相推导。\n★ 分层口径见 `00_待拍板项清单::A6`（**按对象分层**）：常规 → `verified`；\n  重大建议变化 / 争议推断 → `inferred`；基准变更与对外发布属**流程审批**，不在此表达。",
+              "enum": [
+                "verified",
+                "inferred"
+              ],
+              "title": "PublishedAs",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "published_at": {
           "anyOf": [
@@ -4650,6 +4676,18 @@
           ],
           "default": null
         },
+        "conclusion_changed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conclusion Changed"
+        },
         "cost": {
           "additionalProperties": true,
           "title": "Cost",
@@ -4667,6 +4705,19 @@
           ],
           "default": null,
           "title": "Effective From"
+        },
+        "enqueued_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enqueued At"
         },
         "eval_result": {
           "anyOf": [
@@ -4752,6 +4803,13 @@
           "title": "Output Refs",
           "type": "array"
         },
+        "outputs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "array"
+        },
         "parent_context": {
           "additionalProperties": true,
           "title": "Parent Context",
@@ -4794,6 +4852,19 @@
           ],
           "default": null,
           "title": "Recorded Seq"
+        },
+        "result_published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result Published At"
         },
         "rule_change_records": {
           "items": {
@@ -8555,6 +8626,15 @@
       "title": "PropagationKind",
       "type": "string"
     },
+    "PublishedAs": {
+      "description": "**发布态**（`Ch8 §A.4` / `N8.3-11` / `S-09`）—— 把\"已验证\"与\"推断\"在发布层分开。\n\n★ `N8.3-11` 逐字：「有争议的推断以**\"推断状态\"**发布（显式标记，**不伪装为已验证**）」。\n★ `S-09` 明确它「**不改** Ch6 claim 状态」⇒ 与 `RecommendationStatus` 是两个域，不互相推导。\n★ 分层口径见 `00_待拍板项清单::A6`（**按对象分层**）：常规 → `verified`；\n  重大建议变化 / 争议推断 → `inferred`；基准变更与对外发布属**流程审批**，不在此表达。",
+      "enum": [
+        "verified",
+        "inferred"
+      ],
+      "title": "PublishedAs",
+      "type": "string"
+    },
     "RealSubstitute": {
       "additionalProperties": false,
       "description": "**真实替代方案**（`Ch4 §J.1` 的 `N4.3-03` 实现载体逐字：\n`moat.real_substitutes[{switch_trigger, switching_cost, actual_switch_evidence}]`）。\n\n★ `N4.3-03` 验收：\"替代方案含切换触发/成本/**真实实例**\" —— 故\n  `actual_switch_evidence` 是\"真实发生过切换\"的证据引用，不是推测。",
@@ -8770,6 +8850,23 @@
           },
           "title": "Opportunity Types",
           "type": "array"
+        },
+        "published_as": {
+          "anyOf": [
+            {
+              "description": "**发布态**（`Ch8 §A.4` / `N8.3-11` / `S-09`）—— 把\"已验证\"与\"推断\"在发布层分开。\n\n★ `N8.3-11` 逐字：「有争议的推断以**\"推断状态\"**发布（显式标记，**不伪装为已验证**）」。\n★ `S-09` 明确它「**不改** Ch6 claim 状态」⇒ 与 `RecommendationStatus` 是两个域，不互相推导。\n★ 分层口径见 `00_待拍板项清单::A6`（**按对象分层**）：常规 → `verified`；\n  重大建议变化 / 争议推断 → `inferred`；基准变更与对外发布属**流程审批**，不在此表达。",
+              "enum": [
+                "verified",
+                "inferred"
+              ],
+              "title": "PublishedAs",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "published_at": {
           "anyOf": [
@@ -9704,6 +9801,18 @@
           ],
           "default": null
         },
+        "conclusion_changed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Conclusion Changed"
+        },
         "cost": {
           "additionalProperties": true,
           "title": "Cost",
@@ -9721,6 +9830,19 @@
           ],
           "default": null,
           "title": "Effective From"
+        },
+        "enqueued_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Enqueued At"
         },
         "eval_result": {
           "anyOf": [
@@ -9806,6 +9928,13 @@
           "title": "Output Refs",
           "type": "array"
         },
+        "outputs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Outputs",
+          "type": "array"
+        },
         "parent_context": {
           "additionalProperties": true,
           "title": "Parent Context",
@@ -9848,6 +9977,19 @@
           ],
           "default": null,
           "title": "Recorded Seq"
+        },
+        "result_published_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Result Published At"
         },
         "rule_change_records": {
           "items": {
