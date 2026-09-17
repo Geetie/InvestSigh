@@ -35,11 +35,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 _ROOT = Path(__file__).resolve().parents[2]      # .../system
 if str(_ROOT) not in sys.path:
@@ -92,6 +92,17 @@ class RunReport:
     #:  `StepOutcome.skipped`。缺了它，幂等重跑时该字段为空 ⇒ `G1-05` 判【空执行】
     #:  ⇒ 整轮 `blocked`（而这一轮其实什么都没坏）。
     skipped_recommendation_ids: tuple[str, ...] = ()
+    #: ★ 本次决策**实际使用**的"判断是否改变"三要素（`Ch7 §D.4`）。
+    #:
+    #:  ★★ 为什么必须带出来（2026-09-17 冷启动实测，缺陷 `G-RC-04` 的另一半）：
+    #:    `scripts/decision/step.py` 原先**恒回传** `judgment_change={}` —— 于是即便 step 6
+    #:    **真的产出了** `buy`，写进 `check_record` 的仍是 `changed=False`。
+    #:    而 `no_signal_day` 的 `G1-02①` 判据逐字是"**无变化日**产了新信号" ⇒
+    #:    任何**合法的**买入日都会被判红（**假红**），而任何**违法的**无变化产信号日
+    #:    都因为"恰好也写着 False"而**看起来一样** ⇒ 判据在真数据上**没有区分力**。
+    #:    ⇒ 回执里的 `judgment_change` 必须**逐字来自**决策时实际传入的那个对象
+    #:      （`G-06` 唯一真源：不在第二处重算/硬编码）。
+    judgment_change: Mapping[str, bool] = field(default_factory=dict)
 
 
 def load_prices(path: str | Path) -> list[PricePoint]:
@@ -353,9 +364,17 @@ def _run_core(
         benchmark_forecast=benchmark_forecast,
         own_evidence=(f"claim:{company_id}:market",),
     )
-    decision = decide(inp, JudgmentChange(fact_set_changed=True))
+    # ★ `judgment` 提为**具名局部**（2026-09-17）：它的两处用途必须**同源** ——
+    #   ① 传给 `decide()`（决定走 R4 维持还是继续判）；
+    #   ② 原样带进 `RunReport.judgment_change`（供 `step.py` 写进 `check_record`）。
+    #   此前 ② 恒为 `{}`（`step.py` 硬编码）⇒ `G1-02①` 对**合法买入日**也会判红（假红）。
+    judgment = JudgmentChange(fact_set_changed=True)
+    decision = decide(inp, judgment)
     if decision is None:
-        return RunReport((), ("gate_rejected_no_recommendation",), 0, True, None, window)
+        return RunReport(
+            (), ("gate_rejected_no_recommendation",), 0, True, None, window,
+            judgment_change=judgment.as_mapping(),
+        )
 
     recommendation_id = f"rec-{security_id}-{begin.isoformat()}"
     rec = build_recommendation(
@@ -405,11 +424,18 @@ def _run_core(
                 decision.action,
                 window,
                 skipped_recommendation_ids=skipped_ids,
+                judgment_change=judgment.as_mapping(),
             )
         # 键此前不存在却一行未写入 ⇒ 既不是产出、也不是幂等命中 → 两个集合都空，如实降级。
-        return RunReport((), (f"not_persisted:{recommendation_id}",), 0, True, decision.action, window)
+        return RunReport(
+            (), (f"not_persisted:{recommendation_id}",), 0, True, decision.action, window,
+            judgment_change=judgment.as_mapping(),
+        )
     signals = 1 if decision.is_new_signal else 0
-    return RunReport(written_ids, decision.gaps, signals, False, decision.action, window)
+    return RunReport(
+        written_ids, decision.gaps, signals, False, decision.action, window,
+        judgment_change=judgment.as_mapping(),
+    )
 
 
 def run(

@@ -52,10 +52,24 @@ def make_forecast(
     *,
     horizon: str = "2q",
     subject: str = "co-demo",
-    drivers: tuple[str, ...] = ("driver:market_price_total_return",),
+    drivers: tuple[str, ...] = ("driver:dc_revenue_growth",),
     worksheet: object | None = None,
 ) -> ExplainableForecast:
-    """构造可解释预测；`high` 省略 → 点估。`worksheet` 显式给定时原样使用（供注入测试）。"""
+    """构造可解释预测；`high` 省略 → 点估。`worksheet` 显式给定时原样使用（供注入测试）。
+
+    ★★ **缺省驱动**（2026-09-17 冷启动实测后更正）：原缺省为
+      `("driver:market_price_total_return",)` —— 那是**已实现区间总回报**，正是
+      `Ch2 §B.2` **P-08** 逐字禁止的"依据 `past_return` 的收益预测"。
+
+      ★ 后果（这才是本仓该记住的教训）：**整套决策测试曾靠这个缺省值保持全绿** ——
+      即"被禁的形态就是测试的默认前提"。新增 P-08 运行时门后，17 条用例同时变红，
+      **恰是这条缺陷从未被任何判据覆盖过的证据**（不是新门太严）。
+
+      ⇒ 缺省改为**前向**驱动名（`driver:dc_revenue_growth`，`Ch4 §H.2` 的增长驱动形态）。
+      本目录下测的是 **R1–R8 的机制**，前提应是"有一个合法的前向预测"；
+      "预测依据是后向值"这一情形的用例**单独**写在 `tests/decision/test_p08_realized_return.py`
+      （`G-05`：正例与反例分开，缺一则该门的存在性不可判）。
+    """
     hi = low if high is None else high
     ws = worksheet if worksheet is not None else make_worksheet(
         ((Decimal(low) + Decimal(hi)) / 2).__str__(), subject=subject

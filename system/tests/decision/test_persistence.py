@@ -20,6 +20,7 @@ from decision_builders import make_forecast, make_input
 
 from scripts.decision.gate import EarlyJudgmentIncomplete, JudgmentChange
 from scripts.decision.rules import (
+    FalsifiersMissing,
     HorizonOutOfRange,
     PersistOutcome,
     build_recommendation,
@@ -32,6 +33,15 @@ from schema.store import as_of, read_models, read_records, rebuild_index
 
 START = date(2026, 4, 1)
 REVIEW = date(2026, 9, 15)
+
+FALSIFIERS = ("falsifier:dc-revenue-growth-stalls-two-consecutive-quarters",)
+"""`buy` 的**必要**输入之一（`02_02_实现方案.md:281`：`falsifiers` 为买入前置必填）。
+
+★ 2026-09-17 新增：本文件原先构造 `buy` 时**一律不传** `falsifiers` —— 而"买入建议可以有
+  空的证伪条件"正是那次冷启动实测里 `rec-sec-nvda-2026-08-03` 的形态之一。
+  现由 `build_recommendation` 在产出侧拦下（`FalsifiersMissing`），故夹具补上。
+  "不传 ⇒ 拒"的反例单独写在 `test_buy_without_falsifiers_is_rejected`。
+"""
 
 
 def _buy_decision():
@@ -52,6 +62,7 @@ def _rec(*, recommendation_id="rec-persist", start=START, review=REVIEW, rule_ve
         start_date=start,
         rule_version=rule_version,
         review_date=review,
+        falsifiers=FALSIFIERS,
         evidence_version_ids=("dv-total_return-co-demo-compute-v1",),
     )
 
@@ -67,6 +78,7 @@ def test_build_recommendation_fields() -> None:
         start_date=START,
         rule_version="decision-v1",
         review_date=REVIEW,
+        falsifiers=FALSIFIERS,
         evidence_version_ids=("dv-total_return-co-demo-compute-v1",),
     )
     assert isinstance(rec, Recommendation)
@@ -74,6 +86,33 @@ def test_build_recommendation_fields() -> None:
     assert rec.company_id == "co-demo"
     assert rec.horizon == "2q"
     assert rec.change_reason == decision.change_reason
+
+
+def test_buy_without_falsifiers_is_rejected() -> None:
+    """★ **反例**（配上面正例，`G-05`）：`buy` 且 `falsifiers` 为空 ⇒ **拒**（`FalsifiersMissing`）。
+
+    承载依据：`02_已确认的投资规则/02_实现方案.md:281` 逐字
+    「`falsifiers`/`unmet_conditions` 字段虽存在，但**未列为买入前置必填**」——
+    同表 `:371` 的 `R-03` 只补了提前判断三要素，`falsifiers` 这一半**当年没补**。
+
+    ★ 为什么 `pending` 不受本约束：`pending` 不主张任何收益，无需证伪条件；
+      本判据只钉 **`buy`**（`sell` 的对称要求**无设计锚点**，不在此处发明）。
+    """
+    inp, decision = _buy_decision()
+    assert decision.action == "buy"
+    with pytest.raises(FalsifiersMissing):
+        build_recommendation(
+            decision,
+            inp=inp,
+            recommendation_id="rec-buy-empty-falsifiers",
+            security_id="usDEMO",
+            horizon="2q",
+            start_date=START,
+            rule_version="decision-v1",
+            review_date=REVIEW,
+            falsifiers=[],
+            evidence_version_ids=("dv-total_return-co-demo-compute-v1",),
+        )
 
 
 def test_build_recommendation_rejects_out_of_range_horizon() -> None:
@@ -106,6 +145,7 @@ def test_early_judgment_with_empty_trio_is_rejected() -> None:
             assumptions=[],
             evidence_gaps=["gap:no-order"],
             verification_conditions=["cond:order-confirmed"],
+            falsifiers=FALSIFIERS,
         )
 
 
@@ -123,6 +163,7 @@ def test_early_judgment_with_full_trio_is_accepted() -> None:
         assumptions=["assumption:ramp-on-track"],
         evidence_gaps=["gap:no-order-yet"],
         verification_conditions=["cond:q3-order-confirmed"],
+        falsifiers=FALSIFIERS,
     )
     assert rec.early_judgment is True
     assert rec.assumptions and rec.evidence_gaps and rec.verification_conditions

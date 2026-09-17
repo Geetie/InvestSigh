@@ -79,7 +79,13 @@ def make_decision_handler(root: str | Path, *, step_no: int = 6) -> Any:
         return StepOutcome(
             produced=list(report.recommendation_ids),
             skipped=list(report.skipped_recommendation_ids),
-            judgment_change={},
+            # ★★ 2026-09-17 修复（缺陷 `G-RC-04` 的另一半）：**原为硬编码 `{}`**。
+            #   后果：`check_record.judgment_change` 恒为空 ⇒ `no_signal_day` 的
+            #   `G1-02①`（逐字："**无变化日**产了新信号"）对**合法买入日**同样判红（**假红**），
+            #   同时对**违法**的无变化产信号日也写着 `False` ⇒ 判据在真数据上**无区分力**。
+            #   ⇒ 改为**转述**决策层实际使用的那一组布尔（`RunReport.judgment_change`，
+            #     其唯一真源 = `gate.JudgmentChange.as_mapping()`）。本层**不**重算、**不**硬编码。
+            judgment_change=dict(report.judgment_change),
             signals_emitted=int(report.signals_emitted),
             degraded=bool(report.degraded) or not report.recommendation_ids,
         )

@@ -243,17 +243,54 @@ def check(root: Path, sample_size: int = 20) -> CheckReport:
         )
         return report
 
-    # ★ 按 `recommendation_id` **去重**后再截样本：追加式不可变 ⇒ 同一条建议可能有多条版本行，
-    #   若不去重，同一条"当前结论"会被**重复计数**（覆盖率分母失真）。去重后保持文件顺序。
-    ordered_ids: list[str] = []
-    seen: set[str] = set()
-    for r in recs:
-        cid = r.get("recommendation_id")
-        if cid and cid not in seen:
-            seen.add(cid)
-            ordered_ids.append(cid)
-    sample = ordered_ids[:sample_size]
+    # ★★ 取样单位 = **业务键**（`security_id` + `start_date`），不是 `recommendation_id`
+    #   （2026-09-17 冷启动实测后更正；根因与处置见 `rules.recommendation_business_key` 的注释）。
+    #
+    #   **原实现**按 `recommendation_id` 去重 —— 于是当一次修正**换了 id**（本仓实测形态：
+    #   `rec-sec-nvda-2026-08-03` → `rec-sec-nvda-2026-08-03-session-review`，后者明确
+    #   `supersedes` 前者）时，**已被取代的旧行仍被当"当前结论"评估** ⇒ `G1-03` 永久判红，
+    #   而"真的当前结论"（新 id 那条）根本没进样本。
+    #
+    #   ⇒ 改为：同一业务键只评估**当前版本**（`version`/`recorded_seq` 最大者）。
+    #     被取代的行**不删除**（追加式不可变真源，`Ch9 §3.4.2`）、**也不静默丢弃** ——
+    #     逐条落进 `report.scanned` 的计数与具名 note 里（`R-03`：降级要**显式可见**）。
+    #     这与 `no_signal_day.py` 对"同日重跑"的处置**同族**（旧修订仍具名可见）。
+    #
+    #   ★ 业务键的**定义**从 `scripts.decision.rules` 取（`G-06` 唯一真源）——
+    #     本守卫**另写一份**正是上面这个缺陷的成因，不得重演。
+    from scripts.decision.rules import recommendation_business_key
+
+    by_key: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    ordered_keys: list[tuple[str, str]] = []
+    for row in recs:
+        key = recommendation_business_key(row)
+        if key not in by_key:
+            by_key[key] = []
+            ordered_keys.append(key)
+        by_key[key].append(row)
+
+    superseded: list[tuple[str, str]] = []
+    sample: list[str] = []
+    for key in ordered_keys:
+        rows = by_key[key]
+        current = _latest_version_row(rows)
+        sample.append(str(current.get("recommendation_id")))
+        for row in rows:
+            rid = row.get("recommendation_id")
+            if rid != current.get("recommendation_id") or row is not current:
+                superseded.append((str(rid), f"{key[0]}@{key[1]}"))
+
+    report.scanned["business_keys"] = len(ordered_keys)
+    report.scanned["superseded_rows"] = len(superseded)
+    sample = sample[:sample_size]
     report.scanned["sample"] = len(sample)
+    if superseded:
+        report.notes.append(
+            "被取代的历史行（**保留在真源、不计入覆盖率**，`Ch9 §3.4.2`）："
+            + "、".join(f"{rid}（{scope}）" for rid, scope in superseded)
+            + "。★ 这些行**如实留着**：删掉它们等于把失败记录洗掉（`N10.3-14`）。"
+        )
+
     for cid in sample:
         result = traceback(root, cid)
         missing = result.missing()

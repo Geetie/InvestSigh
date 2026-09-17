@@ -9,6 +9,11 @@
 | **R5 强制复查** | 单纯价格明显下跌（阈值在**参数层**判定后以布尔传入） | `action` 不变，`recheck_required=True`（**不自动止损/抄底**） |
 | **R8**（`N7.3-08`） | 负绝对收益 **禁新增买入** | 降为 `pending` + 记 gap |
 | **`boundary_unresolved`**（`§D.3`） | 绝对收益**为负**却**仍可能跑赢基准**，且已有积极建议 | `pending` / `boundary_unresolved`（**挂起待决**，非卖出、非维持） |
+| **P-08 门**（`Ch2 §B.2`） | 个股**或**基准的"预测"依据是**已实现收益**（`past_return` 等） | `pending` / `uncertain` + `gap=realized_return_not_a_forecast`（**拦 R1 与 R2 两侧**） |
+
+★ **P-08 门是 2026-09-17 冷启动实测后新增**（本仓唯一一次把 `P-08` 从文档变成**运行时**判据）：
+  详见 `REALIZED_RETURN_BASIS_IDS` 处的长注释。位置在 R4 **之后**、R2 **之前** —— 两处位置
+  各有理由，改动前先读那段。
 
 ★ **三种"消极"状态语义并列、互不并入**（`Ch2 §C.3` / `Ch7 §D.3`）：
   `confident_underperform`（跑不赢）· `uncertain`（无法判断）· `boundary_unresolved`（未决边界）。
@@ -16,10 +21,12 @@
 
 ★ **零新增门槛**（`施工图 §8` 纪律 1）：本模块**不读任何参数**、**不设任何阈值**；
   "价格明显下跌"的**阈值判定在参数层完成**，此处只接受**已判定的布尔**。
+  （P-08 门**不是**新增门槛：它检的是**依据的性质**（前向 / 后向），不是某个数值阈值。）
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, replace
 from datetime import date
 from types import SimpleNamespace
@@ -54,6 +61,95 @@ _DETERIORATING: frozenset[str] = frozenset({"weakening"})
 
 class HorizonOutOfRange(ValueError):
     """`horizon` 越界 `[1Q,1Y]` —— **拒绝**（`Ch2 §D.2` 规则 1）。"""
+
+
+class FalsifiersMissing(ValueError):
+    """`buy` 建议的 `falsifiers` 为空 —— **拒绝**（`Ch2 §D.1` 买入前置必填）。
+
+    承载依据（逐字）：`02_已确认的投资规则/02_实现方案.md:281`
+    「`falsifiers`/`unmet_conditions` 字段虽存在，但**未列为买入前置必填**」——
+    同一扫描表 `:371` 的 `R-03` 只补了**提前判断三要素**（`assert_early_judgment_complete`），
+    `falsifiers` 这一半**仍是缺口**（`01_需求拆解.md:114` 同样标注 ⚠️）。
+
+    ★★ 为什么它与 P-08 是同一件事的两半：`rec-sec-nvda-2026-08-03`（实测）**同时**
+    具备「依据已实现收益」与「`falsifiers` 为空」两个特征 —— 前者让它**不该**出 `buy`，
+    后者让它**出了也无人能证伪**。两半都必须在**产出侧**拦（验收 §G / `N7.4-08`：
+    "缺则三层复盘的预测质量不可核验"）。
+    """
+
+
+# ─────────────────── P-08 前置门：已实现收益**不得**充当收益预测 ───────────────────
+#
+# `Ch2 §B.2` 反例 **P-08**（逐字）：「依据 `past_return` 的收益预测」——
+#   承载 = **程序检查**（`Ch2 02 实现方案` 表：「落 `Ch5 history_guard`（引用）」）。
+#   `rules/banned_tokens.yaml` 亦把 P-08 标为「不由本表承载」并指向程序检查。
+#
+# ★★ 为什么要在这里（决策层）也落一道门 —— 2026-09-17 冷启动端到端**实测**：
+#   `scripts/decision/run_decide.py` 用 `_forecast()` 把 **`DerivedValue`（区间已实现
+#   总回报）** 包成 `ExplainableForecast`（`drivers=("<subject>:market_price_total_return",)`）
+#   送前置门。门只校验"四要素齐备"，**不校验依据是前向还是后向** ⇒ 门通过 ⇒
+#   产出 `buy`（`rec-sec-nvda-2026-08-03`）且 `falsifiers` 为空 ⇒
+#   ① `G1-02①` 判红（**无变化日**产了新信号）；
+#   ② 该建议成为"当前结论"，把**已实现**的 +3.63% 当成"预期跑赢"的证据。
+#   会话侧只能事后 `supersedes` 覆盖 —— **那是补丁，不是修复**：该函数仍能在
+#   "无前向预测输入"时产出 `buy`。本段即把 P-08 从文档变成**运行时**判据。
+#
+# ★ 词元口径（`R-06` ①：**不**用子串匹配 —— 本仓已栽过 `unadjusted` ⊃ `adjusted`）：
+#   把驱动标识**规范化**（小写 + 非字母数字段折叠为 `_`）后，判据只有两条：
+#     ① 全等某个 basis id；② 以 `_<basis id>` 为**后缀**（前缀允许是 `subject:` 段）。
+#   ⇒ 边界由 `_` 锚定，不是子串包含。
+
+REALIZED_RETURN_BASIS_IDS: frozenset[str] = frozenset(
+    {
+        "past_return",          # `P-08` 逐字用词（`Ch2 §B.2`）
+        "trailing_return",      # 同义：滚动/过去 N 期已实现
+        "realized_return",      # 同义：已实现
+        "historical_return",    # 同义：历史
+        "market_price_total_return",  # ★ 本仓既有形态（`run_decide._forecast` 的 drivers）
+    }
+)
+"""**已实现收益**的 basis 标识白名单（闭集 —— 判据穷尽、可判定，`R-06` ①）。
+
+★ 闭集而非"含 return 就算"：`Ch4 §H.2` 的前向驱动（如 `dc_revenue_growth`）不含这些 token，
+  故**不会**被误伤；反之"任何含 `return` 的标识一律拦"会把合法的**预期**收益口径也拦掉。
+"""
+
+
+def _normalize_basis(token: str) -> str:
+    """把驱动标识规范化为 `_` 连接的小写段序列（`NVDA:Market-Price_Total Return` → `nvda_market_price_total_return`）。"""
+    segments = [s for s in re.split(r"[^a-z0-9]+", token.strip().lower()) if s]
+    return "_".join(segments)
+
+
+def realized_return_drivers(forecast: ExplainableForecast) -> tuple[str, ...]:
+    """该预测的驱动里，**依据已实现收益**的那些（`P-08`）—— 空元组 = 依据是前向的。
+
+    ★ 返回**原始串**（不是规范化后的）以便落进 `change_reason` / `gap`，让"为什么被拦"可复核。
+    """
+    hits: list[str] = []
+    for raw in forecast.drivers or ():
+        norm = _normalize_basis(str(raw))
+        if not norm:
+            continue
+        if norm in REALIZED_RETURN_BASIS_IDS or any(
+            norm.endswith("_" + basis) for basis in REALIZED_RETURN_BASIS_IDS
+        ):
+            hits.append(str(raw))
+    return tuple(hits)
+
+
+def realized_return_basis_offenders(inp: RecommendationInput) -> tuple[str, ...]:
+    """个股 **与** 基准两侧中，"依据已实现收益"的驱动串（并集，去重保序）。
+
+    ★ 为什么**两侧都要查**：R1/R2 的判定是**相对**比较 ⇒ 只要任一侧的"预测"其实是已实现值，
+      这个比较就不成立（左侧是后视、右侧是前视的差是**无意义**的量）。
+    """
+    out: list[str] = []
+    for forecast in (inp.stock_forecast, inp.benchmark_forecast):
+        for hit in realized_return_drivers(forecast):
+            if hit not in out:
+                out.append(hit)
+    return tuple(out)
 
 
 # ─────────────────────────── 收益比较（相对 + 绝对） ───────────────────────────
@@ -176,6 +272,23 @@ def decide(
             "judgment_unchanged",
             comparison=comparison,
             recheck_required=bool(price_drop_triggered),
+        )
+
+    # ── ★ P-08 前置门（**必须早于 R2/R1**）────────────────────────────────────────
+    #   「依据 `past_return` 的收益预测」—— 见本模块 `REALIZED_RETURN_BASIS_IDS` 处的长注释。
+    #   位置在 R4 **之后**：`judgment_unchanged` 的 `maintain` 不是新信号、也不主张收益，
+    #   与"预测依据是否前向"无关，不受本门约束（否则会把"维持原判断"也一并误拦）。
+    #   位置在 R2 **之前**：R2 的"预计跑不赢基准"同样是**用比较结果当判断依据**，
+    #   依据若是后视值，则该判断与 R1 一样不可成立 —— 只拦 `buy` 是**拦漏了右半边**。
+    _realized = realized_return_basis_offenders(inp)
+    if _realized:
+        return _decision(
+            RecommendationAction.pending.value,
+            RecommendationStatus.uncertain.value,
+            "realized_return_is_not_a_forecast:" + "|".join(_realized),
+            comparison=comparison,
+            recheck_required=bool(price_drop_triggered),
+            gaps=("realized_return_not_a_forecast",),
         )
 
     if comparison.relative == "underperform":
@@ -327,6 +440,14 @@ def build_recommendation(
     - `horizon` 走 `assert_horizon`（`[1Q,1Y]`）。
     """
     assert_horizon(horizon, start_date)
+    if decision.action == RecommendationAction.buy.value and not list(falsifiers):
+        # ★ 买入前置必填（见 `FalsifiersMissing`）：**在产出侧**拦，而不只在校验侧。
+        #   `assert_early_judgment_complete` 管的是"提前判断三要素"，**不管** `falsifiers`。
+        raise FalsifiersMissing(
+            "buy 建议必须写明证伪条件（`falsifiers`）："
+            "`02_已确认的投资规则/02_实现方案.md:281` 明列其为买入前置必填项；"
+            "缺则三层复盘的预测质量**不可核验**（`N7.4-08`）"
+        )
     if early_judgment:
         assert_early_judgment_complete(
             SimpleNamespace(
@@ -375,8 +496,21 @@ def build_recommendation(
 #   （`TimeMixin`），**无需**新增字段。
 
 
-def _row_recommendation_identity(row: Mapping[str, Any]) -> tuple[str, str]:
-    """从 JSONL 原始行取业务键 `(security_id, start_date)`（版本链分组键）。"""
+def recommendation_business_key(row: Mapping[str, Any]) -> tuple[str, str]:
+    """建议的**业务键** `(security_id, start_date)` —— 同一"结论"的**唯一分组键**。
+
+    ★★ **公开名**（2026-09-17 由 `_row_recommendation_identity` 更名，原因如下）：
+
+      "一条结论在多行里是同一件事"这个判断，**全仓只能有一处定义**。原先它是**私有**的，
+      于是 `scripts/trace/traceback.py::check()` **另写了一套**：按 `recommendation_id` 去重。
+      两者在真实数据上**给出不同答案** —— 实测：`rec-sec-nvda-2026-08-03`（v1，`buy`，
+      已实现收益依据）与 `rec-sec-nvda-2026-08-03-session-review`（`pending`，明确
+      `supersedes` 前者）**是同一个业务键下的前后两版**，但按 `recommendation_id` 去重时
+      被当成**两条不同的结论** ⇒ 已被取代的 v1 仍被当"当前结论"评估 ⇒ `G1-03` 永久判红。
+
+      ⇒ 与 `G-45`／`stage_gate` 同一处置：**让消费方 import 生产方的唯一真源**，
+      而不是各写一份（本仓最高频的漂移源，症状恒为**假红**）。
+    """
     return (str(row.get("security_id", "")), str(row.get("start_date", "")))
 
 
@@ -465,7 +599,7 @@ def persist_recommendation_detailed(root: str | Any, rec: Recommendation) -> Per
     key = _recommendation_idempotency_key(rec)
     if any(_row_idempotency_key(row) == key for row in rows):
         return PersistOutcome(skipped_ids=(rec.recommendation_id,))
-    version = sum(1 for row in rows if _row_recommendation_identity(row) == _recommendation_identity(rec)) + 1
+    version = sum(1 for row in rows if recommendation_business_key(row) == _recommendation_identity(rec)) + 1
     stamped = rec.model_copy(update={"version": version, "recorded_seq": version})
     if not append_records(root, "recommendations", [stamped]):
         # 未写进任何行，且**不是**幂等命中（键此前不存在）→ 两个集合都为空，

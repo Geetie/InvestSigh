@@ -59,7 +59,15 @@ def _last_json_line(stdout: str) -> dict:
 # ───────────────────────── 显式注入路径（调用方传夹具） ─────────────────────────
 
 
-def test_cli_runs_and_emits_buy_recommendation(scratch: Path, cli) -> None:
+def test_cli_runs_and_emits_pending_recommendation(scratch: Path, cli) -> None:
+    """CLI 真跑通并**落一条建议**（`Ch7 §F`）。
+
+    ★ 2026-09-17 更正：本条原断言 `action == "buy"` / `signals_emitted == 1` —— 那是
+      **旧行为**，且旧行为正是 `P-08` 的违例（该路径只有一个**已实现**区间总回报可当预测，
+      没有前向预测输入）。加了 P-08 运行时门后，诚实结论是 `pending` + 0 信号。
+      ⇒ 断言改为"**落了库、且动作是待判断并带 P-08 缺口**" —— 比原断言**更强**
+      （它同时钉住了"CLI 接线通"与"门真的在真实路径上生效"两件事）。
+    """
     proc = cli(
         SCRIPT,
         scratch,
@@ -74,8 +82,9 @@ def test_cli_runs_and_emits_buy_recommendation(scratch: Path, cli) -> None:
     )
     assert proc.returncode == 0, proc.stderr
     summary = _last_json_line(proc.stdout)
-    assert summary["action"] == "buy"
-    assert summary["signals_emitted"] == 1
+    assert summary["action"] == "pending"
+    assert summary["signals_emitted"] == 0
+    assert "realized_return_not_a_forecast" in summary["gaps"], summary["gaps"]
     assert summary["degraded"] is False
     assert summary["recommendation_ids"]
 
@@ -146,14 +155,20 @@ def test_run_default_on_empty_root_produces_nothing(scratch: Path) -> None:
     assert not (scratch / "facts" / "recommendations.jsonl").exists()
 
 
-def test_run_default_reads_truth_source_and_emits_buy(scratch: Path) -> None:
-    """真源有行情 + 基准对象 → 真算收益 → 真出建议（`Ch7 §F`；收益由 `compute` 算出）。"""
+def test_run_default_reads_truth_source_and_emits_recommendation(scratch: Path) -> None:
+    """真源有行情 + 基准对象 → 真算收益 → 真出建议（`Ch7 §F`；收益由 `compute` 算出）。
+
+    ★ 与上一条同因更正：动作 = `pending`（该路径无前向预测输入，`P-08` 门生效）。
+      断言重点仍是 **`P7-2`/`P7-6` 的接线**：`root` 被真正读取、窗口正确、行真落进**该 root**。
+    """
     from scripts.decision.run_decide import run_default
 
     _write_truth(scratch)
     report = run_default(scratch)
     assert report.degraded is False
-    assert report.action == "buy"
+    assert report.action == "pending"
+    assert report.signals_emitted == 0
+    assert "realized_return_not_a_forecast" in report.gaps, report.gaps
     assert report.recommendation_ids == ("rec-usDEMO-2026-04-01",)
     assert report.window == ("2026-04-01", "2026-09-15")
     rows = read_models(scratch, "recommendations")
@@ -200,11 +215,14 @@ def test_cli_truth_mode_exits_2_on_empty_root(scratch: Path, cli) -> None:
     assert "inputs_unavailable" in proc.stderr
 
 
-def test_cli_truth_mode_emits_buy_from_truth(scratch: Path, cli) -> None:
+def test_cli_truth_mode_emits_recommendation_from_truth(scratch: Path, cli) -> None:
+    """真源模式：动作 = `pending` + P-08 缺口（见上两条的同因更正）。"""
     _write_truth(scratch)
     proc = cli(SCRIPT, scratch, "--run-date", "2026-09-30")
     assert proc.returncode == 0, proc.stderr
     summary = _last_json_line(proc.stdout)
-    assert summary["action"] == "buy"
+    assert summary["action"] == "pending"
+    assert summary["signals_emitted"] == 0
+    assert "realized_return_not_a_forecast" in summary["gaps"], summary["gaps"]
     assert summary["window"] == ["2026-04-01", "2026-09-15"]
     assert summary["recommendation_ids"] == ["rec-usDEMO-2026-04-01"]

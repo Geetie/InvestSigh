@@ -125,6 +125,20 @@ class JudgmentChange:
         """三者任一为真即"判断已变"（`Ch7 §D.4` 逐字）。"""
         return self.fact_set_changed or self.assumption_changed or self.conclusion_changed
 
+    def as_mapping(self) -> dict[str, bool]:
+        """三要素的**真源**投影（供回执落库，`G-06` 唯一真源）。
+
+        ★ 为什么放在**值对象自己身上**：`check_record.judgment_change` 的语义是
+          "**决策时实际使用的**那一组布尔"。任何消费方（`run_decide` 的回执、
+          `step.py` 的 `StepOutcome`）都必须取**同一个**来源 —— 各自手写一份 dict
+          正是实测缺陷 `G-RC-04` 的形态（`step.py` 恒传 `{}` ⇒ 合法买入日恒被判红）。
+        """
+        return {
+            "fact_set_changed": self.fact_set_changed,
+            "assumption_changed": self.assumption_changed,
+            "conclusion_changed": self.conclusion_changed,
+        }
+
 
 @dataclass(frozen=True)
 class RecommendationInput:

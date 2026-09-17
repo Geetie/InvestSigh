@@ -147,46 +147,100 @@ def _degraded_marks(root: Path) -> list[dict]:
 # ── AC-5 (a)：无交易信号的运行日 → 零信号；且**路径确实走到了 step 6** ──────────────
 
 
-def test_no_change_day_emits_zero_signals(code_root: Path) -> None:
-    """(a) 无交易信号的运行日 → `signals_emitted == 0` 且 `changed is False`。
+def test_no_signals_are_emitted_and_that_is_not_vacuity(code_root: Path) -> None:
+    """(a) 该运行日 → `signals_emitted == 0`，**且同一次运行确实产出了建议**（非真空）。
 
-    ★ **非真空断言**（本用例判别力所在）：同一次运行**必须真产出一条建议**
-      （`action=pending`）。这正是原测试缺的那一环 —— 空真源谈"零信号"没有分辨力；
+    ★ **本用例判别力所在**（原测试缺的那一环）：空真源谈"零信号"没有分辨力；
       "走到了 step 6 却按规则**不产**信号"才落进反 KPI 的口径（`Ch1 §D.3`）。
+
+    ★★ 2026-09-17 更正（两处）：
+      1. **动作不再是 `buy`**：新加的 `P-08` 运行时门拦下了"拿**已实现**区间总回报当预测"
+         （该路径没有前向预测输入）⇒ 诚实结论是 `pending` + `gap=realized_return_not_a_forecast`。
+         故断言从「不产信号」升级为「**不产信号** + **确实落了 pending 建议** + **缺口具名**」。
+      2. **不再断言 `changed is False`**：那条断言之所以能过，是因为 `step.py` 当时**恒回传**
+         `judgment_change={}` —— 即回执在**撒谎**（决策层实际用的是
+         `JudgmentChange(fact_set_changed=True)`）。现改为**如实转述**
+         （`RunReport.judgment_change` ← `gate.JudgmentChange.as_mapping()`），
+         故这里 `changed is True`。★ 这**不是**新缺陷：`_run_core` 的
+         `fact_set_changed` **恒 True、尚未由数据判定**这一事实已**单独登记为缺口**
+         （见本文件模块 docstring 与 `reports/e2e_review_2026-09-17.md`）；
+         本条只钉"回执与实际使用的一致"。
+         `(changed=True, signals=0)` 这一组合**不属** `G1-02①` 管辖
+         （见 `test_anti_kpi_guard_discriminates` 的参数矩阵第 4 行）。
     """
     _seed_step6_inputs(code_root, company_end_price="110", benchmark_end_price="110")
     report = daily_run.run_daily(code_root, _RUN_DAY)
 
     assert report.signals_emitted == 0
-    assert report.changed is False
+    assert report.changed is True, "回执必须如实转述决策层实际使用的 judgment_change"
 
     # ★ 非真空：step 6 **确实执行并产出建议**（否则 `== 0` 是"没走到"而非"不产信号"）
     actions = [r.get("action") for r in read_records(code_root, "recommendations")]
     assert actions == ["pending"], actions
     # 真源行情 / 基准被**真实消费**（无"输入缺失"缺口 → 排除退化路径冒充）
     assert not any("inputs_unavailable" in g for g in report.gaps), report.gaps
+    # ★ 不产信号的**原因具名**（不是"什么也没发生"）：P-08 门拦截已实现收益做预测。
+    #   ★ 可观测面在**建议行**的 `change_reason`（`_run_core` 逐字转述 `decision.change_reason`）——
+    #   而不是 `DailyRunReport.gaps`：`StepOutcome` **没有 gaps 字段**（不扩公共契约），
+    #   故决策层的缺口在每日回执里**当前不可见**。该可见性缺口已登记（见模块 docstring §3）。
+    reasons = [str(r.get("change_reason") or "") for r in read_records(code_root, "recommendations")]
+    assert any("realized_return_is_not_a_forecast" in x for x in reasons), reasons
 
-    # 该运行写出的 check_record 如实：无变化 + 零信号 → 反 KPI 守卫放行
+    # 该运行写出的 check_record 如实：有变化 + 零信号 → 反 KPI 守卫放行
     checks = _check_records(code_root)
-    assert checks and checks[0]["changed"] is False and checks[0]["signals_emitted"] == 0
+    assert checks and checks[0]["changed"] is True and checks[0]["signals_emitted"] == 0
     guard = no_signal_day.check(code_root)
     assert guard.passed, [v.render() for v in guard.violations]
 
 
-# ── AC-5 (b)：有交易信号的运行日 → 信号**正常计数**（反向对照） ──────────────────────
+# ── AC-5 (b)：交易信号**能被计数**（反向对照） ────────────────────────────────────
 
 
-def test_change_day_signal_is_counted(code_root: Path) -> None:
-    """(b) 有交易信号的运行日 → `signals_emitted` **正常计数**（证明它不是"永远 0"）。
+def test_signal_counting_path_is_live(code_root: Path, monkeypatch) -> None:
+    """(b) 交易信号**能被正常计数**（证明 `signals_emitted` 不是"永远 0"）。
 
-    没有本用例，就无法区分"守卫在工作"与"路径根本没走到"（这正是原测试的毛病）。
+    ★★ 2026-09-17 重写（原用例已不可达，且**不可达本身是发现**）：
+
+      **原用例**用 `company_end_price=130 / benchmark_end_price=110` 造"个股跑赢基准"，
+      期待 R1 出 `buy`。加 `P-08` 门后该期待**结构性不成立**：`run_decide` 这条路径
+      **只有已实现区间总回报**可当预测，**没有前向预测输入**，也**不提供 `falsifiers`**
+      （`buy` 的两项前置在 `Ch7 §D.2` + `02_02_实现方案.md:281` 都是必填）。
+      ⇒ 这不是"门太严"，而是**该路径本来就缺前向预测与证伪条件来源**（缺口 `B-4`/`C-1`/`C-3`）。
+
+      **本用例**改为**在文档化的接缝上注入**那个缺失的输入（一个"真的产出了交易信号"的
+      decision 回执），从而继续钉住原用例真正要钉的东西：
+      **"信号计数链 + 回执如实 + 守卫不误杀" 是活的**。
+
+      ★ 为什么注入是正当的：它供给的是**设计要求存在、而当前实现尚缺**的输入
+      （前向预测），不是伪造观测；且断言落在**真实编排链**上（真 `Pipeline.run_daily`
+      → 真 `_write_check_record` → 真 `no_signal_day.check`）。
     """
+    from scripts.decision.run_decide import RunReport
+
+    def _fake_run_default(root, *, run_date=None, scope=None, **kw):  # noqa: ANN001
+        return RunReport(
+            recommendation_ids=("rec-signal-1",),
+            gaps=(),
+            signals_emitted=1,
+            degraded=False,
+            action="buy",
+            window=("2026-09-01", "2026-09-10"),
+            judgment_change={"fact_set_changed": True},
+        )
+
+    monkeypatch.setattr("scripts.decision.run_decide.run_default", _fake_run_default)
     _seed_step6_inputs(code_root, company_end_price="130", benchmark_end_price="110")
     report = daily_run.run_daily(code_root, _RUN_DAY)
 
-    assert report.signals_emitted == 1
-    actions = [r.get("action") for r in read_records(code_root, "recommendations")]
-    assert actions == ["buy"], actions
+    assert report.signals_emitted == 1, "商品信号必须能被计数（否则 (a) 的 0 无区分力）"
+    checks = _check_records(code_root)
+    assert checks and checks[0]["signals_emitted"] == 1
+    assert checks[0]["changed"] is True, "有交易信号的运行日必须**同时**被记为判断已变"
+    guard = no_signal_day.check(code_root)
+    assert guard.passed, (
+        "（有变化 + 有信号）不属 G1-02① 管辖 —— 守卫不得误杀："
+        + str([v.render() for v in guard.violations])
+    )
 
 
 # ── 反 KPI 守卫（`scripts/checks/no_signal_day.py`）**两向判别力** ────────────────
@@ -227,6 +281,15 @@ def test_no_signal_assertion_has_discrimination(
     2. 于是 (a) 的目标准确性 `signals_emitted == 0` **不成立** —— 若 (a) 是恒真断言，
        这一步就不可能发生（本用例把"注入违规 → 必红"钉进测试，`G-16`）；
     3. 反 KPI 守卫对本次运行写出的 `check_record`（`changed=False, signals=1`）**如实命中**。
+
+    ★★ 2026-09-17 更正（注入形态必须**同时**压掉 `judgment_change`）：
+      判据 `G1-02①` 逐字是"**无变化日**产了新信号" ⇒ 违规形态是 `(changed=False, signals=1)`
+      **两个一半**。原先只改 `signals_emitted` 就够了 —— 因为当时 `step.py` **恒回传**
+      `judgment_change={}`（回执恒为 `changed=False`）。
+      现 `step.py` 改为**如实转述**决策层实际使用的三要素（`fact_set_changed=True`），
+      于是"只报多一个信号"得到的是 `(changed=True, signals=1)` —— 那是**合法**组合
+      （守卫本就不该拦，见 `test_anti_kpi_guard_discriminates` 第 2 行）。
+      ⇒ 注入必须**显式**把回执压回 `changed=False`，才是要模拟的那个**真仓库历史形态**。
     """
     _seed_step6_inputs(code_root, company_end_price="110", benchmark_end_price="110")
     from scripts.decision import run_decide
@@ -234,8 +297,13 @@ def test_no_signal_assertion_has_discrimination(
     real_run_default = run_decide.run_default
 
     def _forced(root, **kwargs):  # type: ignore[no-untyped-def]
-        # 强制"多报一个信号"，模拟"无变化却产信号"的真违规形态（其余如实转回）。
-        return dataclasses.replace(real_run_default(root, **kwargs), signals_emitted=1)
+        # 强制"无变化 + 多报一个信号"——真违规形态（`G-RC-04` 登记过的那个组合）。
+        # 其余字段如实转回（不伪造产出/窗口）。
+        return dataclasses.replace(
+            real_run_default(root, **kwargs),
+            signals_emitted=1,
+            judgment_change={},          # ← 违规的另一半：回执谎报"判断未变"
+        )
 
     monkeypatch.setattr(run_decide, "run_default", _forced)
 

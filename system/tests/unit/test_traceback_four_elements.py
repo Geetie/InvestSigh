@@ -211,17 +211,55 @@ def test_empty_sample_and_missing_truth_source_do_not_claim_pass(code_root: Path
 
 
 def test_real_root_computation_element_is_resolved() -> None:
-    """真实 `system/` 上：WS-B 负责的 `computation` 要素**已可解析**。
+    """真实 `system/` 上：**每个当前结论**的 `computation` 与 `evidence` 要素**都能解析**。
 
     ★ 只断言 WS-B **拥有**的部分（`computation` / `evidence`），不断言 `assumptions` ——
       后者由**基线深度**（WS-A）供给，随合并进度变化，不该被本测试钉死。
+
+    ★★ 2026-09-17 重写（原实现**钉死了一个 id**：`rec-nvda-001`）：
+
+      原实现把结论 id 写死成某个**历史种子数据**的 id。冷启动端到端重置真源后，
+      该 id **在库里不存在** ⇒ `TraceabilityGap` ⇒ 本条**变红**。
+      这与本仓反复栽的 `G-RC-02` 同族：**观测依赖"仓库里恰好有什么"**。
+
+      ⇒ 改为**在真实数据上派生样本**：按业务键（`rules.recommendation_business_key`，
+      与守卫同源）取每个结论的**当前版本**，逐条断言其 `computation` / `evidence` 可解析。
+      并**显式断言样本非空** —— 否则"真源为空"会被读成"全部通过"（`G-03`）。
+
+      ★ 判别力：本断言在**修复前**必然为红（`_find_derived` 对任何建议都返回 `None`，
+      因 `dv-…` 与 `rec-…` 永不相等），也必然抓得住 `rec-sec-nvda-2026-08-03` 那类
+      "声明的底稿从未存在"的行。
     """
     from conftest import SYSTEM_ROOT
 
-    result = tb_traceback(SYSTEM_ROOT, "rec-nvda-001")
-    assert result.computation is not None, "真实真源上 computation 未解析"
-    assert result.computation["derived_id"] == _DV_ID
-    assert result.evidence, "evidence 应非空"
-    assert set(result.applicable()) <= set(ELEMENTS)
-    assert "computation" not in result.missing()
-    assert "evidence" not in result.missing()
+    from scripts.decision.rules import recommendation_business_key
+
+    rows = [
+        json.loads(line)
+        for line in (SYSTEM_ROOT / "facts" / "recommendations.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+        if line.strip()
+    ]
+    # 每个**业务键**只取其**当前版本**（`version`, `recorded_seq` 最大者）——
+    # 与 `traceback.check()` 的取样口径同源（`G-06` 唯一真源），不在此处另定一套。
+    latest: dict[tuple[str, str], dict] = {}
+    for row in rows:
+        key = recommendation_business_key(row)
+        prev = latest.get(key)
+        if prev is None or (int(row.get("version") or 1), int(row.get("recorded_seq") or 0)) >= (
+            int(prev.get("version") or 1),
+            int(prev.get("recorded_seq") or 0),
+        ):
+            latest[key] = row
+    ids = [str(r.get("recommendation_id")) for r in latest.values()]
+    assert ids, (
+        "真实真源里没有任何建议 ⇒ 本判据无被检对象（G-03：不得把'无被检对象'当'已验证'）"
+    )
+    for cid in ids:
+        result = tb_traceback(SYSTEM_ROOT, cid)
+        assert result.computation is not None, f"{cid}: 真实真源上 computation 未解析"
+        assert result.evidence, f"{cid}: evidence 应非空"
+        assert set(result.applicable()) <= set(ELEMENTS)
+        assert "computation" not in result.missing(), f"{cid}: {result.missing()}"
+        assert "evidence" not in result.missing(), f"{cid}: {result.missing()}"
