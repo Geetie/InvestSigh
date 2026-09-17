@@ -1,0 +1,47 @@
+SOURCE: "NVIDIA 发布 2027 财年第二季度财务报告"（官方中文版）
+PUBLISHER: NVIDIA 中国官方博客 blogs.nvidia.cn
+PUBLISHED: 2026-08-26/27（与英文新闻稿同日）
+URL: https://blogs.nvidia.cn/blog/nvidia-announces-financial-results-for-second-quarter-fiscal-2027/
+TIER: primary (company_official，官方中文版本)
+ACCESS: full_text
+RETRIEVED_BY: session web search, 2026-09-17
+
+--- BEGIN VERBATIM EXCERPTS ---
+
+[L1] 季度收入达 962 亿美元,较去年同期增长 106%
+[L2] 数据中心季度收入达 890 亿美元,较去年同期增长 117%
+
+[L3] NVIDIA 将于 2026 年 10 月 1 日向截至 2026 年 9 月 10 日登记在册的所有股东支付每股 0.25 美元的
+     下一季度现金红利。
+
+[L4] 展望
+     NVIDIA 对 2027 财年第三季度的展望: 收入预计将达到 1,080 亿美元,上下浮动 2%。
+     NVIDIA 的展望未计入来自中国大陆及香港地区市场的数据中心计算收入。
+     GAAP 和非 GAAP 毛利率预计均为 74.0%,上下浮动 50 个基准点。
+     GAAP 和非 GAAP 运营费用预计分别约为 92 亿美元和 90 亿美元。
+     2027 财年全年,GAAP 和非 GAAP 税率预计介于 16.0% 和 18.0% 之间。
+
+[L5] 亮点
+     数据中心: 第二季度收入达 890 亿美元,较上一季度增长 18%,较去年同期增长 117%。
+     宣布 NVIDIA Vera Rubin 平台正加速进入全面量产阶段,CoreWeave、Google Cloud、
+     Microsoft Azure、Oracle Cloud Infrastructure (OCI) 及 Nebius 等合作伙伴的机架已投入运行。
+     宣布 NVIDIA Spectrum-6 交换机正陆续部署于全球十亿瓦级 AI 工厂。
+     推出 NVIDIA Vera —— 首款专为 AI 智能体打造的 CPU。
+     宣布与 SK 海力士达成多年技术合作,共同为全球 AI 工厂建设推进下一代内存技术发展。
+     宣布多项战略合作伙伴关系,将与 Apollo、BlackRock、Blackstone、Brookfield、
+     Goldman Sachs 和 KKR 共同打造独立计算融资平台,逐步调动超过 5,000 亿美元的第三方资本
+     用于 AI 基础设施建设,相关合作需以最终协议为准。
+
+[L6] 边缘计算: 第二季度边缘计算收入达 72 亿美元,较上一季度增长 13%,较去年同期增长 27%。
+
+[L7] 与 SK 电讯、NAVER 以及 Brookfield 达成战略合作,以拓展韩国 AI 工厂生态,依托 NVIDIA DSX
+     平台建设十亿瓦级 AI 基础设施。
+
+[L8] 首席财务官的评论: NVIDIA 执行副总裁兼首席财务官 Colette Kress 对本季度财务业绩发表了评论,
+     敬请访问 https://investor.NVIDIA.com 网站查看评论内容。
+
+--- END VERBATIM EXCERPTS ---
+
+NOTE: 本条与英文官方稿为**同一份披露的中文版本**（同源），不构成独立证据。
+其**独有**信息：`未计入来自中国大陆及香港地区市场的数据中心计算收入` 的中文措辞；
+以及「与 SK 海力士多年技术合作推进下一代内存技术」这一条（英文检索结果中未逐字取得）。

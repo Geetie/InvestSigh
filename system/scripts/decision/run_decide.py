@@ -234,6 +234,12 @@ def _resolve_benchmark_security(benchmark: dict | None, series: dict) -> str | N
     if benchmark is None:
         return None
     explicit = benchmark.get("security_id")
+    if not explicit:
+        # ★ 2026-09-17 冷启动补：与 `scripts/compute/driver._resolve_security` **逐字同口径**
+        #   （`G-06` 唯一真源：两处解析必须给出同一结论，否则同一运行两个入口分歧）。
+        profile = benchmark.get("coverage_profile")
+        if isinstance(profile, dict):
+            explicit = profile.get("security_id")
     if explicit:
         return str(explicit)
     if len(series) == 1:
@@ -309,11 +315,22 @@ def _run_core(
     finish = end or max(stock_end, bench_end)
     window = (begin.isoformat(), finish.isoformat())
 
+    # ★★ 2026-09-17 冷启动实测补（根因：`G1-03` 的 `computation` 要素**永不可达**）：
+    #   `subject` 原用 `company_id` / `benchmark_id`（**无窗口**），算出的 `derived_id`
+    #   （`dv-total_return-company-nvidia-compute-v1`）与计算层 `scripts/compute/run_derived.py`
+    #   的既有命名口径（`<security_id>-<begin>..<finish>`）**不是同一个 id**，且本函数
+    #   **从不把这两个 `DerivedValue` 落 `derived/`** ⇒ 建议声明的 `evidence_version_ids`
+    #   指向一个**从未存在**的底稿 ⇒ `traceback._find_derived` 恒返回 `None`
+    #   ⇒ 四要素里的"计算"对**任何**由本路径产出的建议都判缺失。
+    #   ⇒ 修：`subject` 与计算层**逐字同口径**，并在落建议前把两个底稿经**唯一写入口**
+    #      （`compute.store.append_derived_value_ids_detailed`）落 `derived/`。
+    _subject_stock = f"{security_id}-{begin}..{finish}"
+    _subject_bench = f"{benchmark_id}-{begin}..{finish}"
     stock_derived = _total_return(
-        stock_prices, subject=company_id, currency=currency, start=begin, end=finish
+        stock_prices, subject=_subject_stock, currency=currency, start=begin, end=finish
     )
     bench_derived = _total_return(
-        benchmark_prices, subject=benchmark_id, currency=currency, start=begin, end=finish
+        benchmark_prices, subject=_subject_bench, currency=currency, start=begin, end=finish
     )
     compute_gaps = tuple(
         gap.gap_id for gap in (stock_derived, bench_derived) if isinstance(gap, ComputeGap)
@@ -360,6 +377,12 @@ def _run_core(
         (root_path / "facts").mkdir(parents=True, exist_ok=True)
         # ★ **唯一**落库入口：它同时给出"本轮真正写入"与"本轮幂等命中"两个互斥集合
         #   （`G-06`：幂等判定只在这里做一次；`step.py` 不重算，只转述）。
+        # 底稿先落库（`Ch9 §N9.2-02`：无 `DerivedValue` 的收益值不得进建议）
+        from scripts.compute.store import append_derived_value_ids_detailed
+
+        append_derived_value_ids_detailed(
+            root_path, [stock_derived, bench_derived], version="compute-v1"
+        )
         outcome = persist_recommendation_detailed(root_path, rec)
         written_ids, skipped_ids = outcome.written_ids, outcome.skipped_ids
         from schema.store import rebuild_index

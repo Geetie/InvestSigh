@@ -744,6 +744,15 @@ def plan_benchmark_row(
 
     coverage_profile: dict[str, Any] = dict(decl.get("coverage_profile") or {})
     for key, value in (
+        # ★★ 2026-09-17 冷启动实测补（登记见 reports/cold_start_e2e_2026-09-17.md）：
+        #   `Benchmark` 模型**没有** `security_id` 字段（`extra="forbid"`），而
+        #   `compute/driver.py::_resolve_security` 与 `decision/run_decide.py::_resolve_benchmark_security`
+        #   都以 `benchmark["security_id"]` 为**第一优先**解析基准证券 ——
+        #   即"声明在代码里、字段不在契约里"。缺它 ⇒ 行情有 ≥2 个证券时基准**永远解析不出**
+        #   ⇒ 阶段门 step 5/6 恒 gap。此处把清单声明的证券落进**开放字典** `coverage_profile`
+        #   （与 `unit_nav` / `tracking_index` 同落位、同性质：观测到的事实），
+        #   并让两个解析口把它作为回落 —— **不改 `Benchmark` 契约、不手工写真源行**。
+        ("security_id", bm.get("security_id")),
         ("unit_nav", observed.get("unit_nav")),
         ("unit_nav_date", observed.get("unit_nav_date")),
         ("unit_nav_currency", observed.get("unit_nav_currency")),

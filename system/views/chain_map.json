@@ -1,0 +1,980 @@
+{
+ "view": "chain_map",
+ "generated_at": "2026-09-17T08:47:00Z",
+ "run_date": "2026-09-17",
+ "scope": "能源 → 应用的位置全景（位置收录 / 关系已核验 / 研究基线完成 / 持续跟踪）",
+ "study_depth_legend": {
+  "position_listed": "位置收录（尚未研究）",
+  "relations_verified": "关系已核验",
+  "baseline_done": "研究基线完成",
+  "tracking": "持续跟踪"
+ },
+ "default_sort": [
+  {
+   "field": "position_bucket",
+   "order": "asc"
+  },
+  {
+   "field": "node_id",
+   "order": "asc"
+  }
+ ],
+ "evidence_panel": {
+  "collapsed_default": false,
+  "note": "反证、缺口与支持证据同等可见，不默认折叠"
+ },
+ "nodes": [
+  {
+   "node_id": "node_power_and_facilities__ceg",
+   "node_name": "CEG",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "power_and_facilities",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_power_and_facilities__vst",
+   "node_name": "VST",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "power_and_facilities",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_power_and_facilities__gev",
+   "node_name": "GEV",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "power_and_facilities",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_power_and_facilities__etn",
+   "node_name": "ETN",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "power_and_facilities",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_power_and_facilities__pwr",
+   "node_name": "PWR",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "power_and_facilities",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_power_and_facilities__vrt",
+   "node_name": "VRT",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "power_and_facilities",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_chip_architecture_and_design__arm",
+   "node_name": "ARM",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "chip_architecture_and_design",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_chip_architecture_and_design__snps",
+   "node_name": "SNPS",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "chip_architecture_and_design",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_chip_architecture_and_design__cdns",
+   "node_name": "CDNS",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "chip_architecture_and_design",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_manufacturing_and_memory__asml",
+   "node_name": "ASML",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "manufacturing_and_memory",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_manufacturing_and_memory__amat",
+   "node_name": "AMAT",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "manufacturing_and_memory",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_manufacturing_and_memory__lrcx",
+   "node_name": "LRCX",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "manufacturing_and_memory",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_manufacturing_and_memory__klac",
+   "node_name": "KLAC",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "manufacturing_and_memory",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_manufacturing_and_memory__tsm",
+   "node_name": "TSM",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "manufacturing_and_memory",
+   "research_depth": "baseline_done",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": true,
+   "company_refs": [
+    "company-tsmc"
+   ],
+   "study_state_note": "已建立研究基线"
+  },
+  {
+   "node_id": "node_manufacturing_and_memory__mu",
+   "node_name": "MU",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "manufacturing_and_memory",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_manufacturing_and_memory__sk_hynix",
+   "node_name": "SK hynix",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "manufacturing_and_memory",
+   "research_depth": "relations_verified",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [
+    "company-sk-hynix"
+   ],
+   "study_state_note": "关系已核验"
+  },
+  {
+   "node_id": "node_manufacturing_and_memory__sndk",
+   "node_name": "SNDK",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "manufacturing_and_memory",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_compute_chip_and_system__nvda",
+   "node_name": "NVDA",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "compute_chip_and_system",
+   "research_depth": "baseline_done",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": true,
+   "company_refs": [
+    "company-nvidia"
+   ],
+   "study_state_note": "已建立研究基线"
+  },
+  {
+   "node_id": "node_compute_chip_and_system__amd",
+   "node_name": "AMD",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "compute_chip_and_system",
+   "research_depth": "baseline_done",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": true,
+   "company_refs": [
+    "company-amd"
+   ],
+   "study_state_note": "已建立研究基线"
+  },
+  {
+   "node_id": "node_compute_chip_and_system__avgo",
+   "node_name": "AVGO",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "compute_chip_and_system",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_compute_chip_and_system__mrvl",
+   "node_name": "MRVL",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "compute_chip_and_system",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_compute_chip_and_system__dell",
+   "node_name": "DELL",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "compute_chip_and_system",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_cluster_network_and_interconnect__anet",
+   "node_name": "ANET",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "cluster_network_and_interconnect",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_cluster_network_and_interconnect__lite",
+   "node_name": "LITE",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "cluster_network_and_interconnect",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_cluster_network_and_interconnect__cohr",
+   "node_name": "COHR",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "cluster_network_and_interconnect",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_cluster_network_and_interconnect__crdo",
+   "node_name": "CRDO",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "cluster_network_and_interconnect",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_datacenter_and_cloud__dlr",
+   "node_name": "DLR",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "datacenter_and_cloud",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_datacenter_and_cloud__eqix",
+   "node_name": "EQIX",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "datacenter_and_cloud",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_datacenter_and_cloud__msft",
+   "node_name": "MSFT",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "datacenter_and_cloud",
+   "research_depth": "baseline_done",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": true,
+   "company_refs": [
+    "company-microsoft"
+   ],
+   "study_state_note": "已建立研究基线"
+  },
+  {
+   "node_id": "node_datacenter_and_cloud__amzn",
+   "node_name": "AMZN",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "datacenter_and_cloud",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_datacenter_and_cloud__googl",
+   "node_name": "GOOGL",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "datacenter_and_cloud",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_datacenter_and_cloud__orcl",
+   "node_name": "ORCL",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "datacenter_and_cloud",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_datacenter_and_cloud__crwv",
+   "node_name": "CRWV",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "datacenter_and_cloud",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_datacenter_and_cloud__nbis",
+   "node_name": "NBIS",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "datacenter_and_cloud",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_foundation_model__openai",
+   "node_name": "OpenAI",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "foundation_model",
+   "research_depth": "relations_verified",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [
+    "company-openai"
+   ],
+   "study_state_note": "关系已核验"
+  },
+  {
+   "node_id": "node_foundation_model__anthropic",
+   "node_name": "Anthropic",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "foundation_model",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_software_platform_and_application__snow",
+   "node_name": "SNOW",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "software_platform_and_application",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_software_platform_and_application__pltr",
+   "node_name": "PLTR",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "software_platform_and_application",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_software_platform_and_application__net",
+   "node_name": "NET",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "software_platform_and_application",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_software_platform_and_application__ddog",
+   "node_name": "DDOG",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "software_platform_and_application",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_software_platform_and_application__now",
+   "node_name": "NOW",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "software_platform_and_application",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_software_platform_and_application__crm",
+   "node_name": "CRM",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "software_platform_and_application",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_software_platform_and_application__adbe",
+   "node_name": "ADBE",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "software_platform_and_application",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  },
+  {
+   "node_id": "node_software_platform_and_application__meta",
+   "node_name": "META",
+   "taxonomy_version": "appendix1_v7",
+   "position_bucket": "software_platform_and_application",
+   "research_depth": "position_listed",
+   "updated_at": "2026-09-17T08:47:00Z",
+   "changed_since_last_run": false,
+   "company_refs": [],
+   "study_state_note": "**仅位置收录，尚未研究** —— 不是'中性评级'，也不是'没有投资机会'"
+  }
+ ],
+ "relations": [
+  {
+   "relation_id": "rel-nvda-sk-hynix-memory",
+   "type": "技术合作（下一代内存）",
+   "from": "company-nvidia",
+   "to": "company-sk-hynix",
+   "from_kind": "company",
+   "to_kind": "company",
+   "stage": "discussed",
+   "valid_from": "2026-08-26T00:00:00Z",
+   "valid_to": null,
+   "economic_exposure": "未披露",
+   "exposure_disclosure": "undisclosed",
+   "commitment_kind": "多年技术合作（无金额承诺披露）",
+   "evidence_claim_ids": [
+    "claim-src-nvda-cn-blog-q2fy27-plan-sk-hynix-collab"
+   ],
+   "evidence_sources": [
+    {
+     "claim_id": "claim-src-nvda-cn-blog-q2fy27-plan-sk-hynix-collab",
+     "source_id": "src-nvda-cn-blog-q2fy27",
+     "locator": "raw/2026-08-26-nvidia-cn-blog-q2-fy2027.txt#L30-L30",
+     "tier": "primary"
+    }
+   ],
+   "flows": [
+    {
+     "flow_kind": "product",
+     "from": "company-sk-hynix",
+     "to": "company-nvidia"
+    }
+   ]
+  },
+  {
+   "relation_id": "rel-nvda-t1-partners-verarubin",
+   "type": "供应采购（Vera Rubin 机架已在其云上运行）",
+   "from": "company-nvidia",
+   "to": "company-microsoft",
+   "from_kind": "company",
+   "to_kind": "company",
+   "stage": "order_confirmed",
+   "valid_from": "2026-08-26T00:00:00Z",
+   "valid_to": null,
+   "economic_exposure": "未披露（未点名机架数量或金额）",
+   "exposure_disclosure": "undisclosed",
+   "commitment_kind": "已出货并投运",
+   "evidence_claim_ids": [
+    "claim-src-nvda-q2fy27-pr-vr-full-production"
+   ],
+   "evidence_sources": [
+    {
+     "claim_id": "claim-src-nvda-q2fy27-pr-vr-full-production",
+     "source_id": "src-nvda-q2fy27-pr",
+     "locator": "raw/2026-08-26-nvidia-q2-fy2027-press-release.txt#L71-L73",
+     "tier": "primary"
+    }
+   ],
+   "flows": [
+    {
+     "flow_kind": "demand_signal",
+     "from": "company-microsoft",
+     "to": "company-nvidia"
+    },
+    {
+     "flow_kind": "product",
+     "from": "company-nvidia",
+     "to": "company-microsoft"
+    }
+   ]
+  },
+  {
+   "relation_id": "rel-nvda-aws-gpu-deploy",
+   "type": "供应采购（AWS 追加部署 200 万块 GPU）",
+   "from": "company-nvidia",
+   "to": "company-amazon",
+   "from_kind": "company",
+   "to_kind": "company",
+   "stage": "order_confirmed",
+   "valid_from": "2026-08-27T00:00:00Z",
+   "valid_to": null,
+   "economic_exposure": "未披露（只有数量 200 万块，无金额）",
+   "exposure_disclosure": "undisclosed",
+   "commitment_kind": "计划部署（本季度起至 FY2029Q2）",
+   "evidence_claim_ids": [
+    "claim-src-nasdaq-q2fy27-call-plan-aws-2m-gpus"
+   ],
+   "evidence_sources": [
+    {
+     "claim_id": "claim-src-nasdaq-q2fy27-call-plan-aws-2m-gpus",
+     "source_id": "src-nasdaq-q2fy27-call",
+     "locator": "raw/2026-08-27-nasdaq-q2fy2027-earnings-call-highlights.txt#L35-L37",
+     "tier": "secondary_1_5"
+    }
+   ],
+   "flows": [
+    {
+     "flow_kind": "demand_signal",
+     "from": "company-amazon",
+     "to": "company-nvidia"
+    }
+   ]
+  },
+  {
+   "relation_id": "rel-nvda-openai-capacity",
+   "type": "信用支持（SB Energy 土地/电力/厂房建设担保，供 OpenAI 关联方承租）",
+   "from": "company-nvidia",
+   "to": "company-openai",
+   "from_kind": "company",
+   "to_kind": "company",
+   "stage": "order_confirmed",
+   "valid_from": "2026-08-01T00:00:00Z",
+   "valid_to": null,
+   "economic_exposure": "担保上限 $105B；对应约 4.25 GW IT 负载",
+   "exposure_disclosure": "disclosed",
+   "commitment_kind": "担保（capped）",
+   "evidence_claim_ids": [
+    "claim-src-sec-10q-q2fy27-guarantee-sbenergy-openai"
+   ],
+   "evidence_sources": [
+    {
+     "claim_id": "claim-src-sec-10q-q2fy27-guarantee-sbenergy-openai",
+     "source_id": "src-sec-10q-q2fy27",
+     "locator": "raw/2026-08-26-nvidia-10q-q2fy2027-excerpts.txt#L49-L53",
+     "tier": "primary"
+    }
+   ],
+   "flows": []
+  },
+  {
+   "relation_id": "rel-amd-msft-azure-helios",
+   "type": "供应采购（Azure 规模部署 Helios 与第 6 代 EPYC）",
+   "from": "company-amd",
+   "to": "company-microsoft",
+   "from_kind": "company",
+   "to_kind": "company",
+   "stage": "discussed",
+   "valid_from": "2026-08-05T00:00:00Z",
+   "valid_to": null,
+   "economic_exposure": "未披露",
+   "exposure_disclosure": "undisclosed",
+   "commitment_kind": "宣布的扩展合作",
+   "evidence_claim_ids": [
+    "claim-src-amd-q2-2026-pr-msft-azure-helios"
+   ],
+   "evidence_sources": [
+    {
+     "claim_id": "claim-src-amd-q2-2026-pr-msft-azure-helios",
+     "source_id": "src-amd-q2-2026-pr",
+     "locator": "raw/2026-08-05-amd-q2-2026-results-pr.txt#L30-L31",
+     "tier": "primary"
+    }
+   ],
+   "flows": []
+  },
+  {
+   "relation_id": "rel-amd-anthropic-mi450",
+   "type": "供应采购（部署至多 2 GW MI450）",
+   "from": "company-amd",
+   "to": "company-anthropic",
+   "from_kind": "company",
+   "to_kind": "company",
+   "stage": "order_confirmed",
+   "valid_from": "2026-08-05T00:00:00Z",
+   "valid_to": null,
+   "economic_exposure": "至多 2 GW（无金额披露）",
+   "exposure_disclosure": "disclosed",
+   "commitment_kind": "战略协议",
+   "evidence_claim_ids": [
+    "claim-src-amd-q2-2026-pr-anthropic-2gw-mi450"
+   ],
+   "evidence_sources": [
+    {
+     "claim_id": "claim-src-amd-q2-2026-pr-anthropic-2gw-mi450",
+     "source_id": "src-amd-q2-2026-pr",
+     "locator": "raw/2026-08-05-amd-q2-2026-results-pr.txt#L29-L30",
+     "tier": "primary"
+    }
+   ],
+   "flows": []
+  },
+  {
+   "relation_id": "rel-nvda-amd-competition",
+   "type": "竞争替代（加速器与机架级方案）",
+   "from": "company-nvidia",
+   "to": "company-amd",
+   "from_kind": "company",
+   "to_kind": "company",
+   "stage": "tbd",
+   "valid_from": "2026-08-05T00:00:00Z",
+   "valid_to": null,
+   "economic_exposure": "未披露（份额未披露）",
+   "exposure_disclosure": "undisclosed",
+   "commitment_kind": "竞争关系（非承诺）",
+   "evidence_claim_ids": [
+    "claim-src-amd-q2-2026-pr-helios-launch",
+    "claim-src-nvda-q2fy27-pr-vr-full-production"
+   ],
+   "evidence_sources": [
+    {
+     "claim_id": "claim-src-amd-q2-2026-pr-helios-launch",
+     "source_id": "src-amd-q2-2026-pr",
+     "locator": "raw/2026-08-05-amd-q2-2026-results-pr.txt#L27-L27",
+     "tier": "primary"
+    },
+    {
+     "claim_id": "claim-src-nvda-q2fy27-pr-vr-full-production",
+     "source_id": "src-nvda-q2fy27-pr",
+     "locator": "raw/2026-08-26-nvidia-q2-fy2027-press-release.txt#L71-L73",
+     "tier": "primary"
+    }
+   ],
+   "flows": []
+  }
+ ],
+ "event_paths": [
+  {
+   "event_id": "evt-nvda-q2fy27-earnings",
+   "event_type": "earnings",
+   "company_ids": [
+    "company-nvidia"
+   ],
+   "occurred_at": "2026-08-26T00:00:00Z",
+   "root_source_id": "src-nvda-q2fy27-pr",
+   "paths": [
+    {
+     "impact_id": "imp-nvda-01-dc-demand",
+     "affected_company_id": "company-nvidia",
+     "variable": "数据中心加速计算需求",
+     "direction": "positive",
+     "magnitude": "DC 收入 +117% y/y（$89.0B）",
+     "magnitude_disclosure": "disclosed",
+     "conditions": [
+      "超大规模云厂与 ACIE 客户资本开支维持",
+      "供给（内存/先进封装）不成为出货硬约束"
+     ],
+     "counter_forces": [
+      "内存涨价侵蚀毛利率（公司自述超出预期）",
+      "中国数据中心算力收入被假设为零"
+     ],
+     "time_lag": "已发生（1 个季度内体现）",
+     "falsifiers": [
+      "下一季 DC 收入同比增速 < 50% 且连续两季"
+     ],
+     "path_kind": "direct_relation",
+     "evidence_claim_ids": [
+      "claim-src-nvda-q2fy27-pr-dc-rev-q2fy27",
+      "claim-src-nvda-q2fy27-pr-guide-q3fy27-rev"
+     ],
+     "evidence_sufficient": true
+    },
+    {
+     "impact_id": "imp-msft-01-capex-cost",
+     "affected_company_id": "company-microsoft",
+     "variable": "AI 基础设施资本开支与折旧",
+     "direction": "negative",
+     "magnitude": "季度资本支出 $41B（含组件涨价）",
+     "magnitude_disclosure": "disclosed",
+     "conditions": [
+      "算力需求持续超过可用容量（公司自述产能受限）"
+     ],
+     "counter_forces": [
+      "Azure 增速加快（+43%）带来收入侧对冲"
+     ],
+     "time_lag": "1–2 个季度（折旧滞后于资本支出）",
+     "falsifiers": [
+      "Azure 收入增速回落至 30% 以下且资本开支继续上升"
+     ],
+     "path_kind": "inferred_path",
+     "evidence_claim_ids": [
+      "claim-src-msft-fy26q4-call-capex-41b",
+      "claim-src-msft-fy26q4-pr-azure-growth-43"
+     ],
+     "evidence_sufficient": true
+    }
+   ]
+  },
+  {
+   "event_id": "evt-nvda-q3fy27-guidance",
+   "event_type": "guidance",
+   "company_ids": [
+    "company-nvidia"
+   ],
+   "occurred_at": "2026-08-26T00:00:00Z",
+   "root_source_id": "src-nvda-q2fy27-pr",
+   "paths": [
+    {
+     "impact_id": "imp-nvda-02-margin-path",
+     "affected_company_id": "company-nvidia",
+     "variable": "毛利率路径",
+     "direction": "negative",
+     "magnitude": "Q3 指引 74.0%±50bp（较 Q2 的 75.0% 降约 1pt）",
+     "magnitude_disclosure": "disclosed",
+     "conditions": [
+      "指引兑现且为代际切换期的持续定价让利"
+     ],
+     "counter_forces": [
+      "规模效应与产品组合升级（Vera Rubin 占比提升）"
+     ],
+     "time_lag": "1 个季度内（Q3 FY2027 报表）",
+     "falsifiers": [
+      "Q3 实际 GAAP 毛利率 ≥ 74.5%"
+     ],
+     "path_kind": "direct_relation",
+     "evidence_claim_ids": [
+      "claim-src-nvda-q2fy27-pr-guide-q3fy27-gm"
+     ],
+     "evidence_sufficient": true
+    }
+   ]
+  },
+  {
+   "event_id": "evt-nvda-supply-commitments-279b",
+   "event_type": "supply",
+   "company_ids": [
+    "company-nvidia"
+   ],
+   "occurred_at": "2026-08-26T00:00:00Z",
+   "root_source_id": "src-sec-10q-q2fy27",
+   "paths": []
+  },
+  {
+   "event_id": "evt-tsmc-q2-2026-earnings",
+   "event_type": "earnings",
+   "company_ids": [
+    "company-tsmc"
+   ],
+   "occurred_at": "2026-07-16T00:00:00Z",
+   "root_source_id": "src-tsmc-q2-2026-pr",
+   "paths": [
+    {
+     "impact_id": "imp-tsmc-01-nvda-demand",
+     "affected_company_id": "company-tsmc",
+     "variable": "先进制程与先进封装产能利用率",
+     "direction": "positive",
+     "magnitude": "HPC 占二季度营收 66%（环比 +20%）",
+     "magnitude_disclosure": "disclosed",
+     "conditions": [
+      "云服务商资本开支维持（TSMC 称客户信号仍强）"
+     ],
+     "counter_forces": [
+      "消费类与价格敏感终端承压（公司自述审慎规划）",
+      "2 奈米爬坡稀释毛利率约 3–4pt"
+     ],
+     "time_lag": "1–2 个季度",
+     "falsifiers": [
+      "HPC 平台收入连续两季环比下滑"
+     ],
+     "path_kind": "direct_relation",
+     "evidence_claim_ids": [
+      "claim-src-tsmc-q2-2026-call-hpc-mix-66",
+      "claim-src-tsmc-q2-2026-pr-node-mix-q2-2026"
+     ],
+     "evidence_sufficient": true
+    }
+   ]
+  },
+  {
+   "event_id": "evt-amd-q2-2026-earnings",
+   "event_type": "earnings",
+   "company_ids": [
+    "company-amd"
+   ],
+   "occurred_at": "2026-08-05T00:00:00Z",
+   "root_source_id": "src-amd-q2-2026-pr",
+   "paths": [
+    {
+     "impact_id": "imp-amd-01-competitive",
+     "affected_company_id": "company-amd",
+     "variable": "数据中心加速器竞争份额",
+     "direction": "positive",
+     "magnitude": "DC 收入 $6.7B（同比 +107%），占总营收 58%",
+     "magnitude_disclosure": "disclosed",
+     "conditions": [
+      "Helios 机架级方案按期放量与客户认证通过"
+     ],
+     "counter_forces": [
+      "NVIDIA 平台生态与代际节奏（Vera Rubin 全面量产）",
+      "机架级方案交付复杂度"
+     ],
+     "time_lag": "2–4 个季度（Helios 2026Q3 起出货）",
+     "falsifiers": [
+      "AMD DC 收入连续两季环比下滑，或 Helios 出货时间表推迟两个季度以上"
+     ],
+     "path_kind": "inferred_path",
+     "evidence_claim_ids": [
+      "claim-src-amd-q2-2026-pr-dc-rev-q2-2026",
+      "claim-src-amd-q2-2026-pr-helios-launch"
+     ],
+     "evidence_sufficient": true
+    }
+   ]
+  }
+ ],
+ "unfinished_visible": [
+  "node_power_and_facilities__ceg",
+  "node_power_and_facilities__vst",
+  "node_power_and_facilities__gev",
+  "node_power_and_facilities__etn",
+  "node_power_and_facilities__pwr",
+  "node_power_and_facilities__vrt",
+  "node_chip_architecture_and_design__arm",
+  "node_chip_architecture_and_design__snps",
+  "node_chip_architecture_and_design__cdns",
+  "node_manufacturing_and_memory__asml",
+  "node_manufacturing_and_memory__amat",
+  "node_manufacturing_and_memory__lrcx",
+  "node_manufacturing_and_memory__klac",
+  "node_manufacturing_and_memory__mu",
+  "node_manufacturing_and_memory__sndk",
+  "node_compute_chip_and_system__avgo",
+  "node_compute_chip_and_system__mrvl",
+  "node_compute_chip_and_system__dell",
+  "node_cluster_network_and_interconnect__anet",
+  "node_cluster_network_and_interconnect__lite",
+  "node_cluster_network_and_interconnect__cohr",
+  "node_cluster_network_and_interconnect__crdo",
+  "node_datacenter_and_cloud__dlr",
+  "node_datacenter_and_cloud__eqix",
+  "node_datacenter_and_cloud__amzn",
+  "node_datacenter_and_cloud__googl",
+  "node_datacenter_and_cloud__orcl",
+  "node_datacenter_and_cloud__crwv",
+  "node_datacenter_and_cloud__nbis",
+  "node_foundation_model__anthropic",
+  "node_software_platform_and_application__snow",
+  "node_software_platform_and_application__pltr",
+  "node_software_platform_and_application__net",
+  "node_software_platform_and_application__ddog",
+  "node_software_platform_and_application__now",
+  "node_software_platform_and_application__crm",
+  "node_software_platform_and_application__adbe",
+  "node_software_platform_and_application__meta"
+ ],
+ "data_gaps": [
+  {
+   "gap": "上游具名供应商未在本次取得的一手披露中点名",
+   "detail": "NVIDIA 10-Q 的 Item 1A 风险因素在本次取得副本中被截断；先进封装/HBM 供应商的具名关系因此**不得**被断言",
+   "blocked_steps": [
+    "第 3 步（部分）"
+   ]
+  },
+  {
+   "gap": "传导路径仅到 1 跳",
+   "detail": "库内 relations 仅 7 条且 NVDA 出边有限，2 跳及以上在库内不存在",
+   "blocked_steps": [
+    "第 5 步（多跳）"
+   ]
+  },
+  {
+   "gap": "价格隐含要求（反向估值）本轮 0 行",
+   "detail": "缺 WACC / 高增长年数 / ROIIC 等折现参数（rules/freeze.yaml::p05.algorithm = tbd）",
+   "blocked_steps": [
+    "第 6 步（价格隐含）"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,911 @@
+{
+ "fetched_at": "2026-09-17T08:47:00Z",
+ "session_close_utc": "20:00",
+ "calendar": [
+  "2026-08-03",
+  "2026-08-04",
+  "2026-08-05",
+  "2026-08-06",
+  "2026-08-07",
+  "2026-08-10",
+  "2026-08-11",
+  "2026-08-12",
+  "2026-08-13",
+  "2026-08-14",
+  "2026-08-17",
+  "2026-08-18",
+  "2026-08-19",
+  "2026-08-20",
+  "2026-08-21",
+  "2026-08-24",
+  "2026-08-25",
+  "2026-08-26",
+  "2026-08-27",
+  "2026-08-28",
+  "2026-08-31",
+  "2026-09-01",
+  "2026-09-02",
+  "2026-09-03",
+  "2026-09-04",
+  "2026-09-08",
+  "2026-09-09",
+  "2026-09-10",
+  "2026-09-11",
+  "2026-09-14",
+  "2026-09-15",
+  "2026-09-16"
+ ],
+ "calendar_source": "NYSE/Nasdaq 2026 休市安排（劳动节 2026-09-07）；与两条序列交叉验证一致",
+ "connectors": {
+  "series": "src-westock-mcp-us-daily-v1",
+  "benchmark": "src-kraneshares-agix-fund-page"
+ },
+ "series": [
+  {
+   "expect": {
+    "ticker": "NVDA",
+    "security_id": "sec-nvda",
+    "name_contains": "英伟达",
+    "currency": "USD"
+   },
+   "resolved": {
+    "code": "usNVDA.OQ",
+    "name": "英伟达",
+    "currency": "USD"
+   },
+   "request": {
+    "adjustment": "hfq",
+    "period": "day",
+    "note": "data_kline usNVDA.OQ fq=hfq"
+   },
+   "indicators_params": {
+    "market": "美股",
+    "period": "day",
+    "fq": "hfq",
+    "start": "2026-08-03",
+    "end": "2026-09-16",
+    "limit": 60
+   },
+   "adjustment_caliber_version": "westock-kline-hfq-us-v1",
+   "points": [
+    {
+     "date": "2026-09-16",
+     "close": "213.9"
+    },
+    {
+     "date": "2026-09-15",
+     "close": "212.17"
+    },
+    {
+     "date": "2026-09-14",
+     "close": "210.96"
+    },
+    {
+     "date": "2026-09-11",
+     "close": "218.29"
+    },
+    {
+     "date": "2026-09-10",
+     "close": "218.36"
+    },
+    {
+     "date": "2026-09-09",
+     "close": "223.424"
+    },
+    {
+     "date": "2026-09-08",
+     "close": "225.482"
+    },
+    {
+     "date": "2026-09-04",
+     "close": "230.107"
+    },
+    {
+     "date": "2026-09-03",
+     "close": "228.199"
+    },
+    {
+     "date": "2026-09-02",
+     "close": "224.163"
+    },
+    {
+     "date": "2026-09-01",
+     "close": "217.201"
+    },
+    {
+     "date": "2026-08-31",
+     "close": "220.537"
+    },
+    {
+     "date": "2026-08-28",
+     "close": "217.311"
+    },
+    {
+     "date": "2026-08-27",
+     "close": "227.729"
+    },
+    {
+     "date": "2026-08-26",
+     "close": "209.429"
+    },
+    {
+     "date": "2026-08-25",
+     "close": "212.816"
+    },
+    {
+     "date": "2026-08-24",
+     "close": "208.251"
+    },
+    {
+     "date": "2026-08-21",
+     "close": "214.484"
+    },
+    {
+     "date": "2026-08-20",
+     "close": "216.612"
+    },
+    {
+     "date": "2026-08-19",
+     "close": "217.321"
+    },
+    {
+     "date": "2026-08-18",
+     "close": "219.498"
+    },
+    {
+     "date": "2026-08-17",
+     "close": "224.763"
+    },
+    {
+     "date": "2026-08-14",
+     "close": "224.912"
+    },
+    {
+     "date": "2026-08-13",
+     "close": "225.052"
+    },
+    {
+     "date": "2026-08-12",
+     "close": "223.844"
+    },
+    {
+     "date": "2026-08-11",
+     "close": "217.261"
+    },
+    {
+     "date": "2026-08-10",
+     "close": "217.311"
+    },
+    {
+     "date": "2026-08-07",
+     "close": "223.714"
+    },
+    {
+     "date": "2026-08-06",
+     "close": "218.749"
+    },
+    {
+     "date": "2026-08-05",
+     "close": "218.979"
+    },
+    {
+     "date": "2026-08-04",
+     "close": "211.707"
+    },
+    {
+     "date": "2026-08-03",
+     "close": "206.413"
+    }
+   ]
+  },
+  {
+   "expect": {
+    "ticker": "AGIX",
+    "security_id": "sec-agix",
+    "name_contains": "人工智能ETF",
+    "currency": "USD"
+   },
+   "resolved": {
+    "code": "usAGIX.OQ",
+    "name": "人工智能ETF-KraneShares",
+    "currency": "USD"
+   },
+   "request": {
+    "adjustment": "hfq",
+    "period": "day",
+    "note": "data_kline usAGIX.OQ fq=hfq"
+   },
+   "indicators_params": {
+    "market": "美股",
+    "period": "day",
+    "fq": "hfq",
+    "start": "2026-08-03",
+    "end": "2026-09-16",
+    "limit": 60
+   },
+   "adjustment_caliber_version": "westock-kline-hfq-us-v1",
+   "points": [
+    {
+     "date": "2026-09-16",
+     "close": "44.92"
+    },
+    {
+     "date": "2026-09-15",
+     "close": "44.53"
+    },
+    {
+     "date": "2026-09-14",
+     "close": "44.84"
+    },
+    {
+     "date": "2026-09-11",
+     "close": "45.82"
+    },
+    {
+     "date": "2026-09-10",
+     "close": "45.28"
+    },
+    {
+     "date": "2026-09-09",
+     "close": "46.22"
+    },
+    {
+     "date": "2026-09-08",
+     "close": "46.37"
+    },
+    {
+     "date": "2026-09-04",
+     "close": "45.93"
+    },
+    {
+     "date": "2026-09-03",
+     "close": "45.34"
+    },
+    {
+     "date": "2026-09-02",
+     "close": "44.1"
+    },
+    {
+     "date": "2026-09-01",
+     "close": "44.2"
+    },
+    {
+     "date": "2026-08-31",
+     "close": "45.13"
+    },
+    {
+     "date": "2026-08-28",
+     "close": "45.03"
+    },
+    {
+     "date": "2026-08-27",
+     "close": "45.94"
+    },
+    {
+     "date": "2026-08-26",
+     "close": "44.78"
+    },
+    {
+     "date": "2026-08-25",
+     "close": "44.69"
+    },
+    {
+     "date": "2026-08-24",
+     "close": "44"
+    },
+    {
+     "date": "2026-08-21",
+     "close": "44.85"
+    },
+    {
+     "date": "2026-08-20",
+     "close": "44.7"
+    },
+    {
+     "date": "2026-08-19",
+     "close": "44.53"
+    },
+    {
+     "date": "2026-08-18",
+     "close": "44.81"
+    },
+    {
+     "date": "2026-08-17",
+     "close": "46.71"
+    },
+    {
+     "date": "2026-08-14",
+     "close": "46.68"
+    },
+    {
+     "date": "2026-08-13",
+     "close": "46.56"
+    },
+    {
+     "date": "2026-08-12",
+     "close": "46.26"
+    },
+    {
+     "date": "2026-08-11",
+     "close": "45.24"
+    },
+    {
+     "date": "2026-08-10",
+     "close": "45.09"
+    },
+    {
+     "date": "2026-08-07",
+     "close": "45.34"
+    },
+    {
+     "date": "2026-08-06",
+     "close": "44.14"
+    },
+    {
+     "date": "2026-08-05",
+     "close": "44.57"
+    },
+    {
+     "date": "2026-08-04",
+     "close": "45.3"
+    },
+    {
+     "date": "2026-08-03",
+     "close": "43.62"
+    }
+   ]
+  },
+  {
+   "expect": {
+    "ticker": "TSM",
+    "security_id": "sec-tsmc",
+    "name_contains": "台积电",
+    "currency": "USD"
+   },
+   "resolved": {
+    "code": "usTSM.N",
+    "name": "台积电",
+    "currency": "USD"
+   },
+   "request": {
+    "adjustment": "hfq",
+    "period": "day",
+    "note": "data_kline usTSM.N fq=hfq"
+   },
+   "indicators_params": {
+    "market": "美股",
+    "period": "day",
+    "fq": "hfq",
+    "start": "2026-08-03",
+    "end": "2026-09-16",
+    "limit": 40
+   },
+   "adjustment_caliber_version": "westock-kline-hfq-us-v1",
+   "points": [
+    {
+     "date": "2026-09-16",
+     "close": "417.72"
+    },
+    {
+     "date": "2026-09-15",
+     "close": "413.75"
+    },
+    {
+     "date": "2026-09-14",
+     "close": "418.01"
+    },
+    {
+     "date": "2026-09-11",
+     "close": "433.24"
+    },
+    {
+     "date": "2026-09-10",
+     "close": "428.03"
+    },
+    {
+     "date": "2026-09-09",
+     "close": "435.36"
+    },
+    {
+     "date": "2026-09-08",
+     "close": "439"
+    },
+    {
+     "date": "2026-09-04",
+     "close": "428.91"
+    },
+    {
+     "date": "2026-09-03",
+     "close": "417.01"
+    },
+    {
+     "date": "2026-09-02",
+     "close": "415.5"
+    },
+    {
+     "date": "2026-09-01",
+     "close": "414"
+    },
+    {
+     "date": "2026-08-31",
+     "close": "415.32"
+    },
+    {
+     "date": "2026-08-28",
+     "close": "417.52"
+    },
+    {
+     "date": "2026-08-27",
+     "close": "427.3"
+    },
+    {
+     "date": "2026-08-26",
+     "close": "417.69"
+    },
+    {
+     "date": "2026-08-25",
+     "close": "417.41"
+    },
+    {
+     "date": "2026-08-24",
+     "close": "410.12"
+    },
+    {
+     "date": "2026-08-21",
+     "close": "418.95"
+    },
+    {
+     "date": "2026-08-20",
+     "close": "416"
+    },
+    {
+     "date": "2026-08-19",
+     "close": "412.09"
+    },
+    {
+     "date": "2026-08-18",
+     "close": "413.41"
+    },
+    {
+     "date": "2026-08-17",
+     "close": "430.97"
+    },
+    {
+     "date": "2026-08-14",
+     "close": "426.35"
+    },
+    {
+     "date": "2026-08-13",
+     "close": "430.49"
+    },
+    {
+     "date": "2026-08-12",
+     "close": "429.15"
+    },
+    {
+     "date": "2026-08-11",
+     "close": "422.06"
+    },
+    {
+     "date": "2026-08-10",
+     "close": "418.47"
+    },
+    {
+     "date": "2026-08-07",
+     "close": "420.04"
+    },
+    {
+     "date": "2026-08-06",
+     "close": "418.2"
+    },
+    {
+     "date": "2026-08-05",
+     "close": "414"
+    },
+    {
+     "date": "2026-08-04",
+     "close": "417.17"
+    },
+    {
+     "date": "2026-08-03",
+     "close": "406.11"
+    }
+   ]
+  },
+  {
+   "expect": {
+    "ticker": "MSFT",
+    "security_id": "sec-msft",
+    "name_contains": "微软",
+    "currency": "USD"
+   },
+   "resolved": {
+    "code": "usMSFT.OQ",
+    "name": "微软",
+    "currency": "USD"
+   },
+   "request": {
+    "adjustment": "hfq",
+    "period": "day",
+    "note": "data_kline usMSFT.OQ fq=hfq"
+   },
+   "indicators_params": {
+    "market": "美股",
+    "period": "day",
+    "fq": "hfq",
+    "start": "2026-08-03",
+    "end": "2026-09-16",
+    "limit": 40
+   },
+   "adjustment_caliber_version": "westock-kline-hfq-us-v1",
+   "points": [
+    {
+     "date": "2026-09-16",
+     "close": "490.3"
+    },
+    {
+     "date": "2026-09-15",
+     "close": "497.12"
+    },
+    {
+     "date": "2026-09-14",
+     "close": "505.41"
+    },
+    {
+     "date": "2026-09-11",
+     "close": "495.63"
+    },
+    {
+     "date": "2026-09-10",
+     "close": "492.44"
+    },
+    {
+     "date": "2026-09-09",
+     "close": "491.65"
+    },
+    {
+     "date": "2026-09-08",
+     "close": "493.95"
+    },
+    {
+     "date": "2026-09-04",
+     "close": "499.7"
+    },
+    {
+     "date": "2026-09-03",
+     "close": "510.12"
+    },
+    {
+     "date": "2026-09-02",
+     "close": "496.82"
+    },
+    {
+     "date": "2026-09-01",
+     "close": "501.02"
+    },
+    {
+     "date": "2026-08-31",
+     "close": "507.29"
+    },
+    {
+     "date": "2026-08-28",
+     "close": "513.53"
+    },
+    {
+     "date": "2026-08-27",
+     "close": "505.06"
+    },
+    {
+     "date": "2026-08-26",
+     "close": "496.37"
+    },
+    {
+     "date": "2026-08-25",
+     "close": "491.71"
+    },
+    {
+     "date": "2026-08-24",
+     "close": "487.31"
+    },
+    {
+     "date": "2026-08-21",
+     "close": "483.24"
+    },
+    {
+     "date": "2026-08-20",
+     "close": "481.15"
+    },
+    {
+     "date": "2026-08-19",
+     "close": "483.39"
+    },
+    {
+     "date": "2026-08-18",
+     "close": "480.715"
+    },
+    {
+     "date": "2026-08-17",
+     "close": "479.437"
+    },
+    {
+     "date": "2026-08-14",
+     "close": "494.459"
+    },
+    {
+     "date": "2026-08-13",
+     "close": "495.936"
+    },
+    {
+     "date": "2026-08-12",
+     "close": "491.494"
+    },
+    {
+     "date": "2026-08-11",
+     "close": "502.853"
+    },
+    {
+     "date": "2026-08-10",
+     "close": "505.099"
+    },
+    {
+     "date": "2026-08-07",
+     "close": "499.04"
+    },
+    {
+     "date": "2026-08-06",
+     "close": "498.91"
+    },
+    {
+     "date": "2026-08-05",
+     "close": "486.534"
+    },
+    {
+     "date": "2026-08-04",
+     "close": "491.874"
+    },
+    {
+     "date": "2026-08-03",
+     "close": "486.724"
+    }
+   ]
+  },
+  {
+   "expect": {
+    "ticker": "AMD",
+    "security_id": "sec-amd",
+    "name_contains": "超威半导体",
+    "currency": "USD"
+   },
+   "resolved": {
+    "code": "usAMD.OQ",
+    "name": "超威半导体",
+    "currency": "USD"
+   },
+   "request": {
+    "adjustment": "hfq",
+    "period": "day",
+    "note": "data_kline usAMD.OQ fq=hfq"
+   },
+   "indicators_params": {
+    "market": "美股",
+    "period": "day",
+    "fq": "hfq",
+    "start": "2026-08-03",
+    "end": "2026-09-16",
+    "limit": 40
+   },
+   "adjustment_caliber_version": "westock-kline-hfq-us-v1",
+   "points": [
+    {
+     "date": "2026-09-16",
+     "close": "512.5"
+    },
+    {
+     "date": "2026-09-15",
+     "close": "504.2"
+    },
+    {
+     "date": "2026-09-14",
+     "close": "493.41"
+    },
+    {
+     "date": "2026-09-11",
+     "close": "516.13"
+    },
+    {
+     "date": "2026-09-10",
+     "close": "503.6"
+    },
+    {
+     "date": "2026-09-09",
+     "close": "521.1"
+    },
+    {
+     "date": "2026-09-08",
+     "close": "505.74"
+    },
+    {
+     "date": "2026-09-04",
+     "close": "477.57"
+    },
+    {
+     "date": "2026-09-03",
+     "close": "456.16"
+    },
+    {
+     "date": "2026-09-02",
+     "close": "457.06"
+    },
+    {
+     "date": "2026-09-01",
+     "close": "459.61"
+    },
+    {
+     "date": "2026-08-31",
+     "close": "470.72"
+    },
+    {
+     "date": "2026-08-28",
+     "close": "465.58"
+    },
+    {
+     "date": "2026-08-27",
+     "close": "476.67"
+    },
+    {
+     "date": "2026-08-26",
+     "close": "480.93"
+    },
+    {
+     "date": "2026-08-25",
+     "close": "479.18"
+    },
+    {
+     "date": "2026-08-24",
+     "close": "456.75"
+    },
+    {
+     "date": "2026-08-21",
+     "close": "473.25"
+    },
+    {
+     "date": "2026-08-20",
+     "close": "469.46"
+    },
+    {
+     "date": "2026-08-19",
+     "close": "466.42"
+    },
+    {
+     "date": "2026-08-18",
+     "close": "484.39"
+    },
+    {
+     "date": "2026-08-17",
+     "close": "506"
+    },
+    {
+     "date": "2026-08-14",
+     "close": "514.39"
+    },
+    {
+     "date": "2026-08-13",
+     "close": "483.01"
+    },
+    {
+     "date": "2026-08-12",
+     "close": "482.93"
+    },
+    {
+     "date": "2026-08-11",
+     "close": "474.32"
+    },
+    {
+     "date": "2026-08-10",
+     "close": "469.56"
+    },
+    {
+     "date": "2026-08-07",
+     "close": "483.36"
+    },
+    {
+     "date": "2026-08-06",
+     "close": "489.28"
+    },
+    {
+     "date": "2026-08-05",
+     "close": "482.05"
+    },
+    {
+     "date": "2026-08-04",
+     "close": "518.58"
+    },
+    {
+     "date": "2026-08-03",
+     "close": "484.64"
+    }
+   ]
+  }
+ ],
+ "benchmark": {
+  "benchmark_id": "benchmark-agix-primary",
+  "security_id": "sec-agix",
+  "includes_non_listed_assets": true,
+  "observed": {
+   "holdings_as_of": "2026-09-16",
+   "holdings_page": "https://kraneshares.com/etf/agix/",
+   "tracking_index": "Solactive Worldline Artificial General Intelligence Index",
+   "listing_date": "2024-07-17",
+   "unit_nav": "45.03",
+   "unit_nav_date": "2026-09-16",
+   "unit_nav_currency": "USD",
+   "non_listed_total_weight": "4.35%",
+   "non_listed_assets": [
+    {
+     "name": "ANTHROPIC, PBC",
+     "value": "12926025",
+     "weight": "1.18%",
+     "gap_note": "公司自报估值；持仓页未给出可独立复核的估值方法"
+    },
+    {
+     "name": "GENERAL INTUITION US INC",
+     "value": "9999948",
+     "weight": "0.92%",
+     "gap_note": "公司自报估值；无可独立复核估值"
+    },
+    {
+     "name": "APPTRONIK, INC.",
+     "value": "7673492",
+     "weight": "0.70%",
+     "gap_note": "公司自报估值；无可独立复核估值"
+    },
+    {
+     "name": "AYAR LABS INC",
+     "value": "5925000",
+     "weight": "0.54%",
+     "gap_note": "公司自报估值；无可独立复核估值"
+    },
+    {
+     "name": "STANDARD BOTS CO.",
+     "value": "4999973",
+     "weight": "0.46%",
+     "gap_note": "公司自报估值；无可独立复核估值"
+    },
+    {
+     "name": "NURO INC",
+     "value": "4000000",
+     "weight": "0.37%",
+     "gap_note": "公司自报估值；无可独立复核估值"
+    },
+    {
+     "name": "POLYMARKET PFD SERIES B",
+     "value": "2000040",
+     "weight": "0.18%",
+     "gap_note": "公司自报估值；无可独立复核估值"
+    }
+   ]
+  },
+  "sensitivity_basis": "非上市部分（合计 4.35% NAV）的估值折让对基金净值的影响",
+  "sensitivity": [
+   {
+    "assumption": "非上市资产估值整体折让 50%",
+    "effect_on_nav": "-2.18%",
+    "basis": "4.35% NAV × 50%"
+   },
+   {
+    "assumption": "非上市资产估值整体折让 100%（归零）",
+    "effect_on_nav": "-4.35%",
+    "basis": "4.35% NAV × 100%"
+   }
+  ],
+  "unverifiable_forecasts": [
+   "Morgan Stanley（2026-03-09）：到 2028 年全球 AI 相关基础设施投资近 $3 万亿，其中 80% 以上尚未发生 —— 引自基金页，非基金自身预测，无法独立核验",
+   "Anthropic ARR 由 2025 年初约 $10 亿增至 2026 年 5 月 $470 亿 —— 公司自报，无法独立核验"
+  ],
+  "modeled_coverage": "0.9565",
+  "unmodeled_parts": [
+   "非上市资产（7 项，合计 4.35% NAV）无可独立复核的估值"
+  ],
+  "claims_complete_forecast": false
+ }
+}

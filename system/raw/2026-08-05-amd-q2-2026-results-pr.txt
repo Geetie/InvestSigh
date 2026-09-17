@@ -1,0 +1,37 @@
+SOURCE: "AMD 公布 2026 年第二季度财报"（AMD Reports Second Quarter 2026 Financial Results）
+PUBLISHER: Advanced Micro Devices, Inc.（官方新闻稿，中文版）
+PUBLISHED: 2026-08-05 (加利福尼亚州圣克拉拉市)
+URL: https://amd.com/zh-cn/newsroom/press-releases/amd-2q-2026-earnings.html
+SEC MIRROR: https://www.sec.gov/Archives/edgar/data/2488/000000248826000121/amdq22026earningsslidesf.htm
+TIER: primary (company_official)
+ACCESS: full_text
+RETRIEVED_BY: session web search, 2026-09-17
+
+--- BEGIN VERBATIM EXCERPTS ---
+
+[L1] 2026年第二季度营业额达到115亿美元,毛利率为54%,经营收入20亿美元,净收入23亿美元,
+     摊薄后每股收益为1.38美元。基于非GAAP标准,毛利率为56%,经营收入为31亿美元,净收入为28亿美元,
+     摊薄后每股收益为1.66美元。
+
+[L2] AMD执行副总裁及首席财务官Jean Hu表示:"受数据中心业务持续强劲增长推动,公司第二季度营业额
+     同比增长50%,达到创纪录的115亿美元。数据中心业务收入在本季度占公司总营收的58%。
+     我们预计2026年下半年数据中心业务销售将进一步加速增长。"
+
+[L3] 数据中心事业部本季度营业额为67亿美元,同比增长107%,主要得益于市场对AMD EPYC(霄龙)处理器
+     以及AMD Instinct GPU的强劲需求。
+
+[L4] 客户端和游戏事业部本季度营业额为38亿美元,同比增长6%。其中,客户端业务本季度营业额为31亿美元,
+     同比增长23%,主要得益于市场对AMD Ryzen(锐龙)处理器的强劲需求。游戏业务本季度营业额为7.79亿美元,
+     同比下降31%,主要由于半定制业务营业额减少。嵌入式业务部本季度营业额为9.77亿美元,同比增长19%。
+
+[L5] 推出AMD Helios机架级解决方案,其为性能领先的AI服务器机架。
+
+[L6] (SEC 财报幻灯片) Anthropic and AMD announced a strategic agreement to deploy up to 2 GW of AMD
+     Instinct MI450 Series GPUs in AMD Helios racks. Microsoft and AMD announced an expanded
+     collaboration to deploy AMD Helios and 6th Gen EPYC CPUs at scale across Azure.
+
+--- END VERBATIM EXCERPTS ---
+
+补充（另一家媒体对同一财报电话会的报道，**二三手**）：AMD 2026Q3 营收指引约 130 亿美元 ±3 亿；
+公司预计 2027 年数据中心销售将再翻倍以上；Anthropic 的 MI450 部署首 1GW 自 2027 上半年开始。
+（未单独落 raw 文件，故本轮**不据此出主张**。）

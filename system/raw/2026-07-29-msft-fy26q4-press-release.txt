@@ -1,0 +1,41 @@
+SOURCE: "Microsoft Cloud and AI Strength Fuels Fourth Quarter Results"（微软 FY26 Q4 财报新闻稿）
+PUBLISHER: Microsoft Corporation
+PUBLISHED: 2026-07-29 (REDMOND, Wash.)
+URL: https://www.microsoft.com/en-us/investor/earnings/fy-2026-q4/press-release-webcast
+TIER: primary (company_official)
+ACCESS: full_text
+RETRIEVED_BY: session web search, 2026-09-17
+
+--- BEGIN VERBATIM EXCERPTS ---
+
+[L1] Revenue was $90.0 billion and increased 18% (up 17% in constant currency)
+[L2] Operating income was $40.6 billion and increased 18%
+[L3] Net income was $35.8 billion and increased 31% on a GAAP basis, and was $35.3 billion and
+     increased 22% on a non-GAAP basis
+[L4] Diluted earnings per share was $4.81 and increased 32% on a GAAP basis, and was $4.74 and
+     increased 23% on a non-GAAP basis
+
+[L5] "This year, Azure revenue surpassed $100 billion for the first time, and Microsoft 365 Copilot
+     reached over 30 million paid seats"
+
+[L6] "We delivered a strong quarter to close out the fiscal year, highlighted by Microsoft Cloud
+     revenue of $59.3 billion, up 27% year-over-year," said Amy Hood, executive vice president and
+     chief financial officer of Microsoft.
+
+[L7] Microsoft Cloud revenue was $59.3 billion and increased 27%, and commercial remaining
+     performance obligation increased 84% to $678 billion.
+
+[L8] Revenue in Intelligent Cloud was $39.3 billion and increased 32% (up 31% in constant currency),
+     with the following business highlights: · Azure and other cloud services revenue increased 43%
+
+[L9] Fiscal Year 2026 Results: Revenue was $331.8 billion and increased 18%; Operating income was
+     $155.2 billion and increased 21%; Net income was $133.7 billion.
+
+[L10] Microsoft returned $10.2 billion to shareholders in the form of dividends and share repurchases
+      in the fourth quarter of fiscal year 2026.
+
+--- END VERBATIM EXCERPTS ---
+
+补充（取自财报电话会报道，**1.5 手**，见 `2026-07-29-msft-fy26q4-call-report.txt`）：
+季度资本支出 410 亿美元（含组件涨价）、现金购置不动产及设备 358 亿美元、自由现金流 196 亿美元；
+FY27 资本支出指引由约 1900 亿美元下调至 1750 亿美元。本文件不含这些数字。

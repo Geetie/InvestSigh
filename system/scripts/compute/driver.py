@@ -202,6 +202,12 @@ def _resolve_security(
 ) -> str | None:
     """解析基准对应证券：基准自带的 `security_id` 优先；否则行情里只有唯一证券时用它。"""
     explicit = benchmark.get("security_id")
+    if not explicit:
+        # ★ 2026-09-17 冷启动补：`Benchmark` 无顶层 `security_id`，清单把它落在
+        #   `coverage_profile.security_id`（见 `scripts/ingest/market_data.py::plan_benchmark_row`）。
+        profile = benchmark.get("coverage_profile")
+        if isinstance(profile, Mapping):
+            explicit = profile.get("security_id")
     if explicit:
         return str(explicit)
     securities = sorted(by_security)

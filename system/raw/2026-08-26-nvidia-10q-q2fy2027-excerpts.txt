@@ -1,0 +1,114 @@
+SOURCE: NVIDIA Corporation Form 10-Q, quarterly period ended July 26, 2026
+FILER: NVIDIA CORP, CIK 0001045810
+ACCESSION: 0001045810-26-000075  /  Film No. 261323507  /  File No. 000-23985
+FILED: 2026-08-26  (accepted 2026-08-26 16:36:00)
+URL: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/nvda-20260726.htm
+TIER: primary (regulatory filing)
+ACCESS: full_text available; the retrieved copy was truncated before Item 1A Risk Factors
+RETRIEVED_BY: session web fetch, 2026-09-17
+
+--- BEGIN VERBATIM EXCERPTS ---
+
+[Section: Item 2. MD&A — Recent Developments, Future Objectives and Challenges]
+[L1] "To secure inventory and capacity to meet demand for the next several years, we have entered
+     into significant commitments and may continue to enter into manufacturing and supply
+     agreements for both current and future products, and we continue to expand our supplier base."
+
+[L2] "The scale and size of our production needs and the complexity of producing our data center
+     systems has caused and could in the future cause delays in production, challenges in managing
+     supply and demand, revenue volatility, quality issues, increased inventory provisions,
+     decreases in product yields, higher material costs, and increased warranty costs."
+
+[Section: Note 10 — Commitments and Contingencies — Commitments]
+[L3] "Supply and capacity – We have partnered with our extensive network to secure the necessary
+     supply and critical components needed to meet demand for the next several years, increasing
+     supply commitments from $119 billion last quarter to $279 billion as of July 26, 2026. These
+     supply commitments are for our data center infrastructure systems, primarily memory and
+     manufacturing facilities, to produce our products for long-term demand across current and
+     future product architectures."
+
+[L4] Commitments table ($ in billions), as of July 26, 2026
+     Supply and capacity            $92 / $87 / $88 / $6 / $5 / $1 / $279
+     Cloud service agreements        $3 / $8 / $7 / $6 / $4 / $1 / $29
+     Data center leases not commenced — / $1 / $1 / $2 / $1 / $20 / $25
+     Equity investments             $18 / $3 / $2 / $2 / — / — / $25
+     Capital expenditures            $7 / $1 / — / — / — / — / $8
+     Total                         $120 / $100 / $98 / $16 / $10 / $22 / $366
+
+[L5] "We enter into agreements with our suppliers that allow them to procure inventory based upon
+     our defined criteria, and in certain instances, these agreements may be cancelable,
+     rescheduled, or adjustable for our business needs prior to placing firm orders. Changes to
+     these agreements may result in additional costs."
+
+[Section: Note 10 — Additional Commitments]
+[L6] AI cloud agreements   $— / $6 / $8 / $7 / $6 / $9 / $36
+     Data center leases not commenced for third party  — / — / $1 / $1 / $1 / $17 / $20
+     Total  $— / $6 / $9 / $8 / $7 / $26 / $56
+
+[Section: Note 10 — Guarantees]
+[L7] "In August 2026, we entered into guarantees, capped at a total of $105 billion, to provide
+     credit support on a land, power, and shell buildout with affiliates of SB Energy Corp.
+     (SB Energy) on behalf of a customer, an affiliate of OpenAI Group PBC (OpenAI), related to
+     leases for approximately 4.25 gigawatts of IT load in the aggregate at SB Energy's PORTS
+     Technology Campus in Pike County, Ohio."
+[L8] Land, power, and shell guarantees for AI clouds   3.5
+     SB Energy Corp. guarantees                       105.0
+     Total                                           $108.5
+
+[Section: Note 7 — Supplemental Financial Statement Information — Inventories]
+[L9] Raw materials        $11,341 / $3,807
+     Work in process       $13,377 / $8,822
+     Finished goods         $6,857 / $8,774
+     Total inventories     $31,575 / $21,403
+     ($ in millions; July 26, 2026 vs January 25, 2026)
+[L10] "We recognized inventory provisions of $784 million and $886 million for the second quarter,
+      and $1.6 billion and $3.2 billion for the first half, of fiscal years 2027 and 2026,
+      respectively, in Cost of revenue."
+[L11] Excess inventory purchase obligations  2,138 / 2,739
+[L12] "We recognized $201 million and $137 million for the second quarter, and $501 million and
+      $3.1 billion for the first half, of fiscal years 2027 and 2026, respectively, in Cost of
+      revenue."
+
+[Section: Item 2. MD&A — inventory provisions effect on gross margin]
+[L13] "Provisions for inventory and excess inventory purchase obligations totaled $985 million and
+      $2.1 billion for the second quarter and first half of fiscal year 2027, respectively. Sales
+      of previously reserved inventory and settlements of excess inventory purchase obligations
+      resulted in a provision release of $177 million and $280 million for the second quarter and
+      first half of fiscal year 2027, respectively. The net effect on our gross margin was an
+      unfavorable impact of 0.8% and 1.0% in the second quarter and first half of fiscal year
+      2027, respectively."
+
+[Section: Note 7 / Item 2 — Concentration of revenue]
+[L14] "Five direct customers accounted for 22%, 14%, 13%, 11%, and 10% of our accounts receivable
+      balance as of July 26, 2026. Three direct customers accounted for 25%, 18%, and 13% of our
+      accounts receivable balance as of January 25, 2026."
+[L15] "For the second quarter of fiscal year 2027, one direct customer represented 16% of total
+      revenue, which was primarily attributable to the Compute & Networking segment. For the first
+      half of fiscal year 2027, three direct customers represented 16%, 15%, and 13% of total
+      revenue, all of which was primarily attributable to the Compute & Networking segment."
+[L16] "For the second quarter of fiscal year 2026, two direct customers represented 23% and 16% of
+      total revenue, all of which was primarily attributable to the Compute & Networking segment.
+      For the first half of fiscal year 2026, two direct customers represented 20% and 15% of total
+      revenue, all of which was primarily attributable to the Compute & Networking segment."
+[L17] "We generate a significant amount of our revenue from a limited number of indirect customers,
+      some individually representing 10% or more of our revenue. Certain companies purchase cloud
+      and related services through various direct and indirect customers. We estimate that one AI
+      research and deployment company contributed a meaningful amount of our revenue by purchasing
+      cloud services from our customers in the second quarter and first half of fiscal year 2027."
+
+[Section: Item 2. MD&A — equity investments]
+[L18] "These include equity investments of $99 billion and equity investment commitments of
+      $25 billion as of July 26, 2026."
+
+[Section: Item 2. MD&A — demand/supply constraint]
+[L19] "Customers may postpone purchasing new architectures due to the lack of availability of data
+      center infrastructure to deploy our products, constraints on capital to have sufficient
+      funding to purchase our products, or may adopt new technologies more gradually than
+      anticipated, affecting our revenue timing and supply chain expenses."
+
+--- END VERBATIM EXCERPTS ---
+
+NOTE (collection limit): the retrieved copy of this 10-Q was truncated before Part II Item 1A
+Risk Factors. NVIDIA customarily names its foundry and memory suppliers in that section; that
+naming is therefore NOT recorded here and must not be claimed. Named suppliers of foundry/HBM
+are not asserted from this filing.

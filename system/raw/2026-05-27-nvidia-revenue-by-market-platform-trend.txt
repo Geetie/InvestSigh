@@ -1,0 +1,32 @@
+SOURCE: "NVIDIA Quarterly Revenue Trend" (revenue by market platform, recast)
+PUBLISHER: NVIDIA Corporation — investor relations download
+CONTEXT: accompanying the Q1 FY2027 results (document id Q127-NEW-v3)
+URL: https://s201.q4cdn.com/141608511/files/doc_financials/2027/Q127/Rev_by_Mkt_Qtrly_Trend_Q127-NEW-v3.pdf
+TIER: primary (company_official)
+ACCESS: full_text (PDF table rendered as text)
+RETRIEVED_BY: session web search, 2026-09-17
+
+--- BEGIN VERBATIM EXCERPTS ---
+
+[L1] NVIDIA QUARTERLY REVENUE — REVENUE BY MARKET PLATFORM
+     Fiscal 2025 / Fiscal 2026 / Fiscal 2027   ($ in millions)
+
+[L2] Data Center:      Q1 22,563 | Q2 26,272 | Q3 30,771 | Q4 35,580 |
+                       Q1 39,112 | Q2 41,096 | Q3 51,215 | Q4 62,314 | Q1 75,246
+[L3]   Hyperscale:     10,690 | 10,622 | 13,390 | 19,094 | 17,599 | 23,883 | 30,340 | 33,814 | 37,869
+[L4]   AI Clouds, Industrial, & Enterprise:
+                       11,873 | 15,650 | 17,381 | 16,486 | 21,513 | 17,213 | 20,875 | 28,500 | 37,377
+[L5] Edge Computing:   3,481 | 3,768 | 4,311 | 3,751 | 4,950 | 5,647 | 5,791 | 5,813 | 6,369
+[L6] TOTAL:           26,044 | 30,040 | 35,082 | 39,331 | 44,062 | 46,743 | 57,006 | 68,127 | 81,615
+
+[L7] Footnote 1: Data Center will include two sub-markets, Hyperscale and ACIE, which incorporates
+     AI Clouds, Industrial, and Enterprise. Hyperscale will include revenue from the public clouds
+     and the world's largest consumer internet companies, while ACIE addresses our growth
+     opportunity in diverse AI purpose-built data centers and AI factories across industries and
+     countries.
+[L8] Footnote 2: Edge Computing highlights devices for agentic and physical AI including PCs, game
+     consoles, workstations, AI-RAN base stations, robotics and automotive.
+[L9] Note: In the first quarter of fiscal year 2027, we changed our presentation of revenue by
+     market platform, and the comparable periods have been recast.
+
+--- END VERBATIM EXCERPTS ---

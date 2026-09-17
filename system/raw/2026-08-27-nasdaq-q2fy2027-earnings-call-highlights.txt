@@ -1,0 +1,89 @@
+SOURCE: "NVIDIA Q2 Earnings Call Highlights"
+PUBLISHER: Nasdaq (news article reporting the NVIDIA Q2 FY2027 earnings call)
+PUBLISHED: 2026-08-27 (call held 2026-08-26, 2pm PT)
+URL: https://www.nasdaq.com/articles/nvidia-q2-earnings-call-highlights
+TIER: secondary_1_5  (journalistic report carrying direct quotations of CFO/CEO on the earnings
+                     call; the call itself is an official company event, but this carrier is a
+                     third-party publication transcribing it)
+ACCESS: full_text
+RETRIEVED_BY: session web fetch, 2026-09-17
+
+--- BEGIN VERBATIM EXCERPTS ---
+
+[L1] NVIDIA (NASDAQ:NVDA) reported record second-quarter results for fiscal 2027, with revenue more
+     than doubling from a year earlier to $96 billion, as demand for artificial intelligence
+     infrastructure continued to expand across hyperscalers, cloud providers, enterprises and
+     sovereign customers.
+
+[L2] Chief Financial Officer Colette Kress said the company expects revenue to grow by
+     approximately 70% in fiscal 2028, though she characterized that outlook as supply-constrained.
+     NVIDIA forecast third-quarter revenue of $108 billion, plus or minus 2%.
+
+[L3] "The surge in AI demand is driving a global infrastructure build-out," Kress said, citing
+     demand from hyperscalers, AI laboratories, AI-native businesses, enterprise customers and
+     sovereign AI initiatives.
+
+[L4] Data center revenue rose 18% sequentially to $89 billion in the second quarter. Revenue from
+     hyperscale customers was $49 billion, up 13% from the prior quarter, driven by demand for
+     Blackwell products. Revenue in NVIDIA's ACIE category, which includes NeoCloud, industrial and
+     enterprise customers, rose 25% sequentially and 138% year over year to $40 billion.
+
+[L5] Kress said NVIDIA Compute was "fully utilized across every cloud we serve." She also said
+     NeoCloud partners using NVIDIA's DSX reference designs are expected to exit the year with
+     8 gigawatts of installed capacity, compared with roughly 3 gigawatts at the end of 2025.
+
+[L6] NVIDIA announced an expanded partnership with Amazon Web Services under which AWS plans to
+     deploy an additional 2 million NVIDIA GPUs beginning in the current quarter through the second
+     quarter of fiscal 2029. The deployment will include Vera CPUs, some integrated with Rubin
+     products and some deployed as standalone processors, according to Kress.
+
+[L7] The company began production shipments of its Vera Rubin platform earlier in August and said
+     it had received purchase orders from every major hyperscaler, AI cloud provider and system
+     original equipment manufacturer.
+
+[L8] Kress said NVIDIA expects Vera Rubin to be its fastest product ramp to date and expects the
+     platform to account for about 20% of data center revenue in the third quarter.
+
+[L9] NVIDIA's networking revenue also reached a record, increasing 18% sequentially. Spectrum-X
+     Ethernet revenue grew 2.6 times from a year earlier, Kress said.
+
+[L10] The company also said it is in full production of its Vera CPU and expects CPU revenue to
+      more than double in fiscal 2028, based on customer demand and its improving supply outlook.
+
+[L11] Jensen Huang said the company's outlook reflects both hyperscale demand and growth in markets
+      outside the largest cloud operators. He said NVIDIA's ACIE segment, including enterprises,
+      NeoClouds and sovereign AI customers, represents about half of its business and is growing at
+      an annual rate of 100%.
+
+[L12] Huang also highlighted the company's expanding revenue opportunity per gigawatt of data
+      center capacity. NVIDIA estimated that opportunity at roughly $18 billion during the Hopper
+      generation, $25 billion with Blackwell and $40 billion with Vera Rubin, including CPUs, GPUs,
+      networking, systems and software.
+
+[L13] "Our demand is much higher than" the 70% growth outlook, Huang said, adding that the company
+      is working with suppliers to expand capacity. He said NVIDIA's supply chain is broadly
+      constrained and that the company has supply sufficient to support approximately 70% growth,
+      while demand exceeds that level.
+
+[L14] Kress said NVIDIA has invested nearly $50 billion in frontier AI laboratories and has
+      partnered with Apollo Global Management, BlackRock, Blackstone, Brookfield Asset Management,
+      Goldman Sachs and KKR on financing platforms expected to raise more than $500 billion in
+      third-party capital.
+
+[L15] The company also described a revenue-sharing arrangement with NeoCloud providers. NVIDIA can
+      provide take-or-pay commitments on part of a facility's capacity to support project
+      financing, then share in revenue generated above a defined minimum level. Kress said the
+      model could create a recurring, usage-linked revenue stream in addition to hardware sales
+      over the medium to long term.
+
+[L16] NVIDIA said it secured land, power and shell capacity through SB Energy for a Portsmouth
+      campus expected to support 4.25 gigawatts of AI factory capacity, with the initial deployment
+      intended for OpenAI. OpenAI's existing and planned commitments represent approximately
+      12 gigawatts of NVIDIA Compute through 2030, according to Kress.
+
+[L17] GAAP and non-GAAP gross margin were both 75% in the second quarter, largely unchanged
+      sequentially. Operating expenses increased 10% on a GAAP basis and 11% on a non-GAAP basis
+      from the prior quarter, driven primarily by compute infrastructure and employee compensation
+      costs.
+
+--- END VERBATIM EXCERPTS ---

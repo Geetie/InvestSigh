@@ -1,0 +1,34 @@
+SOURCE: "Microsoft Q4 Earnings Call Highlights"
+PUBLISHER: Nasdaq, Inc.（第三方刊物对微软 FY26Q4 财报电话会的报道）
+PUBLISHED: 2026-07-29/30
+URL: https://www.nasdaq.com/articles/microsoft-q4-earnings-call-highlights
+TIER: secondary_1_5
+ACCESS: full_text
+RETRIEVED_BY: session web search, 2026-09-17
+
+--- BEGIN VERBATIM EXCERPTS ---
+
+[L1] Intelligent Cloud revenue rose 32% to $39.3 billion in the quarter. Azure and other cloud
+     services revenue increased 43%, with Hood saying demand continued to exceed available capacity.
+
+[L2] Chief Executive Officer Satya Nadella said Microsoft added 31 data centers across five continents
+     during the quarter, bringing the year's total additions to 88. The company added another gigawatt
+     of capacity and remains on track to roughly double its overall capacity in two years, he said.
+
+[L3] Capital expenditures totaled $41 billion in the quarter, including higher component prices.
+     About two-thirds of the spending was directed toward short-lived assets, primarily CPUs and GPUs.
+     Hood said cash paid for property and equipment was $35.8 billion, while free cash flow was
+     $19.6 billion.
+
+[L4] Looking ahead, Microsoft expects fiscal first-quarter Azure revenue growth of about 45% in
+     constant currency. Hood said the company remains capacity constrained despite its strong
+     fourth-quarter execution and expects first-half Azure growth to accelerate.
+
+[L5] Companywide gross margin was 67%, down from a year earlier due to a greater mix of Azure revenue,
+     AI infrastructure investments and increased product usage.
+
+--- END VERBATIM EXCERPTS ---
+
+补充（另一家媒体报道，**二三手**）：微软 FY2027 资本支出指引由此前约 1900 亿美元下调至
+1750 亿美元；微软 FY26Q4 新增尚未开始执行的数据中心租赁承诺超过 1300 亿美元，未执行租约
+总额增至 3291 亿美元。（未单独落 raw 文件，故本轮**不据此出主张**。）

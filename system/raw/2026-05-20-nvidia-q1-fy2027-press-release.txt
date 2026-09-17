@@ -1,0 +1,49 @@
+SOURCE: NVIDIA Newsroom — "NVIDIA Announces Financial Results for First Quarter Fiscal 2027"
+PUBLISHER: NVIDIA Corporation (NASDAQ: NVDA)
+PUBLISHED: 2026-05-20 (SANTA CLARA, Calif.)
+URL: https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-Financial-Results-for-First-Quarter-Fiscal-2027/
+TIER: primary (company_official)
+ACCESS: full_text (public web page)
+RETRIEVED_BY: session web search, 2026-09-17
+
+--- BEGIN VERBATIM EXCERPTS ---
+
+[L1] Record revenue of $81.6 billion, up 85% from a year ago
+[L2] Record Data Center revenue of $75.2 billion, up 92% from a year ago
+[L3] NVIDIA announces $80.0 billion additional share repurchase authorization and increases its
+     quarterly cash dividend from $0.01 per share to $0.25 per share
+
+[L5] NVIDIA (NASDAQ: NVDA) today reported record revenue for the first quarter ended April 26,
+     2026, of $81.6 billion, up 20% from the previous quarter and up 85% from a year ago.
+     For the quarter, GAAP and non-GAAP gross margins were 74.9% and 75.0%, respectively.
+     For the quarter, GAAP and non-GAAP earnings per diluted share were $2.39 and $1.87,
+     respectively.
+
+[L7] "The buildout of AI factories — the largest infrastructure expansion in human history — is
+     accelerating at extraordinary speed," said Jensen Huang, founder and CEO of NVIDIA.
+     "Agentic AI has arrived, doing productive work, generating real value and scaling rapidly
+     across companies and industries. NVIDIA is uniquely positioned at the center of this
+     transformation as the only platform that runs in every cloud, powers every frontier and open
+     source model, and scales everywhere AI is produced — from hyperscale data centers to the edge."
+
+[L9] During the first quarter of fiscal 2027, NVIDIA returned a record level of approximately
+     $20.0 billion to shareholders in the form of shares repurchased and cash dividends. As of the
+     end of the first quarter, the company had $38.5 billion remaining under its share repurchase
+     authorization. On May 18, 2026, the Board of Directors approved an additional $80.0 billion to
+     the Company's share repurchase authorization, without expiration.
+
+[L10] NVIDIA is transitioning to a new reporting framework that better reflects its current and
+      future growth drivers. NVIDIA will have two market platforms — Data Center and Edge
+      Computing. Within Data Center, NVIDIA will report two sub-markets, Hyperscale and ACIE, which
+      incorporates AI Clouds, Industrial and Enterprise. Hyperscale will include revenue from the
+      public clouds and the world's largest consumer internet companies, while ACIE addresses
+      NVIDIA's growth opportunity in diverse AI purpose-built data centers and AI factories across
+      industries and countries. Edge Computing highlights data processing devices for agentic and
+      physical AI including PCs, game consoles, workstations, AI-RAN base stations, robotics and
+      automotive.
+
+[L11] Under the previous sub-markets, Data Center compute revenue was a record $60.4 billion,
+      up 77% from a year ago and up 18% sequentially. Data Center networking revenue was a record
+      $14.8 billion, up 199% from a year ago and up 35% sequentially.
+
+--- END VERBATIM EXCERPTS ---

@@ -1,0 +1,293 @@
+{
+ "view": "daily_page",
+ "date": "2026-09-17",
+ "generated_at": "2026-09-17T08:47:00Z",
+ "default_sort": [
+  {
+   "field": "event_time",
+   "order": "desc"
+  },
+  {
+   "field": "company_id",
+   "order": "asc"
+  }
+ ],
+ "evidence_panel": {
+  "collapsed_default": false
+ },
+ "important_information": [
+  {
+   "event_id": "evt-nvda-q2fy27-earnings",
+   "event_time": "2026-08-26T00:00:00Z",
+   "type": "earnings",
+   "companies": [
+    "company-nvidia"
+   ],
+   "source": "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027",
+   "source_tier": "primary",
+   "discovery_note": "事件发现时间 = 系统首次获得（first_seen_at）；**先显示发现，完成分析后才更新判断**"
+  },
+  {
+   "event_id": "evt-nvda-q3fy27-guidance",
+   "event_time": "2026-08-26T00:00:00Z",
+   "type": "guidance",
+   "companies": [
+    "company-nvidia"
+   ],
+   "source": "https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027",
+   "source_tier": "primary",
+   "discovery_note": "事件发现时间 = 系统首次获得（first_seen_at）；**先显示发现，完成分析后才更新判断**"
+  },
+  {
+   "event_id": "evt-nvda-supply-commitments-279b",
+   "event_time": "2026-08-26T00:00:00Z",
+   "type": "supply",
+   "companies": [
+    "company-nvidia"
+   ],
+   "source": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000075/nvda-20260726.htm",
+   "source_tier": "primary",
+   "discovery_note": "事件发现时间 = 系统首次获得（first_seen_at）；**先显示发现，完成分析后才更新判断**"
+  },
+  {
+   "event_id": "evt-tsmc-q2-2026-earnings",
+   "event_time": "2026-07-16T00:00:00Z",
+   "type": "earnings",
+   "companies": [
+    "company-tsmc"
+   ],
+   "source": "https://pr.tsmc.com/chinese/news/3326",
+   "source_tier": "primary",
+   "discovery_note": "事件发现时间 = 系统首次获得（first_seen_at）；**先显示发现，完成分析后才更新判断**"
+  },
+  {
+   "event_id": "evt-amd-q2-2026-earnings",
+   "event_time": "2026-08-05T00:00:00Z",
+   "type": "earnings",
+   "companies": [
+    "company-amd"
+   ],
+   "source": "https://amd.com/zh-cn/newsroom/press-releases/amd-2q-2026-earnings.html",
+   "source_tier": "primary",
+   "discovery_note": "事件发现时间 = 系统首次获得（first_seen_at）；**先显示发现，完成分析后才更新判断**"
+  }
+ ],
+ "affected_companies": [
+  {
+   "impact_id": "imp-nvda-01-dc-demand",
+   "company_id": "company-nvidia",
+   "variable": "数据中心加速计算需求",
+   "direction": "positive",
+   "magnitude": "DC 收入 +117% y/y（$89.0B）",
+   "conditions": [
+    "超大规模云厂与 ACIE 客户资本开支维持",
+    "供给（内存/先进封装）不成为出货硬约束"
+   ],
+   "counter_forces": [
+    "内存涨价侵蚀毛利率（公司自述超出预期）",
+    "中国数据中心算力收入被假设为零"
+   ],
+   "time_lag": "已发生（1 个季度内体现）",
+   "falsifiers": [
+    "下一季 DC 收入同比增速 < 50% 且连续两季"
+   ]
+  },
+  {
+   "impact_id": "imp-nvda-02-margin-path",
+   "company_id": "company-nvidia",
+   "variable": "毛利率路径",
+   "direction": "negative",
+   "magnitude": "Q3 指引 74.0%±50bp（较 Q2 的 75.0% 降约 1pt）",
+   "conditions": [
+    "指引兑现且为代际切换期的持续定价让利"
+   ],
+   "counter_forces": [
+    "规模效应与产品组合升级（Vera Rubin 占比提升）"
+   ],
+   "time_lag": "1 个季度内（Q3 FY2027 报表）",
+   "falsifiers": [
+    "Q3 实际 GAAP 毛利率 ≥ 74.5%"
+   ]
+  },
+  {
+   "impact_id": "imp-tsmc-01-nvda-demand",
+   "company_id": "company-tsmc",
+   "variable": "先进制程与先进封装产能利用率",
+   "direction": "positive",
+   "magnitude": "HPC 占二季度营收 66%（环比 +20%）",
+   "conditions": [
+    "云服务商资本开支维持（TSMC 称客户信号仍强）"
+   ],
+   "counter_forces": [
+    "消费类与价格敏感终端承压（公司自述审慎规划）",
+    "2 奈米爬坡稀释毛利率约 3–4pt"
+   ],
+   "time_lag": "1–2 个季度",
+   "falsifiers": [
+    "HPC 平台收入连续两季环比下滑"
+   ]
+  },
+  {
+   "impact_id": "imp-amd-01-competitive",
+   "company_id": "company-amd",
+   "variable": "数据中心加速器竞争份额",
+   "direction": "positive",
+   "magnitude": "DC 收入 $6.7B（同比 +107%），占总营收 58%",
+   "conditions": [
+    "Helios 机架级方案按期放量与客户认证通过"
+   ],
+   "counter_forces": [
+    "NVIDIA 平台生态与代际节奏（Vera Rubin 全面量产）",
+    "机架级方案交付复杂度"
+   ],
+   "time_lag": "2–4 个季度（Helios 2026Q3 起出货）",
+   "falsifiers": [
+    "AMD DC 收入连续两季环比下滑，或 Helios 出货时间表推迟两个季度以上"
+   ]
+  },
+  {
+   "impact_id": "imp-msft-01-capex-cost",
+   "company_id": "company-microsoft",
+   "variable": "AI 基础设施资本开支与折旧",
+   "direction": "negative",
+   "magnitude": "季度资本支出 $41B（含组件涨价）",
+   "conditions": [
+    "算力需求持续超过可用容量（公司自述产能受限）"
+   ],
+   "counter_forces": [
+    "Azure 增速加快（+43%）带来收入侧对冲"
+   ],
+   "time_lag": "1–2 个季度（折旧滞后于资本支出）",
+   "falsifiers": [
+    "Azure 收入增速回落至 30% 以下且资本开支继续上升"
+   ]
+  }
+ ],
+ "recommendation_changes": [
+  {
+   "company_id": "company-nvidia",
+   "recommendation_id": "rec-sec-nvda-2026-08-03",
+   "action": "buy",
+   "status": "active",
+   "change_reason": "meets_buy_conditions",
+   "supersedes": null,
+   "falsifiers": []
+  },
+  {
+   "company_id": "company-nvidia",
+   "recommendation_id": "rec-sec-nvda-2026-08-03-session-review",
+   "action": "pending",
+   "status": "uncertain",
+   "change_reason": "会话修正：系统默认路径（scripts/decision/run_decide.py::_run_core）把**已实现的区间总回报**当作预期收益，据此产出 buy（rec-sec-nvda-2026-08-03），违反 P-08「不得用 past_return 做收益预测」，且缺 falsifiers。本会话以独立判断覆盖：相对判断被 scenario_method_status=pending 设计性阻塞，且无可辩护的价格隐含假设 ⇒ 结论为**待判断**，不出买入。",
+   "supersedes": "rec-sec-nvda-2026-08-03",
+   "falsifiers": [
+    "Q3 FY2027 实际收入 < $105.84B（指引下沿）⇒ 需求扩张被证伪",
+    "GAAP 毛利率连续两季 < 74.0% ⇒ 75% 平台毛利可持续被证伪",
+    "数据中心收入同比增速连续两季 < 50% 且先进封装/HBM 交期同时回落 ⇒ 供给紧缺支撑被证伪"
+   ]
+  },
+  {
+   "company_id": "company-tsmc",
+   "recommendation_id": "rec-sec-tsmc-2026-08-03-session-review",
+   "action": "pending",
+   "status": "uncertain",
+   "change_reason": "本轮首版：证据仅覆盖一个季度且为**公司单方口径**；未做独立估值，且相对判断被设计性阻塞 ⇒ 待判断，不出买入。",
+   "supersedes": null,
+   "falsifiers": [
+    "HPC 平台收入连续两季环比下滑",
+    "先进制程（≤7nm）收入占比跌破 70%"
+   ]
+  },
+  {
+   "company_id": "company-microsoft",
+   "recommendation_id": "rec-sec-msft-2026-08-03-session-review",
+   "action": "pending",
+   "status": "uncertain",
+   "change_reason": "本轮首版：仅覆盖一个季度且为公司单方口径；产能受限与资本开支强度使「增长兑现在收入侧」尚未可判 ⇒ 待判断。",
+   "supersedes": null,
+   "falsifiers": [
+    "Azure 收入增速回落至 30% 以下且资本开支继续上升"
+   ]
+  },
+  {
+   "company_id": "company-amd",
+   "recommendation_id": "rec-sec-amd-2026-08-03-session-review",
+   "action": "pending",
+   "status": "uncertain",
+   "change_reason": "本轮首版：Helios 尚未出货（2026Q3 起），机架级竞争力与跨代际能力无事实可判 ⇒ 待判断。",
+   "supersedes": null,
+   "falsifiers": [
+    "AMD 数据中心收入连续两季环比下滑",
+    "Helios 出货时间表推迟两个季度以上"
+   ]
+  }
+ ],
+ "next_verification_nodes": [
+  {
+   "company_id": "company-nvidia",
+   "review_date": "2026-11-25"
+  },
+  {
+   "company_id": "company-tsmc",
+   "review_date": "2026-11-25"
+  },
+  {
+   "company_id": "company-microsoft",
+   "review_date": "2026-11-25"
+  },
+  {
+   "company_id": "company-amd",
+   "review_date": "2026-11-25"
+  }
+ ],
+ "unfinished_verification": [
+  {
+   "kind": "未完成核验",
+   "detail": "claim.status=pending_verification（尚未做交叉验证/采纳判定）",
+   "refs": [
+    "claim-src-amd-q2-2026-pr-anthropic-2gw-mi450",
+    "claim-src-amd-q2-2026-pr-dc-rev-q2-2026",
+    "claim-src-amd-q2-2026-pr-helios-launch",
+    "claim-src-amd-q2-2026-pr-msft-azure-helios",
+    "claim-src-amd-q2-2026-pr-rev-q2-2026"
+   ],
+   "count": 77
+  }
+ ],
+ "stale_or_delayed_data": [
+  {
+   "kind": "行情时效",
+   "detail": "行情为 2026-09-16 美东收盘（延迟 1 日，非实时报价）",
+   "as_of": "2026-09-16",
+   "delayed": true
+  }
+ ],
+ "failed_research_tasks": [
+  {
+   "kind": "研究任务失败",
+   "task_id": "task_check_2026-09-17_full",
+   "status": "failed",
+   "last_valid_result_ref": null
+  },
+  {
+   "kind": "研究任务失败",
+   "task_id": "task_degrade::2026-09-17::full",
+   "status": "failed",
+   "last_valid_result_ref": null
+  }
+ ],
+ "run_summary": {
+  "changed": false,
+  "signals_emitted": 1,
+  "degraded": true,
+  "blocked": true,
+  "gaps": 8,
+  "note": "有 1 条由系统默认路径产出的 buy（已由会话评审覆盖为待判断）；无变化日产信号本身构成一条真实缺陷（见报告）。"
+ },
+ "reviews_separated": {
+  "research_quality": "证据链完整、定位与引文双向可复查；转述已去重不计独立佐证",
+  "forecast_quality": "默认决策路径把已实现收益当预期收益（price_expectation + timing）",
+  "investment_result": "已实现相对收益可算（NVDA +3.63% vs AGIX +2.98%）；基准**预测**仍缺（benchmark_forecast）",
+  "note": "三层**分别报告，不合并为单一评分**"
+ }
+}

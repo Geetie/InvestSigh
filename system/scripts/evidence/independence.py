@@ -194,17 +194,42 @@ def _root_source_id(rec: Mapping[str, Any], root_rec: Mapping[str, Any]) -> str:
     return str(derived)
 
 
+def _carried(rec: Mapping[str, Any], key: str) -> Any:
+    """取**内容指纹的组成项**：顶层优先，回落 `impact_capability`（同 `_direct_knowledge` 的 allowlist 形态）。
+
+    ★ 为什么必须加这条回落（**2026-09-17 冷启动端到端实测登记**）：
+      `event_fingerprint` 的四个组成项（`event_type` / `company_ids` / `metric` / `period_bucket`）
+      在 `schema.models.Claim` 上**没有顶层字段**（`_Base` 是 `extra="forbid"`），
+      而 `impact_capability` 是该维度的**唯一合法载体**（模块 docstring 已如此写）。
+      此前本函数**只读顶层键** ⇒ 在真实数据上四项**恒为空** ⇒ 内容指纹退化为 `(日期, 根来源)`
+      ⇒ 同一来源同一日发布的不同主张全部落进**同一组** ⇒
+      `independent_evidence_count` 把"同源 18 条**不同指标**"算成"18 份独立佐证"
+      （本次实测读数恰为 18）。这是"同源多引文被计成多份独立证据"的**最严重形态**。
+
+    ★ 语义**不收窄也不放宽**：顶层键存在时逐字沿用（既有夹具即此形态 ⇒ 行为恒等）；
+      仅当顶层缺该键时才回落。**不**新增任何键名、**不**改指纹算法。
+    """
+    value = rec.get(key)
+    if value is not None:
+        return value
+    node = rec.get("impact_capability")
+    if isinstance(node, Mapping):
+        return node.get(key)
+    return None
+
+
 def claim_group_fingerprint(rec: Mapping[str, Any], root_rec: Mapping[str, Any]) -> str:
     """按 `Ch9 §3.4.7` 计算**内容分组指纹**（**调用** `event_fingerprint`，不重造）。
 
     `root_source_id` 取根来源（见 `_root_source_id`）；`event_type` / `company_ids` /
-    `metric` / `period_bucket` 取记录上的可选字段（缺则用 `EventType.other` / 空）。
+    `metric` / `period_bucket` **经 `_carried` 取值**（顶层优先，回落 `impact_capability`
+    —— 后者是它们在 `schema.models.Claim` 上的唯一合法载体）；缺则用 `EventType.other` / 空。
     """
     return event_fingerprint(
-        event_type=str(rec.get("event_type") or _DEFAULT_EVENT_TYPE),
-        company_ids=list(rec.get("company_ids") or []),
-        metric=rec.get("metric"),
-        period_bucket=rec.get("period_bucket"),
+        event_type=str(_carried(rec, "event_type") or _DEFAULT_EVENT_TYPE),
+        company_ids=list(_carried(rec, "company_ids") or []),
+        metric=_carried(rec, "metric"),
+        period_bucket=_carried(rec, "period_bucket"),
         occurred_at=_occurred_at(rec),
         root_source_id=_root_source_id(rec, root_rec),
     )

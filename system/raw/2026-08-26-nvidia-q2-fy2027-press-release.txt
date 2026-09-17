@@ -1,0 +1,94 @@
+SOURCE: NVIDIA Newsroom — "NVIDIA Announces Financial Results for Second Quarter Fiscal 2027"
+PUBLISHER: NVIDIA Corporation (NASDAQ: NVDA)
+PUBLISHED: 2026-08-26 (SANTA CLARA, Calif.)
+URL: https://nvidianews.nvidia.com/news/nvidia-announces-financial-results-for-second-quarter-fiscal-2027
+SEC MIRROR: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000073/q2fy27pr.htm
+TIER: primary (company_official)
+ACCESS: full_text (public web page + SEC exhibit)
+RETRIEVED_BY: session web fetch, 2026-09-17
+
+--- BEGIN VERBATIM EXCERPTS ---
+
+[L1] NVIDIA Announces Financial Results for Second Quarter Fiscal 2027
+[L2] Revenue of $96.2 billion, up 106% from a year ago
+[L3] Data Center revenue of $89.0 billion, up 117% from a year ago
+
+[L5] NVIDIA (NASDAQ: NVDA) today reported revenue for the second quarter ended July 26, 2026,
+     of $96.2 billion, up 18% from the previous quarter and up 106% from a year ago.
+     For the quarter, GAAP and non-GAAP gross margins were both 75.0%.
+     GAAP and non-GAAP earnings per diluted share were $2.46 and $2.22, respectively.
+
+[L7] "AI has reached its inflection point. It's doing useful work. Its tokens are productive and
+     profitable. Now, compute is revenue," said Jensen Huang, founder and CEO of NVIDIA.
+     "And demand is accelerating. This time last year, one lab alone was driving the buildout;
+     today, we have a golden age of new AI labs and startups, multiple frontier labs scaling in
+     parallel, a thriving open-model ecosystem and physical AI coming online — with strong
+     momentum across the U.S. and around the world. The AI infrastructure buildout is at full
+     steam. Vera Rubin, now in full production, was built to power exactly this moment."
+
+[L11] During the second quarter of fiscal 2027, NVIDIA returned approximately $26.0 billion to
+      shareholders in the form of shares repurchased and cash dividends. As of the end of the
+      second quarter, the company had approximately $99.0 billion remaining under its share
+      repurchase authorization.
+
+[L13] NVIDIA will pay its next quarterly cash dividend of $0.25 per share on October 1, 2026,
+      to all shareholders of record on September 10, 2026.
+
+[L15] Q2 Fiscal 2027 Summary
+
+[L17] GAAP ($ in millions, except earnings per share)
+      Q2 FY27 / Q1 FY27 / Q2 FY26 / Q/Q / Y/Y
+      Revenue              $96,221 / $81,615 / $46,743 / 18% / 106%
+      Gross margin         75.0%   / 74.9%   / 72.4%   / 0.1 pts / 2.6 pts
+      Operating expenses   $8,408  / $7,621  / $5,413  / 10% / 55%
+      Operating income     $63,734 / $53,536 / $28,440 / 19% / 124%
+      Net income           $59,688 / $58,321 / $26,422 / 2% / 126%
+      Diluted EPS          $2.46   / $2.39   / $1.08   / 3% / 128%
+
+[L20] Non-GAAP ($ in millions, except earnings per share)
+      Q2 FY27 / Q1 FY27 / Q2 FY26 / Q/Q / Y/Y
+      Revenue              $96,221 / $81,615 / $46,743 / 18% / 106%
+      Gross margin         75.0%   / 75.0%   / 72.5%   / -- / 2.5 pts
+      Operating expenses   $8,232  / $7,449  / $5,361  / 11% / 54%
+      Operating income     $63,956 / $53,783 / $28,541 / 19% / 124%
+      Net income           $53,954 / $45,548 / $24,763 / 18% / 118%
+      Diluted EPS          $2.22   / $1.87   / $1.01   / 19% / 120%
+
+[L24] Outlook
+[L25] NVIDIA's outlook for the third quarter of fiscal 2027 is as follows:
+[L26] - Revenue is expected to be $108.0 billion, plus or minus 2%.
+       NVIDIA is not assuming any Data Center compute revenue from China in its outlook.
+[L28] - GAAP and non-GAAP gross margins are expected to be 74.0%, plus or minus 50 basis points.
+[L29] - GAAP and non-GAAP operating expenses are expected to be approximately $9.2 billion and
+       $9.0 billion, respectively.
+[L31] For the full year fiscal 2027, NVIDIA expects GAAP and non-GAAP tax rates to be between
+      16.0% and 18.0%, excluding any discrete items and material changes to NVIDIA's tax environment.
+
+[L33] Highlights
+[L34] Data Center
+[L35] Second-quarter revenue was $89.0 billion, up 18% from the previous quarter and up 117% from
+      a year ago.
+[L36] Announced the NVIDIA Vera Rubin platform is ramping into full production with racks running
+      at partners including CoreWeave, Google Cloud, Microsoft Azure, Oracle Cloud Infrastructure
+      and Nebius.
+[L37] Revealed that NVIDIA Spectrum-6 switch systems — supporting both pluggable and co-packaged
+      optics as part of the NVIDIA Vera Rubin platform — are arriving across the world's gigascale
+      AI factories.
+[L38] Unveiled NVIDIA Vera, the first CPU built for AI agents, with broad adoption planned across
+      the world's leading technology providers.
+
+[L40] Edge Computing
+[L41] Second-quarter Edge Computing revenue was $7.2 billion, up 13% from the previous quarter and
+      up 27% from a year ago.
+
+[L43] Announced strategic partnerships with Apollo, BlackRock, Blackstone, Brookfield,
+      Goldman Sachs and KKR to create independent compute financing platforms, to mobilize more
+      than $500 billion of third-party capital for AI infrastructure buildout, subject to
+      definitive agreements.
+
+--- END VERBATIM EXCERPTS ---
+
+NOTE (collection limit): the "Highlights" and "Reconciliation of GAAP to non-GAAP Outlook"
+tables retrieved here are partial — the full press release contains additional bullets
+(product launches, alliances, regional programmes) that were not captured in this retrieval.
+Only the passages above are recorded; no claim of having read the full release is made.

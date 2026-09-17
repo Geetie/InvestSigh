@@ -1,0 +1,42 @@
+SOURCE: "Taiwan Semiconductor Manufacturing Q2 Earnings Call Highlights"
+PUBLISHER: Nasdaq, Inc.（第三方刊物对 TSMC 2026Q2 财报电话会的报道）
+PUBLISHED: 2026-07-16
+URL: https://www.nasdaq.com/articles/taiwan-semiconductor-manufacturing-q2-earnings-call-highlights
+TIER: secondary_1_5
+ACCESS: full_text
+RETRIEVED_BY: session web search, 2026-09-17
+
+--- BEGIN VERBATIM EXCERPTS ---
+
+[L1] On the company's second-quarter 2026 earnings call Chairman and CEO C.C. Wei said TSMC finished the
+     quarter with revenue of $40.2 billion, at the high end of its guidance in U.S. dollar terms,
+     driven by strong demand for leading-edge process technologies. Looking ahead, Wei said the company
+     now expects full-year 2026 revenue growth to be "slightly above 40% year-over-year" in U.S. dollar
+     terms.
+
+[L2] Senior Vice President and CFO Wendell Huang said TSMC expects third-quarter revenue between
+     $44.6 billion and $45.8 billion. At the midpoint, that would represent a 12% sequential increase
+     and a 37% year-over-year increase. Based on an exchange rate assumption of $1 to TWD 32, the
+     company guided for a third-quarter gross margin of 65% to 67% and an operating margin of 56% to 58%.
+
+[L3] TSMC's high-performance computing platform increased 20% quarter-over-quarter and accounted for
+     66% of second-quarter revenue, Huang said. Smartphone revenue decreased 4% sequentially and
+     represented 22% of revenue.
+
+[L4] For the third quarter, Huang said gross margin is expected to decline to 66% at the midpoint,
+     mainly because the steep ramp-up of 2-nanometer technology is expected to dilute gross margin by
+     about 3 to 4 percentage points.
+
+[L5] TSMC raised its full-year 2026 capital budget to between $60 billion and $64 billion, citing
+     continued strong structural demand from customers, including the emerging agentic AI market.
+     Huang said about 70% to 80% of the 2026 capital budget will be allocated to advanced process
+     technologies.
+
+[L6] In U.S. dollar terms, second-quarter capital expenditures totaled $15.7 billion.
+
+[L7] Wei said third-quarter business will be supported by continued strong demand for leading-edge
+     technologies, including the ramp of 2-nanometer production. However, he said consumer and
+     price-sensitive end markets are being challenged by rising component prices and macroeconomic
+     uncertainties, prompting the company to remain prudent in business planning.
+
+--- END VERBATIM EXCERPTS ---
