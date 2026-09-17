@@ -1546,6 +1546,22 @@ class Baseline(TimeMixin):
     把"上一版本"列为结论可追溯四要素之一）。`None` = 首版（结构上不存在上一版本，与 `T-10` 同例）。"""
     changed_by: str = ""
     """`Ch4 §H.3` 的 `"changed_by":"research_skill"` —— 谁改的（供 `§H.2` "无新信息不产新版本"的复核）。"""
+    version_kind: VersionKind | None = None
+    """三类版本事件语义（`Ch9 §2.3.2` / `§3.4.2`）。`None` = 非修订版（首版 / 未标记）。
+
+    ★ **为什么 `baselines` 也要这个字段**（本仓 macOS 会话补；发现于真实数据首跑后的回归）：
+      本表**是版本化表**（主键 = (`company_id`, `version`)，且已有版本链指针
+      `prev_version_id`）；而 `Ch9 §3.4.2` 把 `version_kind` 定为**追加式版本链的通用标记**
+      —— 「机制 | 版本类型标记 | `version_kind ∈ {forecast_revision, financial_restatement,
+      source_retraction}`」写在**通用机制表**里，**未按表限定**。三类事件里
+      「**预测修订** = 系统（我们）改」正是 baseline 追加新版本的语义（`Ch9 §2.3.2`）。
+    ★ 与 `Claim` / `Event` / `Recommendation` 上的**同名同枚举**字段逐字同源 ——
+      **不新增枚举、不新增机制**（`G-06` 唯一真源）。
+    ★ **可选 + 默认 `None`** —— 承本表 docstring 已写明的纪律：`Ch9 §3.4.2` 追加式不可变
+      ⇒ 契约变更**不得**让既有行失效（真仓库 v1 / v2 行无此字段，补字段后仍合法）。
+    ★ **为什么要修 schema 而不是改数据**：该字段出现在真源既有行上（`baselines` v3，
+      `forecast_revision`），而 `append_only_guard` 禁止改既有行 ⇒ 只能补契约、不能改数据。
+    """
 
     # ── `Ch4 §G.4` 未盈利 / 盈利公司的**必填增量**（`N4.2-04` / `N4.2-05`；阶段② 必填）──
     #    ★ 设计把"按 `is_profitable` 分支要求非空"交给**校验器**（属阶段② 的

@@ -26,7 +26,22 @@ python system/scripts/daily/coverage.py [code_root]
 - **CV4 非真空**：`T` 非空。
 
 `T` 取法（**不静默**）：① `registry/acceptance_input_set.yaml` 含列表形态的首批对象 → 用之；
-② 否则退化为 `facts/companies.jsonl` 的研究对象集合，并记 note `ACCEPTANCE_INPUT_ABSENT`。
+② 否则退化为 `facts/companies.jsonl` 的研究对象集合，并**按情形**记一条**显式** note。
+
+★ **四条 note 的穷尽清单**（`_acceptance_target` 返回，`Ch2 §B.3 R-06`：状态穷尽且互斥）——
+  本节此前只写了 `ACCEPTANCE_INPUT_ABSENT` 一条，把另外三条**漏成了"未声明"**（本仓 macOS 会话更正）：
+
+| note | 何时 |
+|---|---|
+| `ACCEPTANCE_INPUT_OK` | 文件在、且命中了 `_ACCEPT_LIST_KEYS` 里的列表形态 ⇒ **用文件里的清单** |
+| `ACCEPTANCE_INPUT_ABSENT` | 文件**不存在** ⇒ 退化为 `facts/companies.jsonl` |
+| `ACCEPTANCE_INPUT_NO_LIST` | 文件在、但**没有**列表形态的首批对象 ⇒ 同样退化 |
+| `ACCEPTANCE_INPUT_UNREADABLE` | 解析失败 / 顶层不是 mapping ⇒ 同样退化 |
+
+★ **`target_source` 的判据是 `ACCEPTANCE_INPUT_OK`**（`"OK" in note`）——
+  故后三条**都**走 `companies_fallback`，但它们**不是同一件事**：语义上"没给输入"（`ABSENT`）、
+  "给了但形态不对"（`NO_LIST`）、"给了但读不了"（`UNREADABLE`）必须可分辨 ——
+  否则"清单没准备好"会被伪装成"当天没有研究对象"（`G-62` 静默等价态）。
 
 ## 复用（`G-06` 唯一真源）
 

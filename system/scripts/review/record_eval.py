@@ -31,6 +31,17 @@
 **绝不**进入任何决策 / 排序 / 门槛逻辑。`assert_no_composite_score()` 是**检查器**（负向断言），
 其函数体**不含**被禁词字面量。
 
+## 三层里唯一需要外部计算的一层（`Ch10 §C.2`）
+
+`research_quality` / `forecast_quality` 两层的检查项是"统计量可查询 / 事前四项已存"，
+而 **`investment_result`** 层的可测判据是「**同区间绝对 / 相对收益可算**」⇒
+`record_eval()` 在该层会**真调用** `scripts/review/review_return.py::compute_review_return()`
+（见 `review_investment_result()`），并把结果**如实**落进 `parent_context["investment_result"]`。
+
+★ 这条接线此前**只有声明、没有调用** —— `review_return.py` 的 docstring 已逐字写明
+  「消费方 = `record_eval.py` 的 `investment_result` 层」，但代码里零消费者，
+  属本项目**第三次**「有声明、零消费者」事故（前两次 `G-50` / `G-RC-12`，第三次 `T-18`）。
+
 ## 版本更正（追加式，`Ch9 §3.4.2`）
 
 复盘记录**一次写入即不可改**：要更正（例如补齐 `output_refs` 回写）**只能追加一版**，
@@ -45,10 +56,11 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from schema.models import (
     ErrorAxis,
@@ -63,8 +75,10 @@ from schema.store import append_records, read_records
 __all__ = [
     "VALID_LAYERS",
     "VALID_AXES",
+    "LAYER_INVESTMENT_RESULT",
     "EvalResult",
     "record_eval",
+    "review_investment_result",
     "assert_no_composite_score",
     "EvalLayerError",
     "ErrorAxisError",
@@ -74,6 +88,15 @@ __all__ = [
 
 _ROOT = Path(__file__).resolve().parents[2]
 """本模块所在 `system/` 根 —— `record_eval()` 的默认 `code_root`（含 `facts/`）。"""
+
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+# ★ 真接线（`Ch10 §C.2`「投资结果」行 / `review_return.py` docstring 的 `AC-03`）：
+#   投资结果层要求「同区间绝对 / 相对收益**可算**」，其**唯一实现落点**就是本导入。
+#   此前该声明**只有文档、没有调用** —— 本项目第三次「有声明、零消费者」事故
+#   （前两次：`G-50` / `G-RC-12`，第三次 `T-18`）。
+from scripts.review.review_return import compute_review_return  # noqa: E402
 
 VALID_LAYERS: frozenset[str] = frozenset(layer.value for layer in EvalLayer)
 """合法层 = `Ch10 §C.1` 三层。
@@ -85,6 +108,14 @@ VALID_AXES: frozenset[str] = frozenset(axis.value for axis in ErrorAxis)
 """合法错误方向 = `Ch10 §C.3` 七方向。
 
 **唯一真源 = `schema.models.ErrorAxis`**（同样**派生**，不手抄）。
+"""
+
+LAYER_INVESTMENT_RESULT: str = EvalLayer.investment_result.value
+"""三层的**投资结果**层（`Ch10 §C.2`）。
+
+★ 三层里**唯一**需要外部计算的层：其余两层的检查项是"统计量可查询 / 事前四项已存"，
+而本层的可测判据是「**同区间绝对 / 相对收益可算**」⇒ 必经复盘收益计算（`§D`）。
+派生自 `schema.models.EvalLayer`，**不手抄字面量**（`G-06`：防枚举与常量两处漂移）。
 """
 
 _COMPOSITE_FIELD_NAMES: tuple[str, ...] = ("score", "confidence")
@@ -148,6 +179,46 @@ def assert_no_composite_score(evals: Sequence[object]) -> None:
                 "N10.3-01：三层被压成综合评分 —— 对象含被禁字段 "
                 f"{merged}；三层不可合并（Ch10 §N10.3-01）"
             )
+
+
+def review_investment_result(
+    target_ref: str, *, code_root: str | Path | None = None
+) -> dict[str, Any]:
+    """投资结果层：**真调用**复盘收益计算，取同区间绝对 / 相对收益（`Ch10 §C.2`）。
+
+    接线依据（两点都指同一处）：
+
+    1. `Ch10 §C.2` 三层表「投资结果」行的可测判据 = 「同区间**绝对 / 相对收益可算**」；
+    2. `scripts/review/review_return.py` 的模块 docstring「★ 真接线（`AC-03`）」逐字声明
+       其消费方 = 「本模块（`record_eval.py`）的 `investment_result` 层」。
+
+    ★ **不合并三层**（`Ch10 §N10.3-01`）：返回的是 `ReviewReturn.as_dict()` **原样**序列化 ——
+      两个**各自独立、各自可追溯**的数值（`total_return` 绝对 / `relative_return` 相对）
+      连同 `formula_refs` 一并落账，**绝不**压成 `score` / 综合分
+      （故本函数返回 dict，不是"一个得分"）。
+    ★ **如实落账，不伪造数字**：口径未冻结（`Ch11 freeze_param[p10]` 全 `tbd`）时
+      返回 `status="blocked_by_caliber"` + `missing=[四个键]` —— 这是**合法结果**
+      （源稿红线），**既不抛异常、也不退回"什么都不做"**。
+    ★ 口径类违例（`CaliberViolation` / `BenchmarkCaliberError`）**原样上抛**（响亮失败）：
+      与 `compute_review_return` 自身的契约一致，本函数**不做兜底**
+      （`G-01`：禁静默降级；降级的"成功"与真成功同形）。
+    """
+    root = Path(code_root) if code_root is not None else _ROOT
+    return compute_review_return(target_ref, root=root).as_dict()
+
+
+def _realize_investment_result(
+    layer: str, target_ref: str, root: Path
+) -> dict[str, Any] | None:
+    """层分派：**只有**投资结果层去算收益；其余两层返回 `None`。
+
+    ★ 反向对照（`G-05`：判据必须证明**不误伤**）：研究质量 / 预测质量两层**不得**被
+      顺带算一遍收益 —— 那既无设计依据（`§C.2` 只对投资结果层要求收益可算），
+      也会把"口径未冻结"的缺口扩散到另外两层的记录里（制造噪声）。
+    """
+    if layer != LAYER_INVESTMENT_RESULT:
+        return None
+    return review_investment_result(target_ref, code_root=root)
 
 
 def record_eval(
@@ -237,6 +308,7 @@ def record_eval(
                 recorded_seq=recorded_seq,
                 backfilled_at=backfilled_at,
                 output_refs=out_refs,
+                investment_result=_realize_investment_result(layer, target_ref, root),
             )
             # 唯一写入口（`Ch9 §3.4.2`）：**不**自写文件、**不**就地改既有行。
             append_records(root, "tasks", [task])
@@ -250,6 +322,7 @@ def record_eval(
                 recorded_seq=recorded_seq,
                 backfilled_at=backfilled_at,
                 output_refs=out_refs,
+                investment_result=_realize_investment_result(layer, target_ref, root),
             )
             # 唯一写入口（`Ch9 §3.4.2`）：**不**自写文件、**不**就地改既有行。
             append_records(root, "tasks", [task])
@@ -320,6 +393,7 @@ def _build_task(
     recorded_seq: int | None,
     backfilled_at: datetime | None,
     output_refs: Sequence[str],
+    investment_result: Mapping[str, Any] | None = None,
 ) -> Task:
     """把一条 `EvalResult` 包成可落库的 `Task`（`facts/tasks.jsonl` 的行模型 = `Task`）。
 
@@ -329,11 +403,19 @@ def _build_task(
     `output_refs`（`T14` 可追溯回写）由调用方给出：复盘任务写成 `done` 即**必须有非空回写**，
     否则被 `G1-04` / `ASKTRACE-WRITEBACK` 判为空执行 —— 即本次更正修复的那条既有契约。
 
+    `investment_result`（**投资结果层专有**，`Ch10 §C.2`）：`compute_review_return()` 的
+    `as_dict()` 结果（绝对 / 相对两个可追溯数值 + `formula_refs`）。落 `parent_context`
+    的**独立子键** ⇒ 与 `eval_target_ref` / `reason` / `version` 同法复用**既有**自由字典，
+    **不新增 schema 字段**（`Ch10 §C.1` 的字段集不变）。
+    ★ 它**不是**决策输入：`parent_context` 不参与任何决策 / 排序 / 门槛
+      （`S-07`：复盘标记字段不进决策函数；`error_axis_guard` 机器绑定）。
+    ★ 其余两层传 `None` ⇒ 该键**不出现**在 `parent_context` 里（不误伤，`G-05`）。
+
     `eval_result`（**当前那条**）与 `eval_result_history`（**追加式累积**）均写入本记录：
     首次写入时二者一致，正是"当前指针 + 追加式日志"的标准形态
     （`schema/models.py::Task.eval_result_history` 注明 append-only）。
     ★ 更正版（`new_version=True`）**另起一行**：跨版本的累积由**追加式行序列**承载
-      （多行同 `task_id`，`recorded_seq` 递增），本行的 `eval_result_history` 仍是本行那条。
+    （多行同 `task_id`，`recorded_seq` 递增），本行的 `eval_result_history` 仍是本行那条。
     """
     persisted = PersistedEvalResult(
         eval_layer=EvalLayer(record.eval_layer),
@@ -346,6 +428,8 @@ def _build_task(
         "reason": record.reason,
         "version": record.version,
     }
+    if investment_result is not None:
+        parent_context["investment_result"] = dict(investment_result)
     return Task(
         task_id=task_id,
         task_type=TASK_TYPE,

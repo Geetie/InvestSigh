@@ -12,26 +12,40 @@
 | 首个提交 | `8b41c94` · 117 个文件 · **pre-commit 钩子实测跑了 6 道门禁并全绿** |
 | 隔离环境 | `/Users/gaza/.workbuddy/binaries/python/envs/default/bin/python` |
 | 依赖版本 | pydantic 2.13.5 · pyyaml 6.0.3 · jsonschema 4.26.0 · pytest 9.1.1 |
-| 更新时间 | 2026-09-16 |
+| 更新时间 | 2026-09-16（**2026-09-17 由 macOS 会话补 §一的阶段状态与顶部指针**） |
 
-> ★ **接手先看**：`reports/开发进展与交接说明_2026-09-17.md` —— 基于 git 历史与十一章设计文档的完整
-> 进展/交接说明（取样 `main@2724e54`，2026-09-17）。本文件记录**已跑过**的东西；那一文件交代**全局现状与待裁定项**。
+> ★★ **接手先看（2026-09-17 更新）**：本文件记录**已跑过**的东西，但**下面的数字大量是"当时读数"**，
+> 已有多处过期（§二 写"18 项门禁"实为 **29**；§三 写"173 passed"实为 **全量 1000+**）。
+> **全局现状与待裁定项**以这两份交接报告为准（本文件**不**改写历史读数，只在此声明）：
+>
+> 1. `reports/开发进展与交接说明_2026-09-17.md`（取样 `main@2724e54`）
+> 2. **`reports/handover_2026-09-17_windows_session.md`**（Windows 会话 → 五阶段全 PASS）
+> 3. **`reports/handover_2026-09-17_macos_session.md`**（macOS 会话 → 全量批次全绿 + 两条真债做完）
+>
+> ★ 引用本文件任何数字前，先跑它自己给的**取数命令**重取（`V-11` 规矩 9：引用另一份文件的数字须带限定词）。
 
 ---
 
 ## 一、五阶段门禁状态
 
+★ **下表已按 `main@0e89ae0` 后的 macOS 会话实测更新**（原表 ②–⑤ 全写 `BLOCKED`，**已作废**）。
+
 | 阶段 | 状态 | 证据 |
 |---|---|---|
-| ① `prep` | ✅ **判据 PASS**（但见 §五 缺口） | `stage_gate.py --stage prep` → `prep: PASS`，`EXIT=0`（deliverables 4 / confirmed_rules 17 / implementation_proposals 7 / freeze_params 11 / skills 6 / **criteria_bound 4，criteria_not_implemented 0**） |
-| ② `nvidia_sample` | ⛔ **BLOCKED** | `G11-04` 前置未满足，`EXIT=1`；判据台账另列 2 条未绑定 |
-| ③ `core_chain` | ⛔ **BLOCKED** | 同上；判据台账另列 `t01_t14_all_pass` / `graph_and_ask_traceable` 未绑定 |
-| ④ `daily_run` | ⛔ **BLOCKED** | 同上；判据台账另列 `coverage_verifiable` 未绑定 |
-| ⑤ `expansion` | ⛔ **BLOCKED** | 同上；判据台账另列 2 条未绑定 |
+| ① `prep` | ✅ **PASS** | `stage_gate.py --stage all` → `RESULT: PASS（0 violations）`；`criteria_bound 4，criteria_not_implemented 0` |
+| ② `nvidia_sample` | ✅ **PASS** | 同上；`baselines_current_version 1` / `coverage_x100 100` / `criteria_bound 4` |
+| ③ `core_chain` | ✅ **PASS** | 同上；`t01_t14_all_pass` 14/14 · `graph_and_ask_traceable` · `criteria_bound 3` |
+| ④ `daily_run` | ✅ **PASS** | 同上；`criteria_bound 4` |
+| ⑤ `expansion` | ✅ **PASS** | 同上；`layers_seen 3/3`（**只作观测**，`T-15` 裁定：不升格为判据）· `criteria_bound 3` |
 
-★ 后续阶段返回 **`passed=False`**，**绝不返回 True 冒充通过**（纪律 12）。
+★ 五阶段的判据台账**均无"声明为 automated 但未绑定"的条目**（逐阶段各 3–4 条全绑定）。
+★ 后续阶段若再阻塞，仍**绝不返回 True 冒充通过**（纪律 12）。
 
-## 二、门禁真实退出码（`run_all_gates.py`，**18 项，全 0**）
+## 二、门禁真实退出码（`run_all_gates.py`）
+
+★ **本节是"当时读数"（2026-09-16，**已过期**）**：当时 **18** 项，现为 **29** 项。
+当前读数：`run_all_gates.py --timeout 30` → **非零计数 0**（29 项，2026-09-17 macOS 会话实测）。
+下面那份清单**保留作历史留痕**，取数请以命令现跑为准。
 
 命令：`python system/scripts/ops/run_all_gates.py --timeout 30` → **非零计数 0**
 
@@ -45,9 +59,15 @@ gap_to_task.py 0.18s        traceback.py 0.18s           pipeline.py 0.20s
 stage_gate.py --stage prep 0.24s
 ```
 
-## 三、测试套件（**173 passed / 13–14s**，实测）
+## 三、测试套件
 
-命令：`cd system && python -m pytest tests -q -p no:cacheprovider` → `173 passed in 13.59s`
+★ **本节是"当时读数"（2026-09-16，**已过期**）**：当时 `173 passed`。
+当前口径**不是"一条命令全量跑"**（`CONVENTIONS.md::V-02/V-08` 明令禁止）——
+按 `verify.py` 的 **20 个批次**逐批跑，2026-09-17 macOS 会话实测 **20/20 全绿**
+（批次与读数见 `reports/handover_2026-09-17_macos_session.md §六`）。
+下面那条命令**保留作历史留痕**，**不要**再照它跑全量。
+
+命令（**历史留痕，勿照跑**）：`cd system && python -m pytest tests -q -p no:cacheprovider` → `173 passed in 13.59s`
 运行后 `tests/.work/` **无残留**（`pytest_sessionstart/finish` 双保险）。
 
 ### 3.1 分批验证 + 证据留档（**禁止一条命令全量验证**）

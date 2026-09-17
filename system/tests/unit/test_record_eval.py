@@ -161,3 +161,64 @@ def test_valid_sets_match_design_enums():
         "benchmark_forecast",
         "timing",
     }
+
+
+# ── AC-03 真接线（`Ch10 §C.2`）：投资结果层**真调用**复盘收益（`review_return`）────
+#
+# ★ 三条断言合并在**一个**用例里：夹具昂贵（每例一次 `copytree`），
+#   `CONVENTIONS.md::V-05` 明说 `unit` 批时序本就不稳；合并**不降低**覆盖（本文件既有约定）。
+
+
+def test_investment_result_layer_is_wired_to_review_return(code_root):
+    """`investment_result` 层 → 真调用 `compute_review_return()`（`Ch10 §C.2` / `AC-03`）。
+
+    接线依据（此前**只有声明、没有调用** —— 本项目第三次「有声明、零消费者」事故，
+    前两次 `G-50` / `G-RC-12`、第三次 `T-18`）：
+
+    - `Ch10 §C.2` 三层表「投资结果」行的可测判据 = 「同区间绝对 / 相对收益**可算**」；
+    - `review_return.py` 模块 docstring「★ 真接线（AC-03）」逐字声明消费方 = 本模块该层。
+
+    三段断言：
+
+    ① **真接线**（不是 stub / 硬编码）：落进记录的 dict 与**直接调用**同源 —— 逐字段相等；
+    ② **如实落账**（源稿红线：不伪造数字）：口径未冻结 ⇒ `blocked_by_caliber` + 四个缺失键，
+       两个数值均为 `None`（**不许**用 0 / 假设值把数字凑出来）；
+    ③ **反向对照**（`G-05`：证明**不误伤**）：另两层**不得**被顺带算一遍收益 ——
+       既无设计依据（`§C.2` 只对投资结果层要求收益可算），也会把"口径未冻结"的缺口
+       扩散进另两层的记录、制造噪声。
+    """
+    from scripts.review.review_return import compute_review_return
+
+    # ① 真接线 + ② 如实落账
+    record_eval("investment_result", "rec-nvda-001", code_root=code_root)
+    row = read_records(code_root, "tasks")[0]
+    recorded = row["parent_context"]["investment_result"]
+
+    assert recorded == compute_review_return("rec-nvda-001", root=code_root).as_dict(), (
+        "记录里的投资结果与直接调用 compute_review_return() 不同源 —— "
+        "接线被换成了 stub / 硬编码（AC-03 真接线失效）"
+    )
+    assert recorded["status"] == "blocked_by_caliber", recorded["status"]
+    assert set(recorded["missing"]) == {
+        "signal_effective_price",
+        "transaction_cost",
+        "pre_tax_caliber",
+        "review_window",
+    }, recorded["missing"]
+    assert recorded["total_return"] is None and recorded["relative_return"] is None, (
+        "口径未冻结却出了数字 —— 违反源稿红线（不伪造数字）"
+    )
+
+    # 三层不可合并（`N10.3-01`）：落的是**两个独立可追溯数值**，不是综合分
+    assert not ({"score", "confidence"} & set(recorded)), sorted(recorded)
+    assert {"total_return", "relative_return", "formula_refs"} <= set(recorded), sorted(recorded)
+
+    # ③ 反向对照：另两层不落该键
+    record_eval("research_quality", "baseline-nvda-001", code_root=code_root)
+    record_eval("forecast_quality", "rec-nvda-001", code_root=code_root)
+    rows = read_records(code_root, "tasks")
+    assert len(rows) == 3, [r["task_id"] for r in rows]
+    by_layer = {r["eval_result"]["eval_layer"]: r for r in rows}
+    assert "investment_result" in by_layer["investment_result"]["parent_context"]
+    for layer in ("research_quality", "forecast_quality"):
+        assert "investment_result" not in by_layer[layer]["parent_context"], layer

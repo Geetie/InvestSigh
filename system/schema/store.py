@@ -180,7 +180,15 @@ def append_records(code_root: str | Path, stem: str, records: Sequence[BaseModel
         return 0
     payload = "\n".join(lines) + "\n"
     with _file_lock(root, stem):
-        with open(path, "a", encoding="utf-8") as fh:
+        # ★ **`newline="\n"` 是刻意的，不是冗余**（本仓 macOS 会话补；见 `platform_defects_ledger §8-2`）：
+        #   文本模式默认 `newline=None` ⇒ 写出的 `\n` 会被翻成 **`os.linesep`** ——
+        #   在 Windows 上就是 `\r\n`。而 `system/.gitattributes` 是 `* -text`（不做行尾转换，
+        #   字节原样存取）+ `rules/` 按内容哈希上锁 ⇒ **写入端必须与平台无关**。
+        #   实测（修复前）：`facts/tasks.jsonl` / `facts/recommendations.jsonl` 已是
+        #   **混合行尾**（Windows 写的行 CRLF / Mac 写的行 LF），因它们**是追加式真源、
+        #   不能回改**，只能从**写入端**根治。
+        #   钉 `"\n"` = 显式声明"本真源一律 LF" ⇒ 两个平台写出**逐字节相同**的追加。
+        with open(path, "a", encoding="utf-8", newline="\n") as fh:
             fh.write(payload)
     return len(lines)
 

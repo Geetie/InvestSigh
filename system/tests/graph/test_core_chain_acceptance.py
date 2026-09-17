@@ -284,15 +284,39 @@ def test_cycle_and_depth_limit_are_bounded_not_hang(code_root: Path) -> None:
     assert r1.cycle_detected and set(r1.cycle_nodes) == {"a", "b"}, r1.cycle_nodes
 
     # ② 跳数超上限：a→b→c→d→e→f→g，max_depth=5 → truncated 显式为 True（不静默假装到底）
+    #
+    # ★ 夹具订正（本仓 macOS 会话）：原实现写的是 `Edge(n, f"n{i + 1}", ...)`，
+    #   源用字母 `a..f`、目标用 `n{i}` ⇒ **产出 6 条互不相连的边**（不是链），
+    #   而 `max_depth=5` 下从 `a` 出发只走得到 `n1`（`depth_of={'a':0,'n1':1}`）。
+    #   于是 `truncated` 恒 `False` —— 用例**红的**，且**红错了根因**：
+    #   它看起来像 `closure.py` 的截断条件坏了，实际是夹具退化成非连通图。
+    #   ⇒ 已做**区分实验**（真链 → `truncated=True`；断边 → `False`）证实
+    #     `closure.forward_closure` 的截断语义**正确**，故只订正夹具、**不改** `closure.py`。
+    #   ⇒ 并补两条**先行断言**（链真的连起来了）+ 一条**反向对照**（未触上限不得报截断），
+    #     否则夹具再退化一次，`truncated` 断言又会**空转成恒真**（`G-03`：无被检对象 ≠ 已验证）。
+    nodes = ["a", "b", "c", "d", "e", "f", "g"]
     chain = tuple(
-        Edge(n, f"n{i + 1}", "k", "dependency_edges", f"x{i}")
-        for i, n in enumerate(["a", "b", "c", "d", "e", "f"])
+        Edge(nodes[i], nodes[i + 1], "k", "dependency_edges", f"x{i}")
+        for i in range(len(nodes) - 1)
     )
+    known = set(nodes)
     r2 = forward_closure(
         code_root, "a", max_depth=5, source="dependency_edges", edges=chain,
-        known_refs={f"n{i}" for i in range(7)} | {"a"},
+        known_refs=known,
     )
+    # 先行断言：链真的连到第 5 跳（否则下面的 truncated 断言没有可检对象）
+    assert r2.reached == ("b", "c", "d", "e", "f"), r2.reached
+    assert r2.max_reached_depth == 5, r2.max_reached_depth
     assert r2.truncated is True, "跳数超硬上限必须显式截断（否则会伪造『完整』）"
+
+    # 反向对照（`G-05`：判据必须配反例，证明它**不误伤**）：
+    # 同一条链在 `max_depth=6`（恰好够走到末端 `g`）时**不得**报截断。
+    r3 = forward_closure(
+        code_root, "a", max_depth=6, source="dependency_edges", edges=chain,
+        known_refs=known,
+    )
+    assert r3.reached == ("b", "c", "d", "e", "f", "g"), r3.reached
+    assert r3.truncated is False, "未触上限却报截断 = 假阳性"
 
 
 # ─────────────────────────── AC-08：设计对齐 ───────────────────────────

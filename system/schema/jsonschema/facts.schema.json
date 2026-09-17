@@ -370,6 +370,17 @@
         "version": {
           "title": "Version",
           "type": "integer"
+        },
+        "version_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -5413,6 +5424,17 @@
         "version": {
           "title": "Version",
           "type": "integer"
+        },
+        "version_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [

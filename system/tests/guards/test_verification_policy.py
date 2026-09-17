@@ -446,13 +446,18 @@ def test_v02_table_missing_row_is_detected(code_root: Path) -> None:
     """★ **反例**（`G-05`：声称能守必须配反例）：删掉表里 `injection-g` **整行** ⇒ 必须判红。
 
     `injection-g` 正是 `#91` 实测里真实缺失的那一行 —— 用真实发生过的形态做反例。
+
+    ★ **本用例是 `#109` 那次"改了注入器却没接上调用点"的现场**（本仓 macOS 会话修复）：
+      `a361585` 的提交信息写「V-02 反例注入器改为按批次名定位（不再锚整行字面量）」，
+      但它**只新增了 `_v02_row_index` / `_delete_v02_row` / `_rewrite_v02_row_cell` 三个函数，
+      一个调用点都没改**（实测：三个函数里只有 `_v02_row_index` 被另外两个调用，
+      `_delete_v02_row` / `_rewrite_v02_row_cell` 调用者为零）⇒ 本用例仍锚**整行字面量**。
+      而 `#109` 恰好改了那一行的「内容」格（`分片 G（反编造 + 分片绑定）`
+      → `… + 守卫防御性`）⇒ 反例**自己先崩**（`注入失败：未找到锚点`），
+      产出**正是它声称修好的那种假红**（`G-01`：反例从"守判据"退化成"制造假红"）。
+      ⇒ 本条改走 `_delete_v02_row()`（按批次名定位），与另两条反例同源。
     """
-    _patch(
-        code_root,
-        CONVENTIONS_REL,
-        "| `injection-g` | 分片 G（反编造 + 分片绑定） | 300s | 5.67s |\n",
-        "",
-    )
+    _delete_v02_row(code_root, "injection-g")
     problems = _v02_binding_problems(code_root)
     assert problems, "删掉 `injection-g` 整行后仍判通过 —— 这条绑定没有在守"
     assert any("injection-g" in p and "缺批次" in p for p in problems), problems
@@ -462,19 +467,28 @@ def test_v02_table_stale_timeout_is_detected(code_root: Path) -> None:
     """★ **反例**（`G-05`）：把 `unit` 的超时写回过期值 `60s` ⇒ 必须判红，且**指到那一行**。
 
     `unit` 的 300s 是主理人裁定的现行值；表里曾写 60s（`#91` 实测的 6 行之一）。
+
+    ★ 改用 `_rewrite_v02_row_cell()`（按 **批次名 + 列位** 定位）：原锚点
+      `"| 300s | 3.40s |"` 里的 **3.40s 是「实测」列的当时读数**，而该列**按设计会随时间变**
+      （`CONVENTIONS.md` 明文："不检查「实测」列（那是读数，本来就会随时间变）"）
+      ⇒ 那种锚点**必然过期**，是本用例的下一个假红源。
     """
-    _patch(code_root, CONVENTIONS_REL, "| 300s | 3.40s |", "| 60s | 3.40s |")
+    _rewrite_v02_row_cell(code_root, "unit", 2, "60s")
     problems = _v02_binding_problems(code_root)
     assert problems, "把 `unit` 超时改回 60s 后仍判通过 —— 超时列没在守"
     assert any("`unit`" in p and "60s" in p and "300s" in p for p in problems), problems
 
 
 def test_v02_table_reformat_is_reported_not_skipped(code_root: Path) -> None:
-    """**重排/破坏表头 → 响亮判红并给出修复提示**（授权边界：不宽松跳过）。"""
+    """**重排/破坏表头 → 响亮判红并给出修复提示**（授权边界：不宽松跳过）。
+
+    ★ 锚点用常量 `_V02_HEADER_PREFIX`（与解析器**同一处**取值），不再手抄一份字面量 ——
+      表头一改，解析器与注入器**同时**跟着变（单一真源，`G-06`）。
+    """
     _patch(
         code_root,
         CONVENTIONS_REL,
-        "| 批次 | 内容 | 超时 |",
+        _V02_HEADER_PREFIX,
         "| batch | content | timeout |",
     )
     problems = _v02_binding_problems(code_root)

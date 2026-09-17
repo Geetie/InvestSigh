@@ -130,10 +130,43 @@ def test_cv4_no_target_is_not_a_pass(code_root: Path) -> None:
 
 
 def test_acceptance_absent_is_explicit_note(code_root: Path) -> None:
-    """缺验收输入 → **显式** note（不静默），并退化为 companies 集合。"""
+    """缺验收输入 → **显式** note（不静默），并退化为 companies 集合。
+
+    ★★ **本用例此前自己就是一处"观测被仓库污染"缺陷**（本仓 macOS 会话修复，
+      与 `G-RC-02` / `G-RC-07` 同族）：
+      它断言 `ACCEPTANCE_INPUT_ABSENT`，却**没有自己制造"文件不存在"这个条件** ——
+      而是依赖"仓库里恰好没有 `registry/acceptance_input_set.yaml`"。
+      Windows 会话把该文件落进仓库（阶段② 交付物）后，夹具的 `copytree` 会把
+      `registry/` 一并复制 ⇒ 文件**存在但无列表形态** ⇒ 代码走 `ACCEPTANCE_INPUT_NO_LIST`
+      分支 ⇒ 本用例**永远红**，且红得像"覆盖判据坏了"（**假红**）。
+      ⇒ 按本文件头部契约「测试自己声明数据」：**显式删掉**该文件来声明"缺输入"。
+    ★ 另两条分支（`NO_LIST` / `OK`）由下面两条独立用例声明（**穷尽**，不靠本条顺带）。
+    """
+    # 声明"缺输入"这一条件本身（不依赖仓库现状）。
+    (code_root / "registry" / "acceptance_input_set.yaml").unlink(missing_ok=True)
     append_records(code_root, "companies", [Company(company_id="c1", legal_name="C1")])
     report = coverage.check(code_root)
     assert any("ACCEPTANCE_INPUT_ABSENT" in n for n in report.notes), report.notes
+    assert report.scanned["coverage_target"] == 1
+
+
+def test_acceptance_present_but_without_list_form_is_a_distinct_note(code_root: Path) -> None:
+    """文件在、但**无列表形态** ⇒ `ACCEPTANCE_INPUT_NO_LIST`（**不得**与 `ABSENT` 混为一条）。
+
+    ★ 与上一条的区别是**语义**而非措辞：「**没给**清单」与「**给了但形态不对**」
+      对下游的含义完全不同 —— 后者是**交付物的形状错了**，必须能被单独看见
+      （否则"清单没准备好"会被伪装成"当天没有研究对象"，`G-62`）。
+    """
+    registry = code_root / "registry"
+    registry.mkdir(parents=True, exist_ok=True)
+    # 顶层是 mapping、但没有任何 `_ACCEPT_LIST_KEYS` 的列表形态。
+    (registry / "acceptance_input_set.yaml").write_text(
+        "note_only: 本文件在，但没有列表形态的首批对象\n", encoding="utf-8"
+    )
+    append_records(code_root, "companies", [Company(company_id="c1", legal_name="C1")])
+    report = coverage.check(code_root)
+    assert any("ACCEPTANCE_INPUT_NO_LIST" in n for n in report.notes), report.notes
+    assert not any("ACCEPTANCE_INPUT_ABSENT" in n for n in report.notes), report.notes
     assert report.scanned["coverage_target"] == 1
 
 

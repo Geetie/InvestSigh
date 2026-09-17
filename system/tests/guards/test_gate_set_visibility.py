@@ -21,7 +21,7 @@ pre-commit: 判据树 HEAD=<sha> · 本树门禁 14 道 · run_all_gates 另有 
 |---|---|
 | ① 两个数各自与实际集合一致 | `test_numbers_match_the_actual_sets`（**第三条独立路径**现算：本文件自己 parse + 自己 import） |
 | ② 增/删一道门禁时两个数**自动跟着变** | `test_adding_a_registered_gate_changes_both` / `test_removing_a_gate_changes_both` / `test_unregistered_gate_is_flagged` |
-| ③ 全道 PASS 不受影响 | `test_real_tree_still_passes_with_the_new_line`（真实树 `rc=0`、`阻断` 0 次） |
+| ③ 全道 PASS 不受影响 | `test_real_tree_still_passes_with_the_new_line`（真实树 `rc=0`、**无阻断行**、无 `[INPUT-ERROR]`） |
 
 ## ★ 本卡在动这一行之前，先修掉一处**我自己在 13-O 写下的静默缺陷**
 
@@ -84,6 +84,25 @@ _GATE_RE = re.compile(r'run_gate\s+"[^"]*"\s+"\$CODE_ROOT/(?P<rel>[^"]+)"')
 # ★ 判"那一行在不在"只认**行首词法开头**，不认语义词（本仓 `G-62` 的测试侧形态：
 #   解释性文字会与它解释的输出同形 —— 我在 `#96` 上一轮已因此连踩三次）。
 _LINE_HEAD = "pre-commit: 判据树 HEAD="
+
+# ★★ 同理：判"有没有被阻断"**必须按行首词法形态**，**不能**做全文子串匹配（本仓 macOS 会话修复）。
+#   原实现是 `assert "阻断" not in text` —— 而某个守卫的 **note 正文里逐字写着**
+#   「只报 note、**不阻断**」（`rule_key_alignment_guard` 解释其处置口径的那句）
+#   ⇒ 那条"解释这句话的输出"把"这句话"打红 ⇒ **假红**（`G-62`：解释文字与被解释输出同形）。
+#   ⇒ 改为认 `pre-commit.sh` **真正发射阻断**的那几行的行首（见下方 `_BLOCK_LINE_HEADS`）。
+_BLOCK_LINE_HEADS = (
+    "pre-commit ✗ ",              # `run_gate` 里某道门禁 exit=1（真违规）
+    "pre-commit: 有门禁阻断",       # 汇总行：有门禁阻断 ⇒ 提交被拒
+    "pre-commit: 另有门禁",         # 输入错误并存时的汇总（同样不得出现）
+)
+
+
+def _block_lines(text: str) -> list[str]:
+    """按**行首词法**取"阻断"行（**不**在正文里搜词 —— 见 `_BLOCK_LINE_HEADS` 的教训）。"""
+    return [
+        line for line in text.splitlines()
+        if any(line.startswith(head) for head in _BLOCK_LINE_HEADS)
+    ]
 
 
 def _clean_env(extra: dict[str, str] | None = None) -> dict[str, str]:
@@ -297,15 +316,18 @@ def test_unregistered_gate_is_flagged(tmp_path: Path) -> None:
 
 
 def test_real_tree_still_passes_with_the_new_line() -> None:
-    """★ 验收③：真实树**全道 PASS**，且新行在位、`阻断`/`INPUT-ERROR` 均 0 次。
+    """★ 验收③：真实树**全道 PASS**，且新行在位、**无阻断行**、`[INPUT-ERROR]` 均 0 次。
 
     ★ 这是唯一一条**跑真实 14 道门禁**的用例（因此较慢）—— 验收③说的就是真实树。
+    ★ "无阻断"按**行首词法**判（`_block_lines`），不在正文里搜"阻断"二字 ——
+      原实现搜全文，被某守卫 note 里的「只报 note、**不阻断**」打红（假红，见 `_BLOCK_LINE_HEADS`）。
     """
     res = _real_tree_run()
     text = _out(res)
     line = _visibility_line(text)
     assert res.returncode == 0, f"真实树没全道 PASS（rc={res.returncode}）：\n{text[-3000:]}"
-    assert "阻断" not in text, f"真实树出现阻断：\n{text[-3000:]}"
+    blocked = _block_lines(text)
+    assert not blocked, f"真实树出现阻断行：{blocked}\n{text[-3000:]}"
     assert "[INPUT-ERROR]" not in text, f"真实树出现输入错误：\n{text[-3000:]}"
     assert "pre-commit ✓ 全部门禁放行" in text, text[-800:]
     assert line.count("另有") == 1, line
@@ -417,6 +439,14 @@ def test_emitted_literals_are_still_in_the_sources() -> None:
     assert '⚠ 本树另有 {len(only_here)} 道**未登记**' in deriver_src, (
         "「未登记」的发射式不在了 ⇒ `test_unregistered_gate_is_flagged` 退化"
     )
+
+    # ★ `_block_lines` 的每一项都必须在 `pre-commit.sh` 里有对应的 **`echo` 发射语句** ——
+    #   否则 `_block_lines` 永远返回空列表 ⇒ "真实树无阻断"那条断言**退化成恒真**（`G-03`）。
+    for head in _BLOCK_LINE_HEADS:
+        assert f'echo "{head}' in pc_src, (
+            f"阻断行的发射语句不在了（锚点 `echo \"{head}`）⇒ "
+            f"`test_real_tree_still_passes_with_the_new_line` 的「无阻断」断言退化"
+        )
 
 
 def test_sources_are_runnable() -> None:

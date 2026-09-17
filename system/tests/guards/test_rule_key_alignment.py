@@ -264,18 +264,49 @@ def test_expiry_mechanism_is_a_deterministic_function_of_the_review_date() -> No
     ★ 为什么带 `today` 入参：把"过期"写成读系统时钟，判定就变成**随时间自己变红/绿** ——
       那是"到时才炸"的判据，不是判据。本用例直接对两个日期做断言，**永远稳定**。
     ★ `review_by` **当天不算过期**（严格 `<`）：否则 `review_by` 的含义会漂移一天。
+
+    ★★ **本用例此前自己就是一处「清单手工维护」缺陷**（本仓 macOS 会话修复）：
+      它把"全部豁免"写成 `KNOWN_ZERO_KEY_READS + KNOWN_ABSENT_RULE_FILES`（**手抄两份**），
+      而模块后来新增了**第三张** `KNOWN_UNCONSUMED_RULE_COLUMNS` ⇒ 模块侧两张内联清单
+      都跟着生效，**本用例那份静默停在两张** ⇒ `assert 30 == 2` 变红（**假红**，
+      看起来像"过期机制坏了"，实为清单漂移）。
+      ⇒ 现**一律派生**自模块的唯一真源 `G.waiver_tables()` —— 新增豁免表时**只改模块一处**，
+        本用例自动跟上（与 conftest `_TRUTH_STEMS` 同一条纪律：清单不得手工维护）。
+      ★ 下面还配一条**元断言**：模块里**每一个** `dict[(str,str), _Waiver]` 类型的模块级属性
+        都必须登记在 `waiver_tables()` 里 —— 把"新增第 4 张表却忘了登记"也变成**机器可查**，
+        而不是靠下一个人记得。
     """
     from scripts.checks import rule_key_alignment_guard as G
 
-    all_keys = list(G.KNOWN_ZERO_KEY_READS) + list(G.KNOWN_ABSENT_RULE_FILES)
+    # ★ 派生，不手抄：`waiver_tables()` = 三张豁免表的唯一真源。
+    tables = dict(G.waiver_tables())
+    all_keys = [key for table in tables.values() for key in table]
     assert all_keys, (
-        "两张豁免表**都空** ⇒ 过期机制此时无对象可测；本断言在此状态下会失败，"
+        "全部豁免表**都空** ⇒ 过期机制此时无对象可测；本断言在此状态下会失败，"
         "提醒：若确实全部关闭了，请把本条改成「给出一个合成的 _Waiver」再测机制本身"
     )
-    review_dates = [
-        w.review_by
-        for w in [*G.KNOWN_ZERO_KEY_READS.values(), *G.KNOWN_ABSENT_RULE_FILES.values()]
-    ]
+    # ★ 元断言（闭合漂移）：模块里凡"豁免表"都必须登记在 `waiver_tables()` 里。
+    #   识别口径取**两条并集**，避免漏判：
+    #     ① **类型注解**含 `_Waiver`（本仓三张表都注成 `dict[tuple[str, str], _Waiver]`）；
+    #        ★ 必须走注解 —— 有的表**当前是空的**（`KNOWN_ZERO_KEY_READS` 欠账已关闭 = `{}`），
+    #          只按"值非空且元素是 `_Waiver`"识别会**把它漏掉**（实测踩到：报"多登 1 张"）。
+    #     ② 值形态匹配（非空 dict 且值全是 `_Waiver`）—— 兜住"后来新增但忘了写注解"的表。
+    ann = getattr(G, "__annotations__", {})
+    declared = {
+        name for name, value in vars(G).items()
+        if "_Waiver" in str(ann.get(name, ""))
+        or (
+            isinstance(value, dict)
+            and value
+            and all(isinstance(v, G._Waiver) for v in value.values())
+        )
+    }
+    assert declared == set(tables), (
+        f"模块里有 {len(declared)} 张豁免表、`waiver_tables()` 只登记了 {len(tables)} 张："
+        f"漏登 {sorted(declared - set(tables))}；多登 {sorted(set(tables) - declared)}"
+        " —— 漏登会让该表的四字段校验**静默失效**（`口径 13` 第 1 条）"
+    )
+    review_dates = [w.review_by for table in tables.values() for w in table.values()]
     earliest = min(review_dates)   # ★ 派生，不写死日期
     assert G._expired_waivers(date.fromisoformat(earliest)) == [], (
         f"review_by={earliest} **当天**不应算过期（严格小于）"

@@ -233,6 +233,39 @@ def test_read_records_does_not_take_the_lock() -> None:
     assert "_file_lock" not in called, "`read_records` 不该取写锁"
 
 
+def test_append_records_pins_newline_so_writes_are_platform_independent() -> None:
+    """★ **写入端必须钉 `newline="\\n"`** —— 否则 Windows 上真源被写成 CRLF（`§8-2` 平台缺陷）。
+
+    ## 为什么这条必须是**源码级**断言（而不是"跑一遍看行尾"）
+
+    本仓在 **macOS** 上跑测试，而 macOS 的 `os.linesep == "\\n"` ⇒ **无论有没有这个修复，
+      在这里跑一遍都只看到 LF**。"行为断言"在 Mac 上是**恒真**的（`G-03`：没有可检对象
+      的断言不是断言）—— 它永远抓不到这个缺陷。能**区分**修复前后的只有
+      "**写入调用有没有显式钉住 `newline`**"这件事本身 ⇒ 故读 `append_records` 自己的源码。
+
+    ## 断言
+
+    函数体里**存在**一个 `open(...)` 调用，且其关键字实参含 `newline="\\n"`。
+    ★ 不检查"写模式是 `a`"等其它实参：本条只负责"行尾平台无关"，别的性质各有其用例。
+
+    实测背景（修复前）：`facts/tasks.jsonl` / `facts/recommendations.jsonl` 已是
+    **混合行尾**；二者是**追加式真源**、不能回改（`append_only_guard`），故只能从写入端根治。
+    """
+    tree = ast.parse(textwrap.dedent(inspect.getsource(append_records)))
+    newline_kwargs = [
+        kw.value.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        for kw in node.keywords
+        if kw.arg == "newline" and isinstance(kw.value, ast.Constant)
+    ]
+    assert newline_kwargs == ["\n"], (
+        f"`append_records` 里没有 `open(..., newline=\"\\n\")`（实得 {newline_kwargs!r}）—— "
+        "文本模式默认会把 `\\n` 翻成 `os.linesep`，在 Windows 上写出 CRLF；"
+        "而本真源是字节敏感（`.gitattributes: * -text`）且追加式不可回改 ⇒ 写入端必须钉住 LF。"
+    )
+
+
 # ───────────────────── 2. 正常往返 + 释放后可重取 ─────────────────────
 
 def test_acquire_write_release_roundtrip(lock_root: Path) -> None:

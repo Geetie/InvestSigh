@@ -99,7 +99,8 @@ Python 的 `dict.get()` **不会报错** —— 它返回 `None`，而 `None` �
 
 ## 白名单（`口径 13`）
 
-两张豁免表**逐条**带 `reason` / `owner` / `预期何时有消费者` / `review_by` 四字段
+**三张**豁免表（真源 = `waiver_tables()`）**逐条**带
+`reason` / `owner` / `预期何时有消费者` / `review_by` 四字段
 （`_Waiver`）；缺一即**导入时响亮失败**（`_selfcheck_waivers`）。过期未消 ⇒ **报警**（note + 计数）；
 并在输出里给出**白名单与被检集合的比值**（`scanned.waiver_ratio_*_permille` + 汇总 note）。
 
@@ -412,6 +413,34 @@ KNOWN_UNCONSUMED_RULE_COLUMNS: dict[tuple[str, str], _Waiver] = {
     for file_name, dotted, reason in _KNOWN_UNCONSUMED_COLUMN_SPECS
 }
 
+#: `口径 13` 三张豁免表的**唯一真源**（`表名 → 表`）。
+#:
+#: ★ **为什么要合成一处**（发现于本仓 macOS 会话；与 `G-65` 同族，**未另编号**）：
+#:   此前这三张表的清单被**手抄了三份** —— ① `_selfcheck_waivers()` 内联一份；
+#:   ② `_expired_waivers()` 内联一份；③ `tests/guards/test_rule_key_alignment.py`
+#:   内联**第三份，且只抄了前两张**。于是新增第三张表（`KNOWN_UNCONSUMED_RULE_COLUMNS`）时，
+#:   ①② 跟着生效、③ **静默停在两张** ⇒ 那条反例 `assert len(expired) == len(all_keys)`
+#:   以 `30 == 2` 变红（**假红**，看起来像"过期机制坏了"）。
+#:   这正是本仓反复栽的「清单手工维护 ⇒ 漂移」（`G-RC-02` / `G-RC-07` / conftest 的
+#:   `_TRUTH_STEMS` 注三处同族）⇒ 收敛为**一处**，其余（含测试）**一律派生**。
+#:   ⇒ ★ 新增豁免表时**只改这里**；若还要改别处，说明派生没做干净。
+def waiver_tables() -> tuple[tuple[str, dict[tuple[str, str], _Waiver]], ...]:
+    """`口径 13` 三张豁免表的**唯一真源**（`表名 → 表`）。
+
+    ★ **是函数而不是常量**（实测教训）：本函数的调用方里有两处**测试**要用
+      `monkeypatch.setattr(G, "<表名>", ...)` **替换**某张表来证伪校验机制
+      （`test_waiver_selfcheck_rejects_incomplete_or_undated_entries` /
+      `test_reverse_waiver_table_is_validated`）。若把清单做成**导入期常量**，
+      元组里握的是**旧 dict 对象**、属性被替换后**看不见** ⇒ 两条用例双双
+      `DID NOT RAISE`（实测踩到）。⇒ 必须在**调用时**读模块全局。
+    ★ 返回顺序稳定（与 `_selfcheck_waivers` / `_expired_waivers` 的报告顺序同源）。
+    """
+    return (
+        ("KNOWN_ZERO_KEY_READS", KNOWN_ZERO_KEY_READS),
+        ("KNOWN_ABSENT_RULE_FILES", KNOWN_ABSENT_RULE_FILES),
+        ("KNOWN_UNCONSUMED_RULE_COLUMNS", KNOWN_UNCONSUMED_RULE_COLUMNS),
+    )
+
 
 def _selfcheck_waivers() -> None:
     """`口径 13` 的**机器绑定**：四个字段缺一 / 日期不可解析 ⇒ **导入时**响亮失败。
@@ -419,12 +448,9 @@ def _selfcheck_waivers() -> None:
       一份字段残缺的白名单只要还能跑，它就已经在"把门禁关掉"了 ——
       那种状态不该等到某人恰好跑门禁才暴露。**破口当场红**（纪律 2：禁 warn-only）。
     ★ 用 `raise` 而非 `assert`：`python -O` 会把 `assert` 整条剥离 ⇒ 检查器在优化模式下**静默失效**。
+    ★ 表清单**派生自 `waiver_tables()`**（唯一真源）—— 此处**不**再手抄第二份（见该函数的注释）。
     """
-    for name, table in (
-        ("KNOWN_ZERO_KEY_READS", KNOWN_ZERO_KEY_READS),
-        ("KNOWN_ABSENT_RULE_FILES", KNOWN_ABSENT_RULE_FILES),
-        ("KNOWN_UNCONSUMED_RULE_COLUMNS", KNOWN_UNCONSUMED_RULE_COLUMNS),
-    ):
+    for name, table in waiver_tables():
         for key, waiver in table.items():
             for field in ("reason", "owner", "expected_consumer_by", "review_by"):
                 if not getattr(waiver, field).strip():
@@ -453,11 +479,7 @@ def _expired_waivers(today: date) -> list[tuple[str, tuple[str, str], _Waiver]]:
       若主理人要求"到期即红"，改动点只有本函数调用处一处。
     """
     out: list[tuple[str, tuple[str, str], _Waiver]] = []
-    for name, table in (
-        ("KNOWN_ZERO_KEY_READS", KNOWN_ZERO_KEY_READS),
-        ("KNOWN_ABSENT_RULE_FILES", KNOWN_ABSENT_RULE_FILES),
-        ("KNOWN_UNCONSUMED_RULE_COLUMNS", KNOWN_UNCONSUMED_RULE_COLUMNS),
-    ):
+    for name, table in waiver_tables():              # 唯一真源（不再手抄第二份）
         for key, waiver in table.items():
             if waiver.is_expired(today):
                 out.append((name, key, waiver))
