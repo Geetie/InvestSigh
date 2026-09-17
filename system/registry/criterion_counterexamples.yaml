@@ -248,19 +248,21 @@ counterexamples:
     kind: counterexample
     test: tests/injection/test_criterion_effectiveness.py::test_expansion_investment_result_verifiable_blocks_on_backfilled_row
     blocked_hint: "投资结果不可核验（前向记录）"
-    note: "`WS-G` 绑定。依据 `Ch10 §E.3` / `N10.3-10`/`N10.3-11`：投资结果只能来自**前向记录流**
-      （`facts/recommendations.jsonl` 的真源子集：真实时间戳、**不可回填**）；**回放 ≠ 能力**（`10_01 §2.5`）。
-      反例（轴①）：前向流的最后一行打上 `backfilled_at` ⇒ 回填/回放行出现在前向流里 ⇒ 阶段⑤ exit 1 且含专属标记。
-      ★ **待对齐 `WS-F`**：`WS-F` 并行交付 `scripts/review/capability_source.py`（`§E.3` 的
-      `assert_capability_from_forward_only` / `assert_forward_not_backfilled`）。它到位后本判据
-      应改为**复用**它（`G-06`）；当前按 `§E.3` 的语义在本函数内实现（真源 = `facts/recommendations.jsonl`）。"
+    note: "`WS-G` 绑定 = **复用** `WS-F` 交付的 `scripts/review/capability_source.py`
+      （`§E.3` 伪代码逐字实现，`G-06` 唯一真源）：能力结论只来自前向流（`N10.3-10`）
+      + 前向流不得回填 / 版本不得错序（`N10.3-11`）。依据 `Ch10 §E.3`：投资结果只能来自
+      **前向记录流**（`facts/recommendations.jsonl` 的真源子集：真实时间戳、**不可回填**）；
+      **回放 ≠ 能力**（`10_01 §2.5`）。
+      反例（轴①）：前向流的最后一行打上 `backfilled_at` ⇒ 回填/回放行出现在前向流里 ⇒ 阶段⑤ exit 1 且含专属标记。"
 
   - stage: expansion
     criterion_id: investment_result_verifiable
     kind: counterexample
     test: tests/injection/test_criterion_effectiveness.py::test_expansion_investment_result_verifiable_blocks_on_non_monotonic_seq
     blocked_hint: "投资结果不可核验（前向记录）"
-    note: "轴②（`Ch9 §3.4.2`：`facts/*.jsonl` **行序即时序**）：前向流一旦被整体重排（行序 ≠ 时序），
-      就无法据以核验『结果来自前向记录』（例如把历史回放结果混入并重排）。
+    note: "轴②（`Ch10 §E.3` / `§E.2` 取版本）：同一**业务键**的每行 `recorded_seq` = 「同键、
+      `first_seen_at ≤ 本行`」的上界（`max_seq_upto`）—— 错序即「行序 ≠ 时序」，
+      无法据以核验『结果来自前向记录』（例如把历史回放结果混入同键版本序列并重排）。
+      判据实现**复用** `scripts/review/capability_source.py`（`G-06`）。
       反例：交换两条合规行的 `recorded_seq`（[1,2]→[2,1]），其余字段**一个不动**（单变量对照）⇒
       阶段⑤ exit 1 且含专属标记。"

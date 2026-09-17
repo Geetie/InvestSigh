@@ -779,7 +779,7 @@ def stage_expansion_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
     | 判据 | 检查落点 |
     |---|---|
     | `research_standard_consistent` | **复用** `scripts/valuelayer/completeness.py::g_depth_violations()`（阶段② 已用它判 `Ch4 §G`）—— **同一把尺**（`G-06` 唯一真源） |
-    | `investment_result_verifiable` | 本函数内：断言投资结果来自**前向记录流**（`facts/recommendations.jsonl`），非回放/回填（`Ch10 §E.3`） |
+    | `investment_result_verifiable` | **复用** `scripts/review/capability_source.py`（`§E.3` 伪代码逐字实现）—— **同一把尺**（`G-06` 唯一真源）：能力结论只来自前向流（`N10.3-10`）+ 前向流不得回填/版本错序（`N10.3-11`） |
     | `review_append_only` | 本函数内：① `append_only_guard` 覆盖本真源 ②「已声明过的层不得从记录集里消失」（`Ch10 §D.5`） |
 
     ★ `T-15`（需求方 2026-09-17 裁定：「一律采取主理人推荐值」）：
@@ -796,10 +796,10 @@ def stage_expansion_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
       前者 = 「三层齐备度」观测（只计数、不判）；后者 = `Ch10 §D.5` 的 **append-only 语义**
       （禁"只留赢的"）—— 它是 `review_append_only` 的**真判别力**所在，**必须保留**。
 
-    ★ `investment_result_verifiable` 的**落点登记（★ 待与 `WS-F` 对齐）**：`WS-F` 正并行交付
-      `scripts/review/capability_source.py`（`§E.3` 的 `assert_capability_from_forward_only` /
-      `assert_forward_not_backfilled`）。它**到位后本判据应改为复用**它（`G-06`）；
-      当前按 `§E.3` 的**语义**在本函数内实现（真源 = `facts/recommendations.jsonl`）。
+    ★ `investment_result_verifiable` 的**落点**：**复用** `WS-F` 交付的
+      `scripts/review/capability_source.py`（`§E.3` 伪代码逐字实现）—— 本判据**不重造**第二条
+      §E.3 解析/断言路径（`G-06` 唯一真源）；真源记录流的读取也走它（`load_forward_stream`），
+      本函数**不再**用 `_read_jsonl` 另立解析。
     """
     tasks = _read_jsonl(root / "facts" / "tasks.jsonl")
     eval_records = [t.get("eval_result") for t in tasks if t.get("eval_result")]
@@ -838,13 +838,27 @@ def stage_expansion_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
 
     # ── ② `investment_result_verifiable`（`Ch10 §E.3`：能力唯一来源 = **前向**建议流）──
     #
-    # ★ `Ch10 §E.3` / `N10.3-04`/`N10.3-10`/`N10.3-11`：投资结果只能来自**前向记录流**
-    #   （`facts/recommendations.jsonl` 的真源子集：真实时间戳、**不可回填**）；**回放 ≠ 能力**。
-    # ★ 可判定 + 可穷尽（`R-06`；两条断言，域 = 前向流全行）：
-    #     ① 前向流里**不得**出现**回填行**（`backfilled_at` 非空）；
-    #     ② 追加序上 `recorded_seq` **存在且单调不减**（行序即时序，承 `Ch9 §3.4.2` append-only）。
-    recs = _read_jsonl(root / "facts" / "recommendations.jsonl")
+    # ★ `G-06` 唯一真源：本判据**不重造** §E.3 的解析/断言 —— 直接**复用** `WS-F` 交付的
+    #   `scripts/review/capability_source.py`（`§E.3` 伪代码逐字实现）：
+    #     ① `assert_capability_from_forward_only(root)`：能力结论只来自**前向流**（`N10.3-10`，
+    #        「回放收益不得作为投资能力结论」——回放 ≠ 能力）；
+    #     ② `iter_forward_violations(stream)`：前向流**不得回填**（`backfilled_at` 非空）/
+    #        版本**不得错序**（`recorded_seq` ≠ 同业务键、`first_seen_at ≤ 本行` 的上界，`N10.3-11`）。
+    #   ★ 真源记录流的读取也走它（`load_forward_stream` → `schema.store.read_records`），
+    #     本函数**不再**用 `_read_jsonl` 另立第二条解析路径（`G-06`）。
+    #   ★ `G-03` 口径与 `capability_source.check()` **一致**：无可核对象（前向流为空）⇒ 显式违例
+    #     （不得据「为空」判「可核验」）；不可核行（缺真实时间戳 `first_seen_at`）⇒ 只记计数、
+    #     **不误报为违例**（与 `iter_forward_violations` 的 `unverifiable` 分类同源）。
+    from scripts.review.capability_source import (
+        CapabilitySourceViolation,
+        assert_capability_from_forward_only,
+        iter_forward_violations,
+        load_forward_stream,
+    )
+
+    recs = load_forward_stream(root)
     ir_hint = "投资结果不可核验（前向记录）"
+    ir_unverifiable = 0
     if not recs:
         v.append(
             Violation(
@@ -855,33 +869,24 @@ def stage_expansion_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
             )
         )
     else:
-        for row in recs:
-            if row.get("backfilled_at") is not None:
-                rid = row.get("recommendation_id") or row.get("security_id") or "<unnamed>"
-                v.append(
-                    Violation(
-                        "expansion",
-                        f"{ir_hint}：{rid} 是**回填行**（`backfilled_at` 非空）却出现在**前向**建议流里"
-                        " ⇒ 投资结果来自回放/回填、不是前向记录（`Ch10 §E.3` / N10.3-10/11）",
-                        "facts/recommendations.jsonl",
-                    )
-                )
-        seqs = [row.get("recorded_seq") for row in recs]
-        if not all(isinstance(s, int) and not isinstance(s, bool) for s in seqs):
+        # ① 能力结论只来自前向流（`N10.3-10`）—— 命中即违例（复用 `capability_source` 的唯一断言）
+        try:
+            assert_capability_from_forward_only(root)
+        except CapabilitySourceViolation as exc:
             v.append(
                 Violation(
                     "expansion",
-                    f"{ir_hint}：前向建议流有行**缺 `recorded_seq`**（或类型非法）⇒ 无法核验"
-                    "『行序即时序』（`Ch9 §3.4.2` append-only）",
-                    "facts/recommendations.jsonl",
+                    f"{ir_hint}：{exc}",
+                    "views/capability_conclusions.jsonl",
                 )
             )
-        elif seqs != sorted(seqs):
+        # ② 前向流不得回填 / 版本不得错序（`N10.3-11`）—— 复用 `capability_source` 的唯一判定
+        ir_details, ir_unverifiable = iter_forward_violations(recs)
+        for detail in ir_details:
             v.append(
                 Violation(
                     "expansion",
-                    f"{ir_hint}：`recorded_seq` 在追加序上**不单调不减** {seqs} ⇒ 行序不等于时序，"
-                    "无法据以核验『结果来自前向记录』（`Ch9 §3.4.2` append-only）",
+                    f"{ir_hint}：{detail}",
                     "facts/recommendations.jsonl",
                 )
             )
@@ -980,6 +985,9 @@ def stage_expansion_passed(root: Path) -> tuple[bool, list[Violation], dict[str,
         "aog_covers_carrier": aog_covers,
         "aog_tracked_files": aog_tracked,
         "tasks_with_eval_history": len(seen_layers),
+        # ★ `G-03` 观测出口：前向流里**不可核**（缺真实时间戳 `first_seen_at`）的行数 ——
+        #   可见但不阻断（与 `capability_source` 的 `unverifiable` 分类**同源**）。
+        "investment_result_unverifiable": ir_unverifiable,
     }
 
 

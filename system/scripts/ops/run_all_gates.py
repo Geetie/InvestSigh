@@ -42,6 +42,12 @@ GATES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("anti_padding.py", "scripts/scope/anti_padding.py", ()),
     ("gap_to_task.py", "scripts/tasks/gap_to_task.py", ()),
     ("traceback.py", "scripts/trace/traceback.py", ()),
+    # ── `Ch10 §B.2`（`WS-F`）：**六结果追溯覆盖率** —— `Ch1 §E` 第 8 步 `verify_hook` 的落点 ──
+    # 复用 `traceback.py`（同在 `GATES`；四要素解析**只实现一次**，本模块**薄包装调用**，`G-06`）；
+    # 本模块**唯一新增维度 = 六结果齐备**（`change`/`company_impact`/`transmission`/
+    # `price_reflection`/`recommendation`/`verification`，缺环即 fail，`N10.1-01`）。
+    # 空样本记 `not_evaluated`（`G-03`：无可核对象 ≠ 已验证）。★ 与 `pre-commit.sh` 同时登记（`G-07`）。
+    ("traceback_coverage.py", "scripts/trace/traceback_coverage.py", ()),
     ("pipeline.py", "scripts/orchestrate/pipeline.py", ()),
     ("stage_gate.py --stage prep", "scripts/delivery/stage_gate.py", ("--stage", "prep")),
     ("injection_guard.py", "scripts/checks/injection_guard.py", ()),

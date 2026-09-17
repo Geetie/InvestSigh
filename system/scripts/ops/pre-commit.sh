@@ -299,6 +299,12 @@ run_gate "rule_key_alignment_guard" "$CODE_ROOT/scripts/checks/rule_key_alignmen
 #    ★ 与 `run_all_gates.py::GATES` **同时**登记（`G-07`）。
 run_gate "error_axis_guard" "$CODE_ROOT/scripts/checks/error_axis_guard.py" "$CODE_ROOT"
 
+# ⑯ 六结果追溯覆盖率（`Ch10 §B.2`；`WS-F`）：`Ch1 §E` 第 8 步 `verify_hook` 的落点 ——
+#    复用 `traceback.py`（四要素解析**只实现一次**，`G-06`）；新增维度 = **六结果齐备**（缺环即 fail，`N10.1-01`）。
+#    空样本记 `not_evaluated`（`G-03`：无可核对象 ≠ 已验证）。
+#    ★ 与 `run_all_gates.py::GATES` **同时**登记（`G-07`：只进一处 = "提交时放行、CI 时拦"）。
+run_gate "traceback_coverage" "$CODE_ROOT/scripts/trace/traceback_coverage.py" "$CODE_ROOT"
+
 # ★ 卡 13-O：先把「输入错误」结掉 —— 它比违规更该先说（`2`：门禁没跑全，结论不成立）。
 #   两者同时出现时**两条都报**，仍以 `exit 2` 结束：此时"跑了哪些、没跑哪些"本身不可信。
 if [ "${INPUT_ERROR}" -ne 0 ]; then

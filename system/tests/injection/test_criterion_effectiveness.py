@@ -174,10 +174,20 @@ def _expansion_compliant(root: Path) -> None:
 _EXP_RS_HINT = "研究标准不一致（Ch4 §G）"
 _EXP_IR_HINT = "投资结果不可核验（前向记录）"
 
-#: 阶段⑤ 的**前向建议流**合规行（`Ch10 §E.3`）：`recorded_seq` 存在且**单调不减** + **无回填**。
+#: 阶段⑤ 的**前向建议流**合规行（`Ch10 §E.3` / `§E.2` 取版本）。
+#: ★ 形态 = **同一业务键**（`recommendation_id`）的多个版本，各有**真实时间戳** `first_seen_at`，
+#:   `recorded_seq` =「同键、`first_seen_at ≤ 本行`」的行中 `recorded_seq` 的**最大值**，且**无回填**。
+#: ★ 为什么必须是**同一键**：`WS-G` 把本判据的实现**复用**为 `scripts/review/capability_source.py`
+#:   （`§E.3` 伪代码逐字实现，`G-06` 唯一真源），其口径是**按业务键取版本**
+#:   （`iter_forward_violations` / `max_seq_upto`）—— 两条违反轴（回填 / 版本错序）只有在
+#:   **同一键**上才可判（与真源 `facts/recommendations.jsonl` 的 `rec-nvda-001` 多版本**同形**，
+#:   非夹具自造）。旧样例两条不同 `recommendation_id`、且无时间戳 ⇒ 换成新实现后落在
+#:   `unverifiable`（`G-03`）而非违例 ⇒ 反例**失去判别力**。
 _EXP_RECS_OK: list[dict] = [
-    {"recommendation_id": "rec-1", "company_id": "co_1", "recorded_seq": 1, "backfilled_at": None},
-    {"recommendation_id": "rec-2", "company_id": "co_1", "recorded_seq": 2, "backfilled_at": None},
+    {"recommendation_id": "rec-1", "company_id": "co_1", "recorded_seq": 1,
+     "first_seen_at": "2026-09-16T00:00:00Z", "backfilled_at": None},
+    {"recommendation_id": "rec-1", "company_id": "co_1", "recorded_seq": 2,
+     "first_seen_at": "2026-09-17T00:00:00Z", "backfilled_at": None},
 ]
 #: 阶段⑤ 的**三层复盘记录**（保证合规输入下观测为 `layers_seen: 3/3`）。
 _EXP_TASKS_OK: list[dict] = [
@@ -803,10 +813,12 @@ def test_expansion_investment_result_verifiable_blocks_on_backfilled_row(code_ro
 
 
 def test_expansion_investment_result_verifiable_blocks_on_non_monotonic_seq(code_root: Path) -> None:
-    """`investment_result_verifiable` 反例（轴②）：追加序上 `recorded_seq` **非单调** ⇒ 阶段⑤ 红。
+    """`investment_result_verifiable` 反例（轴②）：**同一业务键**的版本 `recorded_seq` 错序 ⇒ 阶段⑤ 红。
 
-    ★ 依据 `Ch9 §3.4.2`（`facts/*.jsonl` **行序即时序**）：前向流一旦被整体重排
-      （例如把历史回放结果混入并重排），"行序 ≠ 时序" ⇒ 无法据以核验"结果来自前向记录"。
+    ★ 依据 `Ch10 §E.3` / `§E.2` 取版本（`N10.3-11`）：前向流里同一业务键的每行 `recorded_seq`
+      必须等于「同键、`first_seen_at ≤ 本行`」的上界 —— 否则该行是**事后回填**（例如把历史回放
+      结果混入同键版本序列并错序），"行序 ≠ 时序" ⇒ 无法核验"结果来自前向记录"。
+      ★ 判据实现**复用** `scripts/review/capability_source.py`（`G-06`），该上界由 `max_seq_upto` 作。
       反例 = 交换两条合规行的 `recorded_seq`（`[1,2] → [2,1]`），其余字段**一个不动**（单变量对照）。
     """
     _expansion_env_ok(code_root)
