@@ -56,6 +56,11 @@ from scripts.ingest.market_data import (  # noqa: E402
     ingest_market_inbox,
     market_inbox_files,
 )
+from scripts.ingest.research_ingest import (  # noqa: E402
+    ingest_research_inbox,
+    is_research_manifest,
+    research_inbox_files,
+)
 from scripts.orchestrate.pipeline import StepOutcome  # noqa: E402
 from schema.models import ClaimForm, ClaimNature, SourceTier  # noqa: E402
 from schema.store import read_records  # noqa: E402
@@ -123,10 +128,19 @@ def _is_market_spec(name: str) -> bool:
     return name.startswith(MARKET_INBOX_PREFIX) and name.endswith(MARKET_INBOX_SUFFIX)
 
 
-def _inbox_files(root: Path) -> list[Path]:
-    """列出投递口下**待采集的常规文本**文件（跳过点文件、子目录与**行情清单**），按名排序。
+def _is_research_spec(name: str) -> bool:
+    """该文件名是否是**研究清单** —— 它归 `scripts/ingest/research_ingest.py`。
 
-    行情清单走 `_is_market_spec` 那条独立通路（见该函数）。
+    ★ 与 `_is_market_spec` 同一条纪律（按名分派）：研究清单也是一份 JSON，
+      若不显式分流，同样会被 `process_raw_file` 当文本吸成一条 claim。
+    """
+    return is_research_manifest(name)
+
+
+def _inbox_files(root: Path) -> list[Path]:
+    """列出投递口下**待采集的常规文本**文件（跳过点文件、子目录与两类**清单**），按名排序。
+
+    行情清单走 `_is_market_spec`、研究清单走 `_is_research_spec` 两条独立通路（见各自函数）。
     """
     inbox = root / INBOX_RELPATH
     if not inbox.is_dir():
@@ -135,7 +149,10 @@ def _inbox_files(root: Path) -> list[Path]:
         (
             p
             for p in inbox.iterdir()
-            if p.is_file() and not p.name.startswith(".") and not _is_market_spec(p.name)
+            if p.is_file()
+            and not p.name.startswith(".")
+            and not _is_market_spec(p.name)
+            and not _is_research_spec(p.name)
         ),
         key=lambda p: p.name,
     )
@@ -217,6 +234,9 @@ def ingest_public_information(
     """step 1：把投递口的外部文本经**执行器**摄入（文本落 `raw/`、主张落 `facts/claims.jsonl`）。
 
     - 逐个 `process_raw_file(...)`（**复用**执行器，不另写一条写库路径）；
+    - ★ 投递口的三类投递物**按文件名分派**（不靠后缀猜内容）：常规文本 → 执行器；
+      `market_manifest_*` → `scripts/ingest/market_data.py`；`research_manifest_*` →
+      `scripts/ingest/research_ingest.py`。后两条与文本通路**互斥**（同一份文件不得被两条吃）。
     - 每文件在**采集层**赋五类时间（`Ch9 §2.2`）：system_time 三元组显式传入（不得为 None），
       valid_time/backfill 按命名约定/比对派生（取不到保持 None）；
     - 有文件被摄入 → `produced` = **本轮真正新写入**的各置 claim 的 `claim_id`（**对象引用**）；
@@ -299,7 +319,22 @@ def ingest_public_information(
         skipped.extend(market_skipped)
         degraded = degraded or market_degraded
 
-    if not candidates and not market_files:
-        # 空样本：投递口两类投递物都没有 → 显式降级，不得当成功。
+    # ── 研究清单 → `scripts/ingest/research_ingest.py`（派生校验 + 幂等落 `facts/`）──
+    #
+    # ★ 为什么 step 1 也要管这条：那 395 行真源原本靠**会话内 7 个不入版本库的脚本**落库
+    #   （`gap-mcp-fetch-not-reproducible` 的扩大版），机制还互相漂移。此通路把
+    #   "研究内容"变成**版本库里的一份清单**，机制由 `research_ingest` 承担 ——
+    #   接缝同样在**投递侧**。
+    research_files = research_inbox_files(root)
+    if research_files:
+        res_produced, res_skipped, res_degraded, res_notes = ingest_research_inbox(root)
+        for note in res_notes:
+            print(f"[research_ingest] {note}")
+        produced.extend(res_produced)
+        skipped.extend(res_skipped)
+        degraded = degraded or res_degraded
+
+    if not candidates and not market_files and not research_files:
+        # 空样本：投递口三类投递物都没有 → 显式降级，不得当成功。
         degraded = True
     return StepOutcome(produced=produced, skipped=skipped, degraded=degraded, signals_emitted=0)

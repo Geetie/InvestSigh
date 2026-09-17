@@ -7,7 +7,36 @@
 > · `阅读入口_1_产业图谱.md` · `阅读入口_2_公司研究页.md` · `阅读入口_3_每日研究页_2026-09-17.md`
 > + 本文件作者的**独立复核**（读数与命令见 §9）。
 
+> **配套文档**：`batch2_internalization_2026-09-17.md`（批次 II 收口报告）
+
 ---
+
+## 0.0 ★ 执行进度（2026-09-17 当日更新）
+
+| 批次 | 状态 | 证据 |
+|---|---|---|
+| **I**（P0：P-08 运行时门 + 假红） | **已执行（3/4 步）** | `run_all_gates` 非零 **2 → 0**；`no_signal_day`/`traceback` 双双转绿，**两条历史失败记录都还在库**（一条成 superseded 修订、一条被具名报出） |
+| — §2.1 `B-1` | ✅ | `rules.decide()` 新增 **P-08 门**（R4 后 / R2 前）+ `build_recommendation` 的 `FalsifiersMissing`。★ 连带发现：测试夹具 `make_forecast` 的缺省驱动**就是**被禁形态 ⇒ 17 条用例同时变红，**那恰是"该缺陷从未被任何判据覆盖过"的证据** |
+| — §2.1 `B-2`（`dependency_edges`） | ⏳ **未做** | 原排期在批次 I 第 4 步 |
+| — §5 批次 I 附带 | ✅ 额外修掉 | ① `step.py` 恒回传 `judgment_change={}`（回执撒谎 ⇒ `G1-02①` 对合法买入日**假红**）② `traceback` 按 `recommendation_id` 去重 → 改按**业务键**（与 `rules.recommendation_business_key` 唯一真源） |
+| **II**（P1：落库路径进版本库） | **部分执行（机制已内化）** | `scripts/ingest/research_ingest.py` + `raw/inbox/research_manifest_2026-09-17.json`；★ **往返等价实测通过**（17 表 / 188 行逐一重建）；`unit` 242 passed |
+| — §2.2 `B-3`（落库脚本） | ✅ 机制部分 | 见上。★ 内化过程中抓到 **3 个真缺陷**（`quote_hash` 契约写错 / `period_bucket` 年份季度互换 / 幂等键丢版本），逐条见 §0.0 下方与收口报告 |
+| — §2.2 `B-4` / `S-5`（会话产出受控通路） | ✅ | 投递口第三类投递物 `research_manifest_*` + STEP 1 **按文件名分派** |
+| — §7.3 `B-7`（入口与 `supersedes` 链） | ⏳ **未做** | 与 `S-4`（`views` 构建/渲染内化）**一起**做 —— `build_views.py` / `build_readable_views.py` 仍未内化 |
+| **III**（`B-9` 提问入口 / `B-10` 事件触发） | ⏳ 未开始 | 源稿点名的两条 ❌ |
+| **IV / V** | ⏳ 未开始 | 需先拍板（§8 的 7 件） |
+
+**新登记缺口（本次实测新增，均未自裁修改）**：
+
+| id | 内容 | 性质 |
+|---|---|---|
+| `gap-claim-period-bucket-swapped` | `facts/claims.jsonl` **5 行**的 `impact_capability.period_bucket` = `CY2Q2026`（应 `CY2026Q2`）。**被独立佐证指纹消费**（`Ch9 §3.4.7`）；当前组内一致故**未致错**，但潜伏 | 数据（需裁定更正版与计数口径） |
+| `gap-claim-metric-session-override` | 10 行主张的 `metric` 来自会话**显式覆盖值**（`anthropic-2gw`），不由 `key` 派生 ⇒ 与机制派生约定**不统一** | 口径 |
+| `gap-step6-fact-set-change-not-derived` | `run_decide._run_core` 的 `JudgmentChange(fact_set_changed=True)` **恒真、尚未由数据判定** ⇒ 每日回执恒记"判断已变" | 设计（"判断是否改变"的判定归属） |
+
+---
+
+## 0.0.1 原计划正文（以下为 2026-09-17 制定时的原文）
 
 ## 0. 运行实况（一句话）
 
