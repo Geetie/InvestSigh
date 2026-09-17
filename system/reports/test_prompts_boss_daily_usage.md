@@ -1,5 +1,8 @@
 # 正式测试提示词清单（★ 按执行顺序 · 43 条）
 
+> ★★ **只想拿去发消息 ⇒ 用 `test_prompts_paste_ready.md`**（3 个窗口的纯粘贴块，**不含判据**）。
+> 本文件是**判据版**：带【期望】【❌ 判错】，用途是**事后核对**，**不要发给系统**（等于泄题）。
+>
 > **配套**：`test_run_sheet_batched.md`（批次 0 的技术细节）· `mcp_setup_brief.md`（数据源实测）
 > · `unimplemented_by_design_inventory.md §七`（"设计如此"速查表）。
 >
